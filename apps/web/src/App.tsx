@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { AuditEvent, CreateVehicleInput, Device, Driver, Member, SessionUser, Vehicle } from "@filo/contracts";
+import type { Assignment, AuditEvent, CreateVehicleInput, Device, Driver, Member, SessionUser, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -63,16 +63,20 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "members" | "audit">("overview");
+  const [assignments,setAssignments]=useState<Assignment[]>([]);
+  const [shifts,setShifts]=useState<WorkShift[]>([]);
+  const [tracking,setTracking]=useState<TrackingStatus[]>([]);
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "members" | "audit">("overview");
   const [error, setError] = useState("");
 
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
+      setAssignments(assignmentResult.assignments);setShifts(shiftResult.shifts);setTracking(trackingResult.tracking);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -108,6 +112,13 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try { await api.createDevice({ownership,platform,model,driverId,identifier,status:"active"}); await refresh(); }
     catch { setError("Cihaz eklenemedi. Sürücü ID'sini kontrol edin."); }
   }
+  async function addAssignment(){
+    const vehicleId=window.prompt("Araç ID");if(!vehicleId)return;
+    const driverId=window.prompt("Sürücü ID");if(!driverId)return;
+    const deviceId=window.prompt("Cihaz ID (opsiyonel)")||null;
+    try{await api.createAssignment(vehicleId,driverId,deviceId);await refresh();}
+    catch(e){setError(e instanceof Error&&e.message==="ACTIVE_ASSIGNMENT_CONFLICT"?"Araç veya sürücünün zaten aktif ataması var.":"Atama oluşturulamadı.");}
+  }
   return <div className="app-shell">
     <aside><div className="brand"><span>F</span> Filo</div><nav>
       <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>⌂ <b>Genel Bakış</b></button>
@@ -115,6 +126,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "audit" ? "active" : ""} onClick={() => setView("audit")}>✓ İşlem Geçmişi</button>
       <button className={view === "drivers" ? "active" : ""} onClick={() => setView("drivers")}>♙ Sürücüler</button>
       <button className={view === "devices" ? "active" : ""} onClick={() => setView("devices")}>▤ Cihazlar</button>
+      <button className={view === "operations" ? "active" : ""} onClick={() => setView("operations")}>↔ Operasyonlar</button>
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
     <main className="dashboard">
@@ -155,6 +167,20 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <div className="section-head"><div><p className="eyebrow">ROL VE YETKİ</p><h2>Kullanıcılar</h2></div></div>
         <div className="table-wrap"><table><thead><tr><th>Kullanıcı</th><th>E-posta</th><th>Rol</th></tr></thead><tbody>{members.map(m=><tr key={m.userId}><td><b>{m.fullName}</b></td><td>{m.email}</td><td>{user.role==="owner"&&m.role!=="owner"?<select value={m.role} onChange={async e=>{await api.updateMemberRole(m.userId,e.target.value as "admin"|"operator"|"viewer");await refresh();}}><option value="admin">Admin</option><option value="operator">Operatör</option><option value="viewer">Görüntüleyici</option></select>:m.role}</td></tr>)}</tbody></table></div>
       </section>}
+      {view === "operations" && <>
+      <section className="table-card">
+        <div className="section-head"><div><p className="eyebrow">ARAÇ–SÜRÜCÜ ATAMASI</p><h2>Aktif ve geçmiş atamalar</h2></div>{user.role!=="viewer"&&<button onClick={()=>void addAssignment()}>＋ Atama oluştur</button>}</div>
+        <div className="table-wrap"><table><thead><tr><th>Araç</th><th>Sürücü</th><th>Cihaz</th><th>Başlangıç</th><th>Durum / işlem</th></tr></thead><tbody>{assignments.map(a=><tr key={a.id}><td><b>{a.vehiclePlate}</b><br/><small>{a.vehicleId}</small></td><td>{a.driverName}<br/><small>{a.driverId}</small></td><td>{a.deviceModel??"Atanmamış"}<br/><small>{a.deviceId}</small></td><td>{new Date(a.startsAt).toLocaleString("tr-TR")}</td><td>{a.endedAt?"Tamamlandı":user.role==="viewer"?"Aktif":<button onClick={async()=>{await api.endAssignment(a.id);await refresh();}}>Atamayı bitir</button>}</td></tr>)}</tbody></table></div>
+      </section>
+      <section className="table-card spaced">
+        <div className="section-head"><div><p className="eyebrow">VARDİYA / ÇALIŞMA OTURUMU</p><h2>Vardiyalar</h2></div></div>
+        <div className="table-wrap"><table><thead><tr><th>Araç</th><th>Sürücü</th><th>Başlangıç</th><th>Durum</th></tr></thead><tbody>{shifts.map(s=><tr key={s.id}><td>{s.vehiclePlate}</td><td>{s.driverName}</td><td>{new Date(s.startedAt).toLocaleString("tr-TR")}</td><td>{s.status==="active"&&user.role!=="viewer"?<button onClick={async()=>{await api.endShift(s.id);await refresh();}}>Vardiyayı bitir</button>:"Tamamlandı"}</td></tr>)}</tbody></table></div>
+        {user.role!=="viewer"&&assignments.filter(a=>!a.endedAt).map(a=><button className="inline-action" key={a.id} onClick={async()=>{await api.startShift(a.id);await refresh();}}>Vardiya başlat: {a.vehiclePlate} / {a.driverName}</button>)}
+      </section>
+      <section className="table-card spaced">
+        <div className="section-head"><div><p className="eyebrow">KONUM İZNİ VE TAKİP</p><h2>Takip durumları</h2></div></div>
+        <div className="table-wrap"><table><thead><tr><th>Atama</th><th>İzin</th><th>Takip</th><th>Güncelleme</th></tr></thead><tbody>{tracking.map(t=><tr key={t.assignmentId}><td><small>{t.assignmentId}</small></td><td>{t.permission}</td><td>{t.state}</td><td>{user.role!=="viewer"&&<><button onClick={async()=>{await api.updateTracking(t.assignmentId,"granted_always","tracking");await refresh();}}>İzin ver / başlat</button><button className="secondary" onClick={async()=>{await api.updateTracking(t.assignmentId,"denied","off");await refresh();}}>İzni geri çek</button></>}</td></tr>)}</tbody></table></div>
+      </section></>}
     </main>
     {open && <VehicleForm onClose={() => setOpen(false)} onCreated={(v) => { setVehicles([v,...vehicles]); setOpen(false); void refresh(); }} />}
   </div>;

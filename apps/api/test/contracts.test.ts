@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createDeviceSchema, createDriverSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema } from "@filo/contracts";
+import { createAssignmentSchema, createDeviceSchema, createDriverSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
   it("normalizes email and plate", () => {
@@ -21,5 +21,12 @@ describe("API contracts", () => {
     assert.equal(createDriverSchema.safeParse({ fullName: "Ayşe Yılmaz", phone: "5551112233" }).success, true);
     assert.equal(createDeviceSchema.safeParse({ ownership: "personal", platform: "ios", model: "iPhone", driverId: null }).success, true);
     assert.equal(updateMemberRoleSchema.safeParse({ role: "owner" }).success, false);
+  });
+
+  it("validates assignment and safe tracking transitions", () => {
+    const id = "10000000-0000-4000-8000-000000000001";
+    assert.equal(createAssignmentSchema.safeParse({ vehicleId:id, driverId:id, deviceId:null }).success, true);
+    assert.equal(updateTrackingSchema.safeParse({ permission:"denied", state:"tracking" }).success, false);
+    assert.equal(updateTrackingSchema.safeParse({ permission:"granted_always", state:"tracking" }).success, true);
   });
 });

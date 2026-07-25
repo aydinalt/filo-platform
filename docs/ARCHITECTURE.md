@@ -19,8 +19,14 @@ Uygulama bağlantısı `filo_app` rolüyle kurulur. Migration ve seed bağlantı
 ayrı `DATABASE_ADMIN_URL` üzerinden yürür. Üretimde bu iki URL aynı kullanıcıyı
 kullanmamalıdır.
 
+## v0.4 operasyon durumu
+
+Atama, vardiya ve takip durumu ayrı tablolardır. Konum koordinatı henüz
+toplanmaz; bu dilim yalnız izin ve takip yaşam döngüsünü güvenli biçimde kurar.
+İzin reddedildiğinde veya geri çekildiğinde veritabanı ve API takibin aktif
+kalmasına izin vermez.
+
 ## Henüz kapsamda olmayanlar
 
-Konum toplama, vardiya, sürücü mobil uygulaması, public firma sayfası, CRM,
-teklif, özel alan adı ve ödeme yoktur. Bunlar tenant invariant'ı kanıtlandıktan
-sonra ayrı dikey dilimlerdir.
+Gerçek konum noktası toplama, sürücü mobil uygulaması, public firma sayfası,
+CRM, teklif, özel alan adı ve ödeme yoktur. Bunlar ayrı dikey dilimlerdir.

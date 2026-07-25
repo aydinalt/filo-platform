@@ -90,3 +90,42 @@ export type Vehicle = {
   status: "active" | "maintenance" | "inactive";
   createdAt: string;
 };
+
+export const createAssignmentSchema = z.object({
+  vehicleId: z.string().uuid(),
+  driverId: z.string().uuid(),
+  deviceId: z.string().uuid().nullable().default(null),
+  startsAt: z.string().datetime().optional()
+});
+
+export const startShiftSchema = z.object({
+  assignmentId: z.string().uuid()
+});
+
+export const updateTrackingSchema = z.object({
+  permission: z.enum(["unknown", "granted_while_in_use", "granted_always", "denied", "restricted"]),
+  state: z.enum(["off", "ready", "tracking", "paused", "permission_revoked", "error"]),
+  errorCode: z.string().trim().max(80).nullable().optional()
+}).superRefine((value, context) => {
+  const permitted = value.permission === "granted_while_in_use" || value.permission === "granted_always";
+  if (value.state === "tracking" && !permitted) {
+    context.addIssue({ code: "custom", message: "Tracking requires location permission", path: ["state"] });
+  }
+});
+
+export type Assignment = {
+  id: string; tenantId: string; vehicleId: string; vehiclePlate: string;
+  driverId: string; driverName: string; deviceId: string | null; deviceModel: string | null;
+  startsAt: string; endedAt: string | null; createdAt: string;
+};
+
+export type WorkShift = {
+  id: string; assignmentId: string; vehiclePlate: string; driverName: string;
+  startedAt: string; endedAt: string | null; status: "active" | "completed";
+};
+
+export type TrackingStatus = {
+  assignmentId: string; permission: "unknown" | "granted_while_in_use" | "granted_always" | "denied" | "restricted";
+  state: "off" | "ready" | "tracking" | "paused" | "permission_revoked" | "error";
+  errorCode: string | null; updatedAt: string;
+};

@@ -1,10 +1,13 @@
-# Filo Platform V1 — sürücü, cihaz ve yetkilendirme v0.3
+# Filo Platform V1 — operasyon oturumu ve takip modeli v0.4
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
 
 v0.3 ayrıca tenant izolasyonlu sürücü yönetimi, şirket/kişisel cihaz envanteri,
 cihaz–sürücü ataması ve Owner/Admin/Operator/Viewer rol politikasını içerir.
+
+v0.4 araç–sürücü atama geçmişi, çakışma koruması, vardiya/çalışma oturumları,
+telefon konum izni ve güvenli takip durum makinesini ekler.
 
 ## v0.2 ile çalışan akış
 

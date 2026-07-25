@@ -1,4 +1,4 @@
-import type { AuditEvent, CreateDeviceInput, CreateDriverInput, Device, Driver, Member, CreateVehicleInput, SessionUser, Vehicle } from "@filo/contracts";
+import type { Assignment, AuditEvent, CreateDeviceInput, CreateDriverInput, Device, Driver, Member, CreateVehicleInput, SessionUser, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -38,4 +38,14 @@ export const api = {
   ,members: () => request<{members:Member[]}>("/api/members")
   ,updateMemberRole: (userId:string,role:"admin"|"operator"|"viewer") =>
     request<{member:Member}>(`/api/members/${userId}/role`,{method:"PATCH",body:JSON.stringify({role})})
+  ,assignments: () => request<{assignments:Assignment[]}>("/api/operations/assignments")
+  ,createAssignment: (vehicleId:string,driverId:string,deviceId:string|null) =>
+    request<{assignment:Assignment}>("/api/operations/assignments",{method:"POST",body:JSON.stringify({vehicleId,driverId,deviceId})})
+  ,endAssignment: (id:string) => request<void>(`/api/operations/assignments/${id}/end`,{method:"PATCH"})
+  ,shifts: () => request<{shifts:WorkShift[]}>("/api/operations/shifts")
+  ,startShift: (assignmentId:string) => request<{shift:{id:string}}>("/api/operations/shifts",{method:"POST",body:JSON.stringify({assignmentId})})
+  ,endShift: (id:string) => request<void>(`/api/operations/shifts/${id}/end`,{method:"PATCH"})
+  ,tracking: () => request<{tracking:TrackingStatus[]}>("/api/operations/tracking")
+  ,updateTracking: (assignmentId:string,permission:TrackingStatus["permission"],state:TrackingStatus["state"]) =>
+    request<{tracking:TrackingStatus}>(`/api/operations/tracking/${assignmentId}`,{method:"PATCH",body:JSON.stringify({permission,state})})
 };
