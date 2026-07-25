@@ -7,6 +7,9 @@ import { config } from "./config.js";
 import { authRoutes } from "./routes/auth.js";
 import { vehicleRoutes } from "./routes/vehicles.js";
 import { auditRoutes } from "./routes/audit.js";
+import { driverRoutes } from "./routes/drivers.js";
+import { deviceRoutes } from "./routes/devices.js";
+import { memberRoutes } from "./routes/members.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true, trustProxy: true });
@@ -19,6 +22,9 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(vehicleRoutes, { prefix: "/api/vehicles" });
   await app.register(auditRoutes, { prefix: "/api/audit" });
+  await app.register(driverRoutes, { prefix: "/api/drivers" });
+  await app.register(deviceRoutes, { prefix: "/api/devices" });
+  await app.register(memberRoutes, { prefix: "/api/members" });
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error }, "request failed");

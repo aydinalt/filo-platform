@@ -1,7 +1,10 @@
-# Filo Platform V1 — ilk güvenli dikey dilim v0.2
+# Filo Platform V1 — sürücü, cihaz ve yetkilendirme v0.3
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
+
+v0.3 ayrıca tenant izolasyonlu sürücü yönetimi, şirket/kişisel cihaz envanteri,
+cihaz–sürücü ataması ve Owner/Admin/Operator/Viewer rol politikasını içerir.
 
 ## v0.2 ile çalışan akış
 

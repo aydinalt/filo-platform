@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { AuditEvent, CreateVehicleInput, SessionUser, Vehicle } from "@filo/contracts";
+import type { AuditEvent, CreateVehicleInput, Device, Driver, Member, SessionUser, Vehicle } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -60,15 +60,20 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<"overview" | "vehicles" | "audit">("overview");
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "members" | "audit">("overview");
   const [error, setError] = useState("");
 
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult] = await Promise.all([api.vehicles(), api.auditEvents()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
+      setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
+      if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
     }
@@ -88,12 +93,29 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   }
 
   const active = vehicles.filter((v) => v.status === "active").length;
+  async function addDriver() {
+    const fullName=window.prompt("Sürücü adı soyadı"); if(!fullName) return;
+    const phone=window.prompt("Telefon numarası"); if(!phone) return;
+    try { await api.createDriver({fullName,phone,status:"active"}); await refresh(); }
+    catch { setError("Sürücü eklenemedi. Telefon numarası daha önce kullanılmış olabilir."); }
+  }
+  async function addDevice() {
+    const ownership=window.confirm("Şirket cihazı mı? Evet: şirket, Hayır: kişisel") ? "company" : "personal";
+    const platform=window.confirm("Android cihaz mı? Evet: Android, Hayır: iOS") ? "android" : "ios";
+    const model=window.prompt("Cihaz marka/modeli"); if(!model) return;
+    const driverId=window.prompt("Atanacak sürücünün ID'si (boş bırakılabilir)") || null;
+    const identifier=ownership==="company" ? window.prompt("Envanter/seri numarası (opsiyonel)") || undefined : undefined;
+    try { await api.createDevice({ownership,platform,model,driverId,identifier,status:"active"}); await refresh(); }
+    catch { setError("Cihaz eklenemedi. Sürücü ID'sini kontrol edin."); }
+  }
   return <div className="app-shell">
     <aside><div className="brand"><span>F</span> Filo</div><nav>
       <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>⌂ <b>Genel Bakış</b></button>
       <button className={view === "vehicles" ? "active" : ""} onClick={() => setView("vehicles")}>▣ Araçlar</button>
       <button className={view === "audit" ? "active" : ""} onClick={() => setView("audit")}>✓ İşlem Geçmişi</button>
-      <button disabled>♙ Sürücüler <small>yakında</small></button>
+      <button className={view === "drivers" ? "active" : ""} onClick={() => setView("drivers")}>♙ Sürücüler</button>
+      <button className={view === "devices" ? "active" : ""} onClick={() => setView("devices")}>▤ Cihazlar</button>
+      {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
     <main className="dashboard">
       <header><div><p className="eyebrow">OPERASYON KONTROL MERKEZİ</p><h1>Günaydın, {user.fullName.split(" ")[0]}</h1></div><div className="user"><span>{user.fullName.slice(0,2).toUpperCase()}</span><div><strong>{user.fullName}</strong><small>{user.role}</small></div><button className="secondary" onClick={onLogout}>Çıkış</button></div></header>
@@ -120,6 +142,18 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <div className="audit-list">{events.map((event) => <article key={event.id}>
           <span className="audit-icon">✓</span><div><b>{event.action === "vehicle.created" ? "Araç eklendi" : "Araç durumu değiştirildi"}</b><p>{String(event.metadata.plate ?? "Araç")} · {event.actorName}</p></div><time>{new Date(event.createdAt).toLocaleString("tr-TR")}</time>
         </article>)}</div>}
+      </section>}
+      {view === "drivers" && <section className="table-card">
+        <div className="section-head"><div><p className="eyebrow">SÜRÜCÜ YÖNETİMİ</p><h2>Sürücüler</h2></div>{["owner","admin"].includes(user.role)&&<button onClick={()=>void addDriver()}>＋ Sürücü ekle</button>}</div>
+        <div className="table-wrap"><table><thead><tr><th>Ad soyad</th><th>Telefon</th><th>Ehliyet</th><th>Durum</th><th>Kayıt ID</th></tr></thead><tbody>{drivers.map(d=><tr key={d.id}><td><b>{d.fullName}</b></td><td>{d.phone}</td><td>{d.licenseNumber??"—"}</td><td>{d.status==="active"?"Aktif":"Pasif"}</td><td><small>{d.id}</small></td></tr>)}</tbody></table></div>
+      </section>}
+      {view === "devices" && <section className="table-card">
+        <div className="section-head"><div><p className="eyebrow">CİHAZ ENVANTERİ</p><h2>Şirket ve kişisel cihazlar</h2></div>{["owner","admin"].includes(user.role)&&<button onClick={()=>void addDevice()}>＋ Cihaz ekle</button>}</div>
+        <div className="table-wrap"><table><thead><tr><th>Cihaz</th><th>Sahiplik</th><th>Platform</th><th>Sürücü</th><th>Tanımlayıcı</th></tr></thead><tbody>{devices.map(d=><tr key={d.id}><td><b>{d.model}</b></td><td>{d.ownership==="company"?"Şirket":"Kişisel"}</td><td>{d.platform}</td><td>{d.driverName??"Atanmamış"}</td><td>{d.identifier??"Veri minimizasyonu"}</td></tr>)}</tbody></table></div>
+      </section>}
+      {view === "members" && <section className="table-card">
+        <div className="section-head"><div><p className="eyebrow">ROL VE YETKİ</p><h2>Kullanıcılar</h2></div></div>
+        <div className="table-wrap"><table><thead><tr><th>Kullanıcı</th><th>E-posta</th><th>Rol</th></tr></thead><tbody>{members.map(m=><tr key={m.userId}><td><b>{m.fullName}</b></td><td>{m.email}</td><td>{user.role==="owner"&&m.role!=="owner"?<select value={m.role} onChange={async e=>{await api.updateMemberRole(m.userId,e.target.value as "admin"|"operator"|"viewer");await refresh();}}><option value="admin">Admin</option><option value="operator">Operatör</option><option value="viewer">Görüntüleyici</option></select>:m.role}</td></tr>)}</tbody></table></div>
       </section>}
     </main>
     {open && <VehicleForm onClose={() => setOpen(false)} onCreated={(v) => { setVehicles([v,...vehicles]); setOpen(false); void refresh(); }} />}

@@ -32,12 +32,52 @@ export type SessionUser = {
 
 export type AuditEvent = {
   id: string;
-  action: "vehicle.created" | "vehicle.status_changed";
-  entityType: "vehicle";
+  action: string;
+  entityType: string;
   entityId: string;
   actorName: string;
   metadata: Record<string, unknown>;
   createdAt: string;
+};
+
+export const createDriverSchema = z.object({
+  fullName: z.string().trim().min(2).max(120),
+  phone: z.string().trim().min(7).max(24),
+  licenseNumber: z.string().trim().min(3).max(40).optional(),
+  status: z.enum(["active", "inactive"]).default("active")
+});
+
+export const createDeviceSchema = z.object({
+  ownership: z.enum(["company", "personal"]),
+  platform: z.enum(["android", "ios"]),
+  model: z.string().trim().min(1).max(100),
+  identifier: z.string().trim().max(120).optional(),
+  driverId: z.string().uuid().nullable().default(null),
+  status: z.enum(["active", "inactive"]).default("active")
+});
+
+export const updateMemberRoleSchema = z.object({
+  role: z.enum(["admin", "operator", "viewer"])
+});
+
+export type CreateDriverInput = z.infer<typeof createDriverSchema>;
+export type CreateDeviceInput = z.infer<typeof createDeviceSchema>;
+
+export type Driver = {
+  id: string; tenantId: string; fullName: string; phone: string;
+  licenseNumber: string | null; status: "active" | "inactive"; createdAt: string;
+};
+
+export type Device = {
+  id: string; tenantId: string; ownership: "company" | "personal";
+  platform: "android" | "ios"; model: string; identifier: string | null;
+  driverId: string | null; driverName: string | null;
+  status: "active" | "inactive"; createdAt: string;
+};
+
+export type Member = {
+  userId: string; fullName: string; email: string;
+  role: SessionUser["role"]; createdAt: string;
 };
 
 export type Vehicle = {

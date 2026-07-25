@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createVehicleSchema, loginSchema } from "@filo/contracts";
+import { createDeviceSchema, createDriverSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
   it("normalizes email and plate", () => {
@@ -15,5 +15,11 @@ describe("API contracts", () => {
     assert.throws(() => createVehicleSchema.parse({
       plate: "34 ABC 123", make: "Ford", model: "Transit", year: 1970
     }));
+  });
+
+  it("validates driver, device and assignable roles", () => {
+    assert.equal(createDriverSchema.safeParse({ fullName: "Ayşe Yılmaz", phone: "5551112233" }).success, true);
+    assert.equal(createDeviceSchema.safeParse({ ownership: "personal", platform: "ios", model: "iPhone", driverId: null }).success, true);
+    assert.equal(updateMemberRoleSchema.safeParse({ role: "owner" }).success, false);
   });
 });
