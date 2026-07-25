@@ -1,0 +1,7 @@
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'filo_app') THEN
+    CREATE ROLE filo_app LOGIN PASSWORD 'filo_app_dev_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+  END IF;
+END
+$$;

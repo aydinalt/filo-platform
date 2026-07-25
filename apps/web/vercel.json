@@ -1,0 +1,5 @@
+{
+  "framework": "vite",
+  "buildCommand": "cd ../.. && npm ci && npm run build --workspace @filo/web",
+  "outputDirectory": "dist"
+}
