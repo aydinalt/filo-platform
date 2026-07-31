@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { Assignment, AuditEvent, CreateVehicleInput, Device, Driver, LatestLocation, Member, SessionUser, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import type { Assignment, AuditEvent, CreateVehicleInput, Device, Driver, LatestLocation, Member, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -67,6 +67,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [shifts,setShifts]=useState<WorkShift[]>([]);
   const [tracking,setTracking]=useState<TrackingStatus[]>([]);
   const [locations,setLocations]=useState<LatestLocation[]>([]);
+  const [selectedRoute,setSelectedRoute]=useState<ShiftRoute|null>(null);
   const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
@@ -200,7 +201,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       </section>
       <section className="table-card spaced">
         <div className="section-head"><div><p className="eyebrow">VARDİYA / ÇALIŞMA OTURUMU</p><h2>Vardiyalar</h2></div></div>
-        <div className="table-wrap"><table><thead><tr><th>Araç</th><th>Sürücü</th><th>Başlangıç</th><th>Durum</th></tr></thead><tbody>{shifts.map(s=><tr key={s.id}><td>{s.vehiclePlate}</td><td>{s.driverName}</td><td>{new Date(s.startedAt).toLocaleString("tr-TR")}</td><td>{s.status==="active"&&user.role!=="viewer"?<button onClick={async()=>{await api.endShift(s.id);await refresh();}}>Vardiyayı bitir</button>:"Tamamlandı"}</td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table><thead><tr><th>Araç</th><th>Sürücü</th><th>Başlangıç</th><th>Durum</th><th>Rota</th></tr></thead><tbody>{shifts.map(s=><tr key={s.id}><td>{s.vehiclePlate}</td><td>{s.driverName}</td><td>{new Date(s.startedAt).toLocaleString("tr-TR")}</td><td>{s.status==="active"&&user.role!=="viewer"?<button onClick={async()=>{await api.endShift(s.id);await refresh();}}>Vardiyayı bitir</button>:"Tamamlandı"}</td><td><button className="secondary" onClick={async()=>setSelectedRoute((await api.shiftRoute(s.id)).route)}>Geçmişi aç</button></td></tr>)}</tbody></table></div>
         {user.role!=="viewer"&&assignments.filter(a=>!a.endedAt).map(a=><button className="inline-action" key={a.id} onClick={async()=>{await api.startShift(a.id);await refresh();}}>Vardiya başlat: {a.vehiclePlate} / {a.driverName}</button>)}
       </section>
       <section className="table-card spaced">
@@ -213,6 +214,12 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <label>Aktif atama<select value={mobileAssignment} onChange={e=>setMobileAssignment(e.target.value)}><option value="">Atama seçin</option>{assignments.filter(a=>!a.endedAt).map(a=><option key={a.id} value={a.id}>{a.vehiclePlate} · {a.driverName}</option>)}</select></label>
         <div className="modal-actions"><button onClick={()=>void startMobileTracking()}>Takibi başlat</button><button className="secondary" onClick={()=>void stopMobileTracking()}>Takibi durdur</button></div>
         <div className="security-note">{mobileMessage}</div>
+      </section>}
+      {view === "operations" && selectedRoute && <section className="table-card spaced route-card">
+        <div className="section-head"><div><p className="eyebrow">VARDİYA ROTA GEÇMİŞİ</p><h2>{selectedRoute.vehiclePlate} · {selectedRoute.driverName}</h2></div><button className="secondary" onClick={()=>setSelectedRoute(null)}>Kapat</button></div>
+        <section className="route-metrics"><article><span>Konum noktası</span><strong>{selectedRoute.pointCount}</strong></article><article><span>Tahmini mesafe</span><strong>{(selectedRoute.distanceMeters/1000).toFixed(2)} km</strong></article><article><span>Hareket</span><strong>{Math.round(selectedRoute.movingSeconds/60)} dk</strong></article><article><span>Duraklama</span><strong>{Math.round(selectedRoute.stoppedSeconds/60)} dk</strong></article></section>
+        <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Koordinat</th><th>Hız</th><th>Doğruluk</th></tr></thead><tbody>{selectedRoute.points.map(point=><tr key={point.id}><td>{new Date(point.recordedAt).toLocaleString("tr-TR")}</td><td>{point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</td><td>{point.speedMps===null?"—":`${Math.round(point.speedMps*3.6)} km/sa`}</td><td>±{Math.round(point.accuracyMeters)} m</td></tr>)}</tbody></table></div>
+        {!selectedRoute.pointCount&&<div className="empty"><b>Bu vardiyada konum kaydı yok</b><p>Takip başladığında zaman sıralı rota burada oluşur.</p></div>}
       </section>}
       {view === "operations" && <section className="table-card spaced">
         <div className="section-head"><div><p className="eyebrow">CANLI OPERASYON GÖRÜNÜMÜ</p><h2>Son alınan konumlar</h2></div><button className="secondary" onClick={()=>void refresh()}>Yenile</button></div>

@@ -11,6 +11,13 @@ const assignmentSelect = `SELECT a.id,a.tenant_id AS "tenantId",a.vehicle_id AS 
  FROM vehicle_driver_assignments a JOIN vehicles v ON v.id=a.vehicle_id
  JOIN drivers r ON r.id=a.driver_id LEFT JOIN devices d ON d.id=a.device_id`;
 
+function distanceMeters(a:{latitude:number;longitude:number},b:{latitude:number;longitude:number}) {
+  const radians=(value:number)=>value*Math.PI/180;
+  const dLat=radians(b.latitude-a.latitude),dLon=radians(b.longitude-a.longitude);
+  const value=Math.sin(dLat/2)**2+Math.cos(radians(a.latitude))*Math.cos(radians(b.latitude))*Math.sin(dLon/2)**2;
+  return 6371000*2*Math.atan2(Math.sqrt(value),Math.sqrt(1-value));
+}
+
 export async function operationRoutes(app: FastifyInstance) {
   app.get("/assignments", { preHandler: requireSession }, async (request) =>
     withTenantTransaction(request.sessionUser.tenantId, request.sessionUser.id, async (client) => {
@@ -155,4 +162,34 @@ export async function operationRoutes(app: FastifyInstance) {
         ORDER BY e.assignment_id,e.recorded_at DESC`)).rows;
       return {locations:rows.map(r=>({...r,recordedAt:r.recordedAt.toISOString(),receivedAt:r.receivedAt.toISOString()}))};
     }));
+
+  app.get("/shifts/:id/route",{preHandler:requireSession},async(request,reply)=>{
+    const id=(request.params as {id?:string}).id;
+    if(!id)return reply.code(400).send({error:"INVALID_INPUT"});
+    const user=request.sessionUser;
+    const route=await withTenantTransaction(user.tenantId,user.id,async client=>{
+      const shift=(await client.query(`SELECT s.id,s.assignment_id AS "assignmentId",s.started_at AS "startedAt",s.ended_at AS "endedAt",
+        v.plate AS "vehiclePlate",d.full_name AS "driverName"
+        FROM work_shifts s JOIN vehicle_driver_assignments a ON a.id=s.assignment_id
+        JOIN vehicles v ON v.id=a.vehicle_id JOIN drivers d ON d.id=a.driver_id WHERE s.id=$1`,[id])).rows[0];
+      if(!shift)return null;
+      const points=(await client.query(`SELECT id::text,latitude,longitude,accuracy_meters AS "accuracyMeters",
+        speed_mps AS "speedMps",heading_degrees AS "headingDegrees",recorded_at AS "recordedAt"
+        FROM location_events WHERE assignment_id=$1 AND recorded_at >= $2
+        AND ($3::timestamptz IS NULL OR recorded_at <= $3) ORDER BY recorded_at ASC LIMIT 5000`,
+        [shift.assignmentId,shift.startedAt,shift.endedAt])).rows;
+      let distance=0,movingSeconds=0,stoppedSeconds=0;
+      for(let index=1;index<points.length;index++){
+        const previous=points[index-1]!,current=points[index]!;
+        const seconds=Math.max(0,Math.min(300,(current.recordedAt.getTime()-previous.recordedAt.getTime())/1000));
+        const segment=distanceMeters(previous,current);
+        if(previous.accuracyMeters<=100&&current.accuracyMeters<=100&&segment<=5000)distance+=segment;
+        if((current.speedMps??(seconds?segment/seconds:0))>=1) movingSeconds+=seconds; else stoppedSeconds+=seconds;
+      }
+      return {...shift,pointCount:points.length,distanceMeters:Math.round(distance),movingSeconds:Math.round(movingSeconds),stoppedSeconds:Math.round(stoppedSeconds),
+        startedAt:shift.startedAt.toISOString(),endedAt:shift.endedAt?.toISOString()??null,
+        points:points.map(point=>({...point,recordedAt:point.recordedAt.toISOString()}))};
+    });
+    return route?{route}:reply.code(404).send({error:"SHIFT_NOT_FOUND"});
+  });
 }

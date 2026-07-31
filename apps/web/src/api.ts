@@ -1,4 +1,4 @@
-import type { Assignment, AuditEvent, CreateDeviceInput, CreateDriverInput, CreateLocationEventInput, Device, Driver, LatestLocation, Member, CreateVehicleInput, SessionUser, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import type { Assignment, AuditEvent, CreateDeviceInput, CreateDriverInput, CreateLocationEventInput, Device, Driver, LatestLocation, Member, CreateVehicleInput, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -51,4 +51,5 @@ export const api = {
   ,sendLocation: (input:CreateLocationEventInput) =>
     request<{accepted:boolean;duplicate:boolean}>("/api/operations/locations",{method:"POST",body:JSON.stringify(input)})
   ,latestLocations: () => request<{locations:LatestLocation[]}>("/api/operations/locations/latest")
+  ,shiftRoute: (shiftId:string) => request<{route:ShiftRoute}>(`/api/operations/shifts/${shiftId}/route`)
 };

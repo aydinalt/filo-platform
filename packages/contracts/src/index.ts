@@ -148,3 +148,15 @@ export type LatestLocation = {
   latitude: number; longitude: number; accuracyMeters: number;
   recordedAt: string; receivedAt: string;
 };
+
+export type RoutePoint = {
+  id: string; latitude: number; longitude: number; accuracyMeters: number;
+  speedMps: number | null; headingDegrees: number | null; recordedAt: string;
+};
+
+export type ShiftRoute = {
+  shiftId: string; assignmentId: string; vehiclePlate: string; driverName: string;
+  startedAt: string; endedAt: string | null; pointCount: number;
+  distanceMeters: number; movingSeconds: number; stoppedSeconds: number;
+  points: RoutePoint[];
+};

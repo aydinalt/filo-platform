@@ -36,4 +36,10 @@ describe("API contracts", () => {
     assert.equal(createLocationEventSchema.safeParse({...base,latitude:91,longitude:29.01,accuracyMeters:12}).success,false);
     assert.equal(createLocationEventSchema.safeParse({...base,latitude:41.01,longitude:29.01,accuracyMeters:0}).success,false);
   });
+
+  it("keeps route event identifiers tenant-safe and bounded", () => {
+    const input={assignmentId:"10000000-0000-4000-8000-000000000001",eventId:"30000000-0000-4000-8000-000000000001",recordedAt:new Date().toISOString(),latitude:41.01,longitude:29.01,accuracyMeters:25,speedMps:12,headingDegrees:359};
+    assert.equal(createLocationEventSchema.safeParse(input).success,true);
+    assert.equal(createLocationEventSchema.safeParse({...input,headingDegrees:360}).success,false);
+  });
 });
