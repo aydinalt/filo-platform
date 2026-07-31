@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createAssignmentSchema, startShiftSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAssignmentSchema, createLocationEventSchema, startShiftSchema, updateTrackingSchema } from "@filo/contracts";
 import { withTenantTransaction } from "@filo/database";
 import { requireSession } from "../lib/auth.js";
 import { allow } from "../lib/permissions.js";
@@ -118,4 +118,41 @@ export async function operationRoutes(app: FastifyInstance) {
         VALUES($1,$2,'tracking.status_changed','assignment',$3,jsonb_build_object('permission',$4,'state',$5))`,[user.tenantId,user.id,assignmentId,parsed.data.permission,state]);return true;
     });return result?{tracking:{assignmentId,permission:parsed.data.permission,state,errorCode:parsed.data.errorCode??null}}:reply.code(404).send({error:"ASSIGNMENT_NOT_FOUND"});
   });
+
+  app.post("/locations", {preHandler:[requireSession,allow("owner","admin","operator")]}, async(request,reply)=>{
+    const parsed=createLocationEventSchema.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:"INVALID_LOCATION"});
+    const recordedAt=new Date(parsed.data.recordedAt);
+    if(Math.abs(Date.now()-recordedAt.getTime())>5*60*1000)return reply.code(400).send({error:"LOCATION_TIME_OUT_OF_RANGE"});
+    const user=request.sessionUser;
+    const result=await withTenantTransaction(user.tenantId,user.id,async client=>{
+      const eligible=await client.query(`SELECT 1 FROM vehicle_driver_assignments a
+        JOIN work_shifts s ON s.assignment_id=a.id AND s.status='active'
+        JOIN tracking_statuses t ON t.assignment_id=a.id AND t.state='tracking'
+        WHERE a.id=$1 AND a.ended_at IS NULL`,[parsed.data.assignmentId]);
+      if(!eligible.rowCount)return "inactive" as const;
+      const inserted=await client.query(`INSERT INTO location_events
+        (tenant_id,assignment_id,event_id,recorded_at,latitude,longitude,accuracy_meters,speed_mps,heading_degrees)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        ON CONFLICT (tenant_id,event_id) DO NOTHING RETURNING id`,[
+        user.tenantId,parsed.data.assignmentId,parsed.data.eventId,recordedAt,
+        parsed.data.latitude,parsed.data.longitude,parsed.data.accuracyMeters,
+        parsed.data.speedMps??null,parsed.data.headingDegrees??null]);
+      return inserted.rowCount?"created" as const:"duplicate" as const;
+    });
+    if(result==="inactive")return reply.code(409).send({error:"TRACKING_NOT_ACTIVE"});
+    return reply.code(result==="created"?201:200).send({accepted:true,duplicate:result==="duplicate"});
+  });
+
+  app.get("/locations/latest",{preHandler:requireSession},async request=>
+    withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async client=>{
+      const rows=(await client.query(`SELECT DISTINCT ON (e.assignment_id)
+        e.assignment_id AS "assignmentId",v.plate AS "vehiclePlate",d.full_name AS "driverName",
+        e.latitude,e.longitude,e.accuracy_meters AS "accuracyMeters",
+        e.recorded_at AS "recordedAt",e.received_at AS "receivedAt"
+        FROM location_events e JOIN vehicle_driver_assignments a ON a.id=e.assignment_id
+        JOIN vehicles v ON v.id=a.vehicle_id JOIN drivers d ON d.id=a.driver_id
+        ORDER BY e.assignment_id,e.recorded_at DESC`)).rows;
+      return {locations:rows.map(r=>({...r,recordedAt:r.recordedAt.toISOString(),receivedAt:r.receivedAt.toISOString()}))};
+    }));
 }

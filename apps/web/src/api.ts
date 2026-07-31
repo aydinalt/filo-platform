@@ -1,4 +1,4 @@
-import type { Assignment, AuditEvent, CreateDeviceInput, CreateDriverInput, Device, Driver, Member, CreateVehicleInput, SessionUser, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import type { Assignment, AuditEvent, CreateDeviceInput, CreateDriverInput, CreateLocationEventInput, Device, Driver, LatestLocation, Member, CreateVehicleInput, SessionUser, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -48,4 +48,7 @@ export const api = {
   ,tracking: () => request<{tracking:TrackingStatus[]}>("/api/operations/tracking")
   ,updateTracking: (assignmentId:string,permission:TrackingStatus["permission"],state:TrackingStatus["state"]) =>
     request<{tracking:TrackingStatus}>(`/api/operations/tracking/${assignmentId}`,{method:"PATCH",body:JSON.stringify({permission,state})})
+  ,sendLocation: (input:CreateLocationEventInput) =>
+    request<{accepted:boolean;duplicate:boolean}>("/api/operations/locations",{method:"POST",body:JSON.stringify(input)})
+  ,latestLocations: () => request<{locations:LatestLocation[]}>("/api/operations/locations/latest")
 };

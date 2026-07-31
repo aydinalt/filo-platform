@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import type { Assignment, AuditEvent, CreateVehicleInput, Device, Driver, Member, SessionUser, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import type { Assignment, AuditEvent, CreateVehicleInput, Device, Driver, LatestLocation, Member, SessionUser, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -66,17 +66,22 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [assignments,setAssignments]=useState<Assignment[]>([]);
   const [shifts,setShifts]=useState<WorkShift[]>([]);
   const [tracking,setTracking]=useState<TrackingStatus[]>([]);
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "members" | "audit">("overview");
+  const [locations,setLocations]=useState<LatestLocation[]>([]);
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
+  const [mobileAssignment,setMobileAssignment]=useState("");
+  const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
+  const watchId=useRef<number|null>(null);
 
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
       setAssignments(assignmentResult.assignments);setShifts(shiftResult.shifts);setTracking(trackingResult.tracking);
+      setLocations(locationResult.locations);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -84,6 +89,26 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   }
 
   useEffect(() => { void refresh(); }, []);
+  useEffect(()=>()=>{if(watchId.current!==null)navigator.geolocation.clearWatch(watchId.current);},[]);
+
+  async function startMobileTracking(){
+    if(!mobileAssignment){setMobileMessage("Önce aktif bir atama seçin.");return;}
+    if(!navigator.geolocation){setMobileMessage("Bu cihaz konum özelliğini desteklemiyor.");return;}
+    await api.updateTracking(mobileAssignment,"granted_while_in_use","tracking");
+    watchId.current=navigator.geolocation.watchPosition(async position=>{
+      try{
+        await api.sendLocation({assignmentId:mobileAssignment,eventId:crypto.randomUUID(),recordedAt:new Date(position.timestamp).toISOString(),latitude:position.coords.latitude,longitude:position.coords.longitude,accuracyMeters:position.coords.accuracy,speedMps:position.coords.speed,headingDegrees:position.coords.heading});
+        setMobileMessage(`Konum gönderildi · ${new Date().toLocaleTimeString("tr-TR")}`);
+        setLocations((await api.latestLocations()).locations);
+      }catch(e){setMobileMessage(e instanceof Error&&e.message==="TRACKING_NOT_ACTIVE"?"Aktif vardiya olmadan konum gönderilemez.":"Konum gönderilemedi.");}
+    },()=>setMobileMessage("Konum izni verilmedi veya konum alınamadı."),{enableHighAccuracy:true,maximumAge:15000,timeout:20000});
+    setMobileMessage("Konum izni bekleniyor…");
+  }
+  async function stopMobileTracking(){
+    if(watchId.current!==null){navigator.geolocation.clearWatch(watchId.current);watchId.current=null;}
+    if(mobileAssignment)await api.updateTracking(mobileAssignment,"granted_while_in_use","paused");
+    setMobileMessage("Takip kullanıcı tarafından durduruldu.");await refresh();
+  }
 
   async function changeStatus(vehicle: Vehicle, status: Vehicle["status"]) {
     setError("");
@@ -127,6 +152,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "drivers" ? "active" : ""} onClick={() => setView("drivers")}>♙ Sürücüler</button>
       <button className={view === "devices" ? "active" : ""} onClick={() => setView("devices")}>▤ Cihazlar</button>
       <button className={view === "operations" ? "active" : ""} onClick={() => setView("operations")}>↔ Operasyonlar</button>
+      {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
     <main className="dashboard">
@@ -181,6 +207,18 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <div className="section-head"><div><p className="eyebrow">KONUM İZNİ VE TAKİP</p><h2>Takip durumları</h2></div></div>
         <div className="table-wrap"><table><thead><tr><th>Atama</th><th>İzin</th><th>Takip</th><th>Güncelleme</th></tr></thead><tbody>{tracking.map(t=><tr key={t.assignmentId}><td><small>{t.assignmentId}</small></td><td>{t.permission}</td><td>{t.state}</td><td>{user.role!=="viewer"&&<><button onClick={async()=>{await api.updateTracking(t.assignmentId,"granted_always","tracking");await refresh();}}>İzin ver / başlat</button><button className="secondary" onClick={async()=>{await api.updateTracking(t.assignmentId,"denied","off");await refresh();}}>İzni geri çek</button></>}</td></tr>)}</tbody></table></div>
       </section></>}
+      {view === "mobile" && <section className="table-card mobile-tracking">
+        <div className="section-head"><div><p className="eyebrow">SÜRÜCÜ MOBİL WEB</p><h2>Telefon konum paylaşımı</h2></div></div>
+        <p>Konum yalnız aktif vardiya sırasında ve bu ekrandaki açık kontrolle gönderilir.</p>
+        <label>Aktif atama<select value={mobileAssignment} onChange={e=>setMobileAssignment(e.target.value)}><option value="">Atama seçin</option>{assignments.filter(a=>!a.endedAt).map(a=><option key={a.id} value={a.id}>{a.vehiclePlate} · {a.driverName}</option>)}</select></label>
+        <div className="modal-actions"><button onClick={()=>void startMobileTracking()}>Takibi başlat</button><button className="secondary" onClick={()=>void stopMobileTracking()}>Takibi durdur</button></div>
+        <div className="security-note">{mobileMessage}</div>
+      </section>}
+      {view === "operations" && <section className="table-card spaced">
+        <div className="section-head"><div><p className="eyebrow">CANLI OPERASYON GÖRÜNÜMÜ</p><h2>Son alınan konumlar</h2></div><button className="secondary" onClick={()=>void refresh()}>Yenile</button></div>
+        <div className="table-wrap"><table><thead><tr><th>Araç</th><th>Sürücü</th><th>Koordinat</th><th>Doğruluk</th><th>Telefon zamanı</th></tr></thead><tbody>{locations.map(l=><tr key={l.assignmentId}><td><b>{l.vehiclePlate}</b></td><td>{l.driverName}</td><td>{l.latitude.toFixed(5)}, {l.longitude.toFixed(5)}</td><td>±{Math.round(l.accuracyMeters)} m</td><td>{new Date(l.recordedAt).toLocaleString("tr-TR")}</td></tr>)}</tbody></table></div>
+        {!locations.length&&<div className="empty"><b>Henüz konum kaydı yok</b><p>Aktif vardiyada telefon takibi başlatıldığında burada görünecek.</p></div>}
+      </section>}
     </main>
     {open && <VehicleForm onClose={() => setOpen(false)} onCreated={(v) => { setVehicles([v,...vehicles]); setOpen(false); void refresh(); }} />}
   </div>;
