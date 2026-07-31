@@ -129,3 +129,22 @@ export type TrackingStatus = {
   state: "off" | "ready" | "tracking" | "paused" | "permission_revoked" | "error";
   errorCode: string | null; updatedAt: string;
 };
+
+export const createLocationEventSchema = z.object({
+  assignmentId: z.string().uuid(),
+  eventId: z.string().uuid(),
+  recordedAt: z.string().datetime(),
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+  accuracyMeters: z.number().finite().positive().max(5000),
+  speedMps: z.number().finite().min(0).max(150).nullable().optional(),
+  headingDegrees: z.number().finite().min(0).lt(360).nullable().optional()
+});
+
+export type CreateLocationEventInput = z.infer<typeof createLocationEventSchema>;
+
+export type LatestLocation = {
+  assignmentId: string; vehiclePlate: string; driverName: string;
+  latitude: number; longitude: number; accuracyMeters: number;
+  recordedAt: string; receivedAt: string;
+};
