@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createAssignmentSchema, createLocationEventSchema, startShiftSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAssignmentSchema, createGeofenceSchema, createLocationEventSchema, startShiftSchema, updateTrackingSchema } from "@filo/contracts";
 import { withTenantTransaction } from "@filo/database";
 import { requireSession } from "../lib/auth.js";
 import { allow } from "../lib/permissions.js";
@@ -19,6 +19,53 @@ function distanceMeters(a:{latitude:number;longitude:number},b:{latitude:number;
 }
 
 export async function operationRoutes(app: FastifyInstance) {
+  app.get("/geofences", {preHandler:requireSession}, async request =>
+    withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async client=>{
+      const geofences=(await client.query(`SELECT id,name,latitude,longitude,radius_meters AS "radiusMeters",status,created_at AS "createdAt"
+        FROM geofences ORDER BY status ASC,name ASC`)).rows;
+      return {geofences:geofences.map(item=>({...item,createdAt:item.createdAt.toISOString()}))};
+    }));
+
+  app.post("/geofences",{preHandler:[requireSession,allow("owner","admin")]},async(request,reply)=>{
+    const parsed=createGeofenceSchema.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:"INVALID_GEOFENCE"});
+    const user=request.sessionUser;
+    try{
+      const row=await withTenantTransaction(user.tenantId,user.id,async client=>{
+        const result=(await client.query(`INSERT INTO geofences(tenant_id,name,latitude,longitude,radius_meters,created_by)
+          VALUES($1,$2,$3,$4,$5,$6) RETURNING id,name,latitude,longitude,radius_meters AS "radiusMeters",status,created_at AS "createdAt"`,
+          [user.tenantId,parsed.data.name,parsed.data.latitude,parsed.data.longitude,parsed.data.radiusMeters,user.id])).rows[0];
+        await client.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+          VALUES($1,$2,'geofence.created','geofence',$3,jsonb_build_object('name',$4,'radiusMeters',$5))`,
+          [user.tenantId,user.id,result.id,result.name,result.radiusMeters]);
+        return result;
+      });
+      return reply.code(201).send({geofence:{...row,createdAt:row.createdAt.toISOString()}});
+    }catch(error){if((error as {code?:string}).code==="23505")return reply.code(409).send({error:"GEOFENCE_NAME_EXISTS"});throw error;}
+  });
+
+  app.patch("/geofences/:id/deactivate",{preHandler:[requireSession,allow("owner","admin")]},async(request,reply)=>{
+    const id=(request.params as {id?:string}).id;if(!id)return reply.code(400).send({error:"INVALID_INPUT"});
+    const user=request.sessionUser;
+    const changed=await withTenantTransaction(user.tenantId,user.id,async client=>{
+      const result=await client.query("UPDATE geofences SET status='inactive' WHERE id=$1 AND status='active' RETURNING id",[id]);
+      if(!result.rowCount)return false;
+      await client.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'geofence.deactivated','geofence',$3)`,[user.tenantId,user.id,id]);
+      return true;
+    });
+    return changed?reply.code(204).send():reply.code(404).send({error:"ACTIVE_GEOFENCE_NOT_FOUND"});
+  });
+
+  app.get("/geofence-events",{preHandler:requireSession},async request=>
+    withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async client=>{
+      const events=(await client.query(`SELECT e.id::text,e.geofence_id AS "geofenceId",g.name AS "geofenceName",
+        e.assignment_id AS "assignmentId",v.plate AS "vehiclePlate",d.full_name AS "driverName",
+        e.event_type AS "eventType",e.occurred_at AS "occurredAt"
+        FROM geofence_events e JOIN geofences g ON g.id=e.geofence_id
+        JOIN vehicle_driver_assignments a ON a.id=e.assignment_id JOIN vehicles v ON v.id=a.vehicle_id
+        JOIN drivers d ON d.id=a.driver_id ORDER BY e.occurred_at DESC LIMIT 200`)).rows;
+      return {events:events.map(item=>({...item,occurredAt:item.occurredAt.toISOString()}))};
+    }));
   app.get("/assignments", { preHandler: requireSession }, async (request) =>
     withTenantTransaction(request.sessionUser.tenantId, request.sessionUser.id, async (client) => {
       const rows = (await client.query(`${assignmentSelect} ORDER BY a.created_at DESC`)).rows;
@@ -138,14 +185,37 @@ export async function operationRoutes(app: FastifyInstance) {
         JOIN tracking_statuses t ON t.assignment_id=a.id AND t.state='tracking'
         WHERE a.id=$1 AND a.ended_at IS NULL`,[parsed.data.assignmentId]);
       if(!eligible.rowCount)return "inactive" as const;
-      const inserted=await client.query(`INSERT INTO location_events
+      const inserted=await client.query<{id:string}>(`INSERT INTO location_events
         (tenant_id,assignment_id,event_id,recorded_at,latitude,longitude,accuracy_meters,speed_mps,heading_degrees)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        ON CONFLICT (tenant_id,event_id) DO NOTHING RETURNING id`,[
+        ON CONFLICT (tenant_id,event_id) DO NOTHING RETURNING id::text`,[
         user.tenantId,parsed.data.assignmentId,parsed.data.eventId,recordedAt,
         parsed.data.latitude,parsed.data.longitude,parsed.data.accuracyMeters,
         parsed.data.speedMps??null,parsed.data.headingDegrees??null]);
-      return inserted.rowCount?"created" as const:"duplicate" as const;
+      if(!inserted.rowCount)return "duplicate" as const;
+      const locationEventId=inserted.rows[0]!.id;
+      const fences=(await client.query(`SELECT id,latitude,longitude,radius_meters AS "radiusMeters" FROM geofences WHERE status='active'`)).rows;
+      for(const fence of fences){
+        const inside=distanceMeters(parsed.data,{latitude:fence.latitude,longitude:fence.longitude})<=fence.radiusMeters;
+        const previous=await client.query<{isInside:boolean}>(`SELECT is_inside AS "isInside" FROM geofence_assignment_states
+          WHERE geofence_id=$1 AND assignment_id=$2 FOR UPDATE`,[fence.id,parsed.data.assignmentId]);
+        if(!previous.rowCount){
+          await client.query(`INSERT INTO geofence_assignment_states(tenant_id,geofence_id,assignment_id,is_inside,last_location_event_id,observed_at)
+            VALUES($1,$2,$3,$4,$5,$6)`,[user.tenantId,fence.id,parsed.data.assignmentId,inside,locationEventId,recordedAt]);
+          if(!inside)continue;
+        }else{
+          if(previous.rows[0]!.isInside===inside){
+            await client.query(`UPDATE geofence_assignment_states SET last_location_event_id=$3,observed_at=$4
+              WHERE geofence_id=$1 AND assignment_id=$2`,[fence.id,parsed.data.assignmentId,locationEventId,recordedAt]);
+            continue;
+          }
+          await client.query(`UPDATE geofence_assignment_states SET is_inside=$3,last_location_event_id=$4,observed_at=$5
+            WHERE geofence_id=$1 AND assignment_id=$2`,[fence.id,parsed.data.assignmentId,inside,locationEventId,recordedAt]);
+        }
+        await client.query(`INSERT INTO geofence_events(tenant_id,geofence_id,assignment_id,location_event_id,event_type,occurred_at)
+          VALUES($1,$2,$3,$4,$5,$6)`,[user.tenantId,fence.id,parsed.data.assignmentId,locationEventId,inside?"entered":"exited",recordedAt]);
+      }
+      return "created" as const;
     });
     if(result==="inactive")return reply.code(409).send({error:"TRACKING_NOT_ACTIVE"});
     return reply.code(result==="created"?201:200).send({accepted:true,duplicate:result==="duplicate"});

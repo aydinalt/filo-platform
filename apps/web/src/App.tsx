@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { Assignment, AuditEvent, CreateVehicleInput, Device, Driver, LatestLocation, Member, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import type { Assignment, AuditEvent, CreateVehicleInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, Member, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -68,7 +68,9 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [tracking,setTracking]=useState<TrackingStatus[]>([]);
   const [locations,setLocations]=useState<LatestLocation[]>([]);
   const [selectedRoute,setSelectedRoute]=useState<ShiftRoute|null>(null);
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "mobile" | "members" | "audit">("overview");
+  const [geofences,setGeofences]=useState<Geofence[]>([]);
+  const [geofenceEvents,setGeofenceEvents]=useState<GeofenceEvent[]>([]);
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
   const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
@@ -77,12 +79,13 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
       setAssignments(assignmentResult.assignments);setShifts(shiftResult.shifts);setTracking(trackingResult.tracking);
       setLocations(locationResult.locations);
+      setGeofences(geofenceResult.geofences);setGeofenceEvents(geofenceEventResult.events);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -145,6 +148,14 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try{await api.createAssignment(vehicleId,driverId,deviceId);await refresh();}
     catch(e){setError(e instanceof Error&&e.message==="ACTIVE_ASSIGNMENT_CONFLICT"?"Araç veya sürücünün zaten aktif ataması var.":"Atama oluşturulamadı.");}
   }
+  async function addGeofence(){
+    const name=window.prompt("Bölge adı (ör. Merkez Depo)");if(!name)return;
+    const latitude=Number(window.prompt("Merkez enlem (ör. 41.015)"));
+    const longitude=Number(window.prompt("Merkez boylam (ör. 29.010)"));
+    const radiusMeters=Number(window.prompt("Yarıçap metre (50–50000)","250"));
+    try{await api.createGeofence({name,latitude,longitude,radiusMeters});await refresh();}
+    catch(e){setError(e instanceof Error&&e.message==="GEOFENCE_NAME_EXISTS"?"Bu adla aktif bir bölge zaten var.":"Bölge oluşturulamadı; koordinat ve yarıçapı kontrol edin.");}
+  }
   return <div className="app-shell">
     <aside><div className="brand"><span>F</span> Filo</div><nav>
       <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>⌂ <b>Genel Bakış</b></button>
@@ -153,6 +164,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "drivers" ? "active" : ""} onClick={() => setView("drivers")}>♙ Sürücüler</button>
       <button className={view === "devices" ? "active" : ""} onClick={() => setView("devices")}>▤ Cihazlar</button>
       <button className={view === "operations" ? "active" : ""} onClick={() => setView("operations")}>↔ Operasyonlar</button>
+      <button className={view === "geofences" ? "active" : ""} onClick={() => setView("geofences")}>◎ Bölgeler</button>
       {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
@@ -215,6 +227,18 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <div className="modal-actions"><button onClick={()=>void startMobileTracking()}>Takibi başlat</button><button className="secondary" onClick={()=>void stopMobileTracking()}>Takibi durdur</button></div>
         <div className="security-note">{mobileMessage}</div>
       </section>}
+      {view === "geofences" && <>
+        <section className="table-card">
+          <div className="section-head"><div><p className="eyebrow">GEOFENCE YÖNETİMİ</p><h2>Operasyon bölgeleri</h2></div>{["owner","admin"].includes(user.role)&&<button onClick={()=>void addGeofence()}>＋ Bölge ekle</button>}</div>
+          <div className="table-wrap"><table><thead><tr><th>Bölge</th><th>Merkez</th><th>Yarıçap</th><th>Durum / işlem</th></tr></thead><tbody>{geofences.map(g=><tr key={g.id}><td><b>{g.name}</b></td><td>{g.latitude.toFixed(5)}, {g.longitude.toFixed(5)}</td><td>{g.radiusMeters} m</td><td>{g.status==="inactive"?"Pasif":["owner","admin"].includes(user.role)?<button className="secondary" onClick={async()=>{await api.deactivateGeofence(g.id);await refresh();}}>Pasife al</button>:"Aktif"}</td></tr>)}</tbody></table></div>
+          {!geofences.length&&<div className="empty"><b>Henüz bölge yok</b><p>Depo, şube veya müşteri sahası için güvenli bir dairesel bölge tanımlayın.</p></div>}
+        </section>
+        <section className="table-card spaced">
+          <div className="section-head"><div><p className="eyebrow">GİRİŞ / ÇIKIŞ OLAYLARI</p><h2>Son bölge hareketleri</h2></div><span>{geofenceEvents.length} olay</span></div>
+          <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Bölge</th><th>Araç</th><th>Sürücü</th><th>Olay</th></tr></thead><tbody>{geofenceEvents.map(e=><tr key={e.id}><td>{new Date(e.occurredAt).toLocaleString("tr-TR")}</td><td><b>{e.geofenceName}</b></td><td>{e.vehiclePlate}</td><td>{e.driverName}</td><td>{e.eventType==="entered"?"Giriş":"Çıkış"}</td></tr>)}</tbody></table></div>
+          {!geofenceEvents.length&&<div className="empty"><b>Henüz giriş/çıkış olayı yok</b><p>Aktif takipteki araç bir bölge sınırını geçtiğinde otomatik oluşur.</p></div>}
+        </section>
+      </>}
       {view === "operations" && selectedRoute && <section className="table-card spaced route-card">
         <div className="section-head"><div><p className="eyebrow">VARDİYA ROTA GEÇMİŞİ</p><h2>{selectedRoute.vehiclePlate} · {selectedRoute.driverName}</h2></div><button className="secondary" onClick={()=>setSelectedRoute(null)}>Kapat</button></div>
         <section className="route-metrics"><article><span>Konum noktası</span><strong>{selectedRoute.pointCount}</strong></article><article><span>Tahmini mesafe</span><strong>{(selectedRoute.distanceMeters/1000).toFixed(2)} km</strong></article><article><span>Hareket</span><strong>{Math.round(selectedRoute.movingSeconds/60)} dk</strong></article><article><span>Duraklama</span><strong>{Math.round(selectedRoute.stoppedSeconds/60)} dk</strong></article></section>

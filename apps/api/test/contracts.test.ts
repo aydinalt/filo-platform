@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAssignmentSchema, createDeviceSchema, createDriverSchema, createLocationEventSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
   it("normalizes email and plate", () => {
@@ -41,5 +41,12 @@ describe("API contracts", () => {
     const input={assignmentId:"10000000-0000-4000-8000-000000000001",eventId:"30000000-0000-4000-8000-000000000001",recordedAt:new Date().toISOString(),latitude:41.01,longitude:29.01,accuracyMeters:25,speedMps:12,headingDegrees:359};
     assert.equal(createLocationEventSchema.safeParse(input).success,true);
     assert.equal(createLocationEventSchema.safeParse({...input,headingDegrees:360}).success,false);
+  });
+
+  it("bounds geofence centers and radii", () => {
+    assert.equal(createGeofenceSchema.safeParse({name:"Merkez Depo",latitude:41.01,longitude:29.01,radiusMeters:250}).success,true);
+    assert.equal(createGeofenceSchema.safeParse({name:"X",latitude:41.01,longitude:29.01,radiusMeters:250}).success,false);
+    assert.equal(createGeofenceSchema.safeParse({name:"Merkez",latitude:41.01,longitude:29.01,radiusMeters:25}).success,false);
+    assert.equal(createGeofenceSchema.safeParse({name:"Merkez",latitude:91,longitude:29.01,radiusMeters:250}).success,false);
   });
 });

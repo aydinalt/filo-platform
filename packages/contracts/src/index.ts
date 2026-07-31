@@ -160,3 +160,20 @@ export type ShiftRoute = {
   distanceMeters: number; movingSeconds: number; stoppedSeconds: number;
   points: RoutePoint[];
 };
+
+export const createGeofenceSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+  radiusMeters: z.number().int().min(50).max(50000)
+});
+
+export type CreateGeofenceInput = z.infer<typeof createGeofenceSchema>;
+export type Geofence = CreateGeofenceInput & {
+  id: string; status: "active" | "inactive"; createdAt: string;
+};
+export type GeofenceEvent = {
+  id: string; geofenceId: string; geofenceName: string; assignmentId: string;
+  vehiclePlate: string; driverName: string; eventType: "entered" | "exited";
+  occurredAt: string;
+};
