@@ -206,3 +206,17 @@ export const createMaintenancePlanSchema=z.object({
 export const completeMaintenanceSchema=z.object({completedOdometerKm:z.number().int().min(0).max(10_000_000).nullable().default(null)});
 export type CreateMaintenancePlanInput=z.infer<typeof createMaintenancePlanSchema>;
 export type MaintenancePlan={id:string;vehicleId:string;vehiclePlate:string;title:string;dueDate:string|null;dueOdometerKm:number|null;status:"scheduled"|"completed"|"cancelled";displayStatus:"scheduled"|"due_soon"|"overdue"|"completed"|"cancelled";notes:string|null;completedAt:string|null;completedOdometerKm:number|null;createdAt:string};
+
+export const createVehicleExpenseSchema=z.object({
+  vehicleId:z.string().uuid(),category:z.enum(["fuel","toll","parking","wash","repair","other"]),
+  occurredOn:z.string().date(),amount:z.number().finite().positive().max(10_000_000),
+  odometerKm:z.number().int().min(0).max(10_000_000).nullable().default(null),
+  liters:z.number().finite().positive().max(5000).nullable().default(null),
+  description:z.string().trim().max(500).nullable().default(null)
+}).superRefine((value,context)=>{
+  if(value.category==="fuel"&&value.liters===null)context.addIssue({code:"custom",message:"Fuel expense requires liters",path:["liters"]});
+  if(value.category!=="fuel"&&value.liters!==null)context.addIssue({code:"custom",message:"Liters are only valid for fuel",path:["liters"]});
+});
+export type CreateVehicleExpenseInput=z.infer<typeof createVehicleExpenseSchema>;
+export type VehicleExpense={id:string;vehicleId:string;vehiclePlate:string;category:CreateVehicleExpenseInput["category"];occurredOn:string;amount:number;odometerKm:number|null;liters:number|null;description:string|null;createdAt:string};
+export type ExpenseSummary={totalAmount:number;fuelAmount:number;fuelLiters:number;entryCount:number;byVehicle:Array<{vehicleId:string;vehiclePlate:string;totalAmount:number;fuelLiters:number;entryCount:number}>};

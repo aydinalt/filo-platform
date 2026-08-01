@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createVehicleExpenseSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
   it("normalizes email and plate", () => {
@@ -60,5 +60,12 @@ describe("API contracts", () => {
     assert.equal(createMaintenancePlanSchema.safeParse({vehicleId,title:"Periyodik bakım",dueDate:"2026-09-01",dueOdometerKm:null}).success,true);
     assert.equal(createMaintenancePlanSchema.safeParse({vehicleId,title:"Yağ değişimi",dueDate:null,dueOdometerKm:120000}).success,true);
     assert.equal(createMaintenancePlanSchema.safeParse({vehicleId,title:"Bakım",dueDate:null,dueOdometerKm:null}).success,false);
+  });
+  it("validates fuel and non-fuel expense details",()=>{
+    const vehicleId="10000000-0000-4000-8000-000000000001";
+    assert.equal(createVehicleExpenseSchema.safeParse({vehicleId,category:"fuel",occurredOn:"2026-08-01",amount:2250,odometerKm:120000,liters:45,description:null}).success,true);
+    assert.equal(createVehicleExpenseSchema.safeParse({vehicleId,category:"fuel",occurredOn:"2026-08-01",amount:2250,liters:null}).success,false);
+    assert.equal(createVehicleExpenseSchema.safeParse({vehicleId,category:"parking",occurredOn:"2026-08-01",amount:250,liters:5}).success,false);
+    assert.equal(createVehicleExpenseSchema.safeParse({vehicleId,category:"toll",occurredOn:"2026-08-01",amount:-1,liters:null}).success,false);
   });
 });

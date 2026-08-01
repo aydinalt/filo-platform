@@ -12,6 +12,7 @@ import { deviceRoutes } from "./routes/devices.js";
 import { memberRoutes } from "./routes/members.js";
 import { operationRoutes } from "./routes/operations.js";
 import { maintenanceRoutes } from "./routes/maintenance.js";
+import { expenseRoutes } from "./routes/expenses.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true, trustProxy: true });
@@ -29,6 +30,7 @@ export async function buildApp() {
   await app.register(memberRoutes, { prefix: "/api/members" });
   await app.register(operationRoutes, { prefix: "/api/operations" });
   await app.register(maintenanceRoutes, { prefix: "/api/maintenance" });
+  await app.register(expenseRoutes, { prefix: "/api/expenses" });
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error }, "request failed");

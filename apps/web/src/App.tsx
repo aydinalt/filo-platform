@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, MaintenancePlan, Member, OperationalAlert, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, LatestLocation, MaintenancePlan, Member, OperationalAlert, SessionUser, ShiftRoute, TrackingStatus, Vehicle, VehicleExpense, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -73,7 +73,9 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [alertRules,setAlertRules]=useState<AlertRule[]>([]);
   const [alerts,setAlerts]=useState<OperationalAlert[]>([]);
   const [maintenance,setMaintenance]=useState<MaintenancePlan[]>([]);
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "mobile" | "members" | "audit">("overview");
+  const [expenses,setExpenses]=useState<VehicleExpense[]>([]);
+  const [expenseSummary,setExpenseSummary]=useState<ExpenseSummary>({totalAmount:0,fuelAmount:0,fuelLiters:0,entryCount:0,byVehicle:[]});
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
   const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
@@ -82,7 +84,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult,expenseResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans(),api.expenses()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
@@ -91,6 +93,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setGeofences(geofenceResult.geofences);setGeofenceEvents(geofenceEventResult.events);
       setAlertRules(alertRuleResult.rules);setAlerts(alertResult.alerts);
       setMaintenance(maintenanceResult.plans);
+      setExpenses(expenseResult.expenses);setExpenseSummary(expenseResult.summary);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -180,6 +183,18 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try{await api.createMaintenancePlan({vehicleId,title,dueDate,dueOdometerKm,notes:null});await refresh();}
     catch{setError("Bakım planı oluşturulamadı; araç ID, tarih veya kilometre hedefini kontrol edin.");}
   }
+  async function addExpense(){
+    const vehicleId=window.prompt("Gider kaydedilecek araç ID");if(!vehicleId)return;
+    const category=window.prompt("Tür: fuel, toll, parking, wash, repair veya other","fuel");
+    if(!category||!["fuel","toll","parking","wash","repair","other"].includes(category)){setError("Geçerli bir gider türü seçin.");return;}
+    const amount=Number(window.prompt("Tutar (TL)","1000"));
+    const occurredOn=window.prompt("Tarih (YYYY-AA-GG)",new Date().toISOString().slice(0,10));if(!occurredOn)return;
+    const kmText=window.prompt("Araç kilometresi (opsiyonel)")||"";
+    const liters=category==="fuel"?Number(window.prompt("Yakıt litresi","40")):null;
+    const description=window.prompt("Açıklama (opsiyonel)")||null;
+    try{await api.createExpense({vehicleId,category:category as "fuel"|"toll"|"parking"|"wash"|"repair"|"other",occurredOn,amount,odometerKm:kmText?Number(kmText):null,liters,description});await refresh();}
+    catch(e){setError(e instanceof Error&&e.message==="ODOMETER_ROLLBACK"?"Kilometre önceki kayıttan düşük olamaz.":"Gider kaydedilemedi; araç, tarih ve tutar alanlarını kontrol edin.");}
+  }
   return <div className="app-shell">
     <aside><div className="brand"><span>F</span> Filo</div><nav>
       <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>⌂ <b>Genel Bakış</b></button>
@@ -191,6 +206,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "geofences" ? "active" : ""} onClick={() => setView("geofences")}>◎ Bölgeler</button>
       <button className={view === "alerts" ? "active" : ""} onClick={() => setView("alerts")}>⚠ Uyarılar {alerts.filter(a=>a.status==="open").length?`(${alerts.filter(a=>a.status==="open").length})`:""}</button>
       <button className={view === "maintenance" ? "active" : ""} onClick={() => setView("maintenance")}>⚙ Bakım {maintenance.filter(p=>p.displayStatus==="overdue").length?`(${maintenance.filter(p=>p.displayStatus==="overdue").length})`:""}</button>
+      <button className={view === "expenses" ? "active" : ""} onClick={() => setView("expenses")}>₺ Yakıt ve Giderler</button>
       {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
@@ -282,6 +298,18 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <div className="table-wrap"><table><thead><tr><th>Araç</th><th>Bakım</th><th>Hedef tarih</th><th>Hedef km</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{maintenance.map(plan=><tr key={plan.id}><td><b>{plan.vehiclePlate}</b></td><td>{plan.title}</td><td>{plan.dueDate?new Date(`${plan.dueDate}T00:00:00`).toLocaleDateString("tr-TR"):"—"}</td><td>{plan.dueOdometerKm?.toLocaleString("tr-TR")??"—"}</td><td>{plan.displayStatus==="overdue"?"Gecikmiş":plan.displayStatus==="due_soon"?"Yaklaşıyor":plan.status==="completed"?"Tamamlandı":"Planlandı"}</td><td>{plan.status==="scheduled"&&user.role!=="viewer"&&<button onClick={async()=>{const value=window.prompt("Tamamlanma kilometresi (opsiyonel)");await api.completeMaintenance(plan.id,value?Number(value):null);await refresh();}}>Tamamla</button>}</td></tr>)}</tbody></table></div>
         {!maintenance.length&&<div className="empty"><b>Henüz bakım planı yok</b><p>Araç için tarih veya kilometre hedefli ilk bakım planını oluşturun.</p></div>}
       </section>}
+      {view === "expenses" && <>
+        <section className="metrics">
+          <article><span>Toplam gider</span><strong>{expenseSummary.totalAmount.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</strong><small>{expenseSummary.entryCount} kayıt</small></article>
+          <article><span>Yakıt gideri</span><strong>{expenseSummary.fuelAmount.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</strong><small>yakıt harcaması</small></article>
+          <article><span>Yakıt miktarı</span><strong>{expenseSummary.fuelLiters.toLocaleString("tr-TR")} L</strong><small>toplam dolum</small></article>
+        </section>
+        <section className="table-card spaced">
+          <div className="section-head"><div><p className="eyebrow">ARAÇ MALİYET TAKİBİ</p><h2>Yakıt ve operasyon giderleri</h2></div>{user.role!=="viewer"&&<button onClick={()=>void addExpense()}>＋ Gider ekle</button>}</div>
+          <div className="table-wrap"><table><thead><tr><th>Tarih</th><th>Araç</th><th>Tür</th><th>Tutar</th><th>Litre</th><th>Kilometre</th><th>Açıklama</th></tr></thead><tbody>{expenses.map(expense=><tr key={expense.id}><td>{new Date(`${expense.occurredOn}T00:00:00`).toLocaleDateString("tr-TR")}</td><td><b>{expense.vehiclePlate}</b></td><td>{expense.category==="fuel"?"Yakıt":expense.category}</td><td>{expense.amount.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</td><td>{expense.liters===null?"—":`${expense.liters.toLocaleString("tr-TR")} L`}</td><td>{expense.odometerKm?.toLocaleString("tr-TR")??"—"}</td><td>{expense.description??"—"}</td></tr>)}</tbody></table></div>
+          {!expenses.length&&<div className="empty"><b>Henüz gider kaydı yok</b><p>İlk yakıt dolumunu veya araç giderini kaydedin.</p></div>}
+        </section>
+      </>}
       {view === "operations" && selectedRoute && <section className="table-card spaced route-card">
         <div className="section-head"><div><p className="eyebrow">VARDİYA ROTA GEÇMİŞİ</p><h2>{selectedRoute.vehiclePlate} · {selectedRoute.driverName}</h2></div><button className="secondary" onClick={()=>setSelectedRoute(null)}>Kapat</button></div>
         <section className="route-metrics"><article><span>Konum noktası</span><strong>{selectedRoute.pointCount}</strong></article><article><span>Tahmini mesafe</span><strong>{(selectedRoute.distanceMeters/1000).toFixed(2)} km</strong></article><article><span>Hareket</span><strong>{Math.round(selectedRoute.movingSeconds/60)} dk</strong></article><article><span>Duraklama</span><strong>{Math.round(selectedRoute.stoppedSeconds/60)} dk</strong></article></section>
