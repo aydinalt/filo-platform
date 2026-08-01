@@ -1,8 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("validates vehicle incidents and requires resolution notes",()=>{
+    const vehicleId="10000000-0000-4000-8000-000000000001";
+    const base={vehicleId,driverId:null,incidentType:"accident",severity:"major",occurredAt:new Date().toISOString(),description:"Arka tampon hasarı",injuryReported:false};
+    assert.equal(createVehicleIncidentSchema.safeParse(base).success,true);
+    assert.equal(createVehicleIncidentSchema.safeParse({...base,incidentType:"damage",injuryReported:true}).success,false);
+    assert.equal(updateVehicleIncidentSchema.safeParse({status:"resolved",resolutionNotes:null}).success,false);
+    assert.equal(updateVehicleIncidentSchema.safeParse({status:"resolved",resolutionNotes:"Onarım tamamlandı"}).success,true);
+  });
   it("validates tire lifecycle targets and mount odometers",()=>{
     const vehicleId="10000000-0000-4000-8000-000000000001";
     assert.equal(createTireSetSchema.safeParse({brand:"Michelin",model:"Agilis",size:"215/65 R16",purchasedOn:"2026-08-01",targetChangeDate:"2028-08-01",targetLifeKm:50000}).success,true);

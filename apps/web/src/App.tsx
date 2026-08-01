@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleInspection, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -81,8 +81,10 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [inspectionSummary,setInspectionSummary]=useState<InspectionSummary>({total:0,unsafe:0,openDefects:0,criticalDefects:0});
   const [tires,setTires]=useState<TireSet[]>([]);
   const [tireSummary,setTireSummary]=useState<TireSummary>({total:0,mounted:0,dueSoon:0,overdue:0});
+  const [incidents,setIncidents]=useState<VehicleIncident[]>([]);
+  const [incidentSummary,setIncidentSummary]=useState<IncidentSummary>({total:0,open:0,critical:0,estimatedExposure:0});
   const [expenseSummary,setExpenseSummary]=useState<ExpenseSummary>({totalAmount:0,fuelAmount:0,fuelLiters:0,entryCount:0,byVehicle:[]});
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "safety" | "inspections" | "tires" | "mobile" | "members" | "audit">("overview");
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "safety" | "inspections" | "tires" | "incidents" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
   const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
@@ -91,7 +93,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult,expenseResult,documentResult,safetyResult,inspectionResult,tireResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans(),api.expenses(),api.documents(),api.safetyEvents(),api.inspections(),api.tires()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult,expenseResult,documentResult,safetyResult,inspectionResult,tireResult,incidentResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans(),api.expenses(),api.documents(),api.safetyEvents(),api.inspections(),api.tires(),api.incidents()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
@@ -105,6 +107,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setSafetyEvents(safetyResult.events);setSafetySummary(safetyResult.summary);
       setInspections(inspectionResult.inspections);setInspectionSummary(inspectionResult.summary);
       setTires(tireResult.tires);setTireSummary(tireResult.summary);
+      setIncidents(incidentResult.incidents);setIncidentSummary(incidentResult.summary);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -259,6 +262,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "safety" ? "active" : ""} onClick={() => setView("safety")}>◉ Sürücü Güvenliği {safetySummary.open?`(${safetySummary.open})`:""}</button>
       <button className={view === "inspections" ? "active" : ""} onClick={() => setView("inspections")}>☑ Araç Kontrolleri {inspectionSummary.openDefects?`(${inspectionSummary.openDefects})`:""}</button>
       <button className={view === "tires" ? "active" : ""} onClick={() => setView("tires")}>◉ Lastikler {tireSummary.overdue?`(${tireSummary.overdue})`:""}</button>
+      <button className={view === "incidents" ? "active" : ""} onClick={() => setView("incidents")}>⚑ Kaza ve Hasar {incidentSummary.open?`(${incidentSummary.open})`:""}</button>
       {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
@@ -404,6 +408,19 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
           <div className="section-head"><div><p className="eyebrow">LASTİK YAŞAM DÖNGÜSÜ</p><h2>Envanter, montaj ve değişim hedefleri</h2></div>{user.role!=="viewer"&&<button onClick={()=>void addTireSet()}>＋ Lastik seti ekle</button>}</div>
           <div className="table-wrap"><table><thead><tr><th>Lastik</th><th>Araç / konum</th><th>Takılma</th><th>Kullanım</th><th>Hedef</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{tires.map(tire=><tr key={tire.id}><td><b>{tire.brand} {tire.model}</b><br/><small>{tire.size}{tire.serialNumber?` · ${tire.serialNumber}`:""}</small></td><td>{tire.vehiclePlate??"Depoda"}{tire.position?` · ${tire.position}`:""}</td><td>{tire.mountedOn?new Date(`${tire.mountedOn}T00:00:00`).toLocaleDateString("tr-TR"):"—"}<br/><small>{tire.mountedOdometerKm?.toLocaleString("tr-TR")??"—"} km</small></td><td>{tire.usedKm===null?"—":`${tire.usedKm.toLocaleString("tr-TR")} km`}</td><td>{tire.targetLifeKm?`${tire.targetLifeKm.toLocaleString("tr-TR")} km`:"—"}<br/><small>{tire.targetChangeDate??"—"}</small></td><td>{tire.displayStatus==="overdue"?"Gecikmiş":tire.displayStatus==="due_soon"?"Yaklaşıyor":tire.status==="mounted"?"Takılı":tire.status==="stored"?"Depoda":"Emekli"}</td><td>{user.role!=="viewer"&&tire.status==="stored"&&<button onClick={async()=>{const vehicleId=window.prompt("Araç ID");if(!vehicleId)return;const km=Number(window.prompt("Montaj kilometresi","0"));await api.mountTireSet(tire.id,vehicleId,"all",new Date().toISOString().slice(0,10),km);await refresh();}}>Tak</button>}{user.role!=="viewer"&&tire.status==="mounted"&&<button onClick={async()=>{const km=Number(window.prompt("Söküm kilometresi"));const reason=window.prompt("Söküm nedeni");if(!reason)return;await api.removeTireSet(tire.id,new Date().toISOString().slice(0,10),km,reason);await refresh();}}>Sök</button>}</td></tr>)}</tbody></table></div>
           {!tires.length&&<div className="empty"><b>Henüz lastik seti yok</b><p>İlk lastik setini ekleyip araca monte ederek yaşam döngüsü takibini başlatın.</p></div>}
+        </section>
+      </>}
+      {view === "incidents" && <>
+        <section className="metrics">
+          <article><span>Toplam olay</span><strong>{incidentSummary.total}</strong><small>kaza ve hasar kaydı</small></article>
+          <article><span>Açık dosya</span><strong>{incidentSummary.open}</strong><small>inceleme bekliyor</small></article>
+          <article><span>Kritik</span><strong>{incidentSummary.critical}</strong><small>yüksek öncelik</small></article>
+          <article><span>Tahmini risk</span><strong>{incidentSummary.estimatedExposure.toLocaleString("tr-TR")} ₺</strong><small>açık dosyalar</small></article>
+        </section>
+        <section className="table-card">
+          <div className="section-head"><div><p className="eyebrow">KAZA VE HASAR YÖNETİMİ</p><h2>Olay ve sigorta dosyaları</h2></div>{user.role!=="viewer"&&<button onClick={async()=>{const vehicleId=window.prompt("Araç ID");if(!vehicleId)return;const description=window.prompt("Olay açıklaması");if(!description)return;const estimatedText=window.prompt("Tahmini maliyet (opsiyonel)")||"";try{await api.createIncident({vehicleId,driverId:null,incidentType:"accident",severity:"major",occurredAt:new Date().toISOString(),location:null,description,injuryReported:false,policeReportNumber:null,insuranceClaimNumber:null,estimatedCost:estimatedText?Number(estimatedText):null});await refresh();}catch{setError("Olay kaydedilemedi; araç ve olay bilgilerini kontrol edin.");}}}>＋ Olay kaydet</button>}</div>
+          <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Araç / sürücü</th><th>Olay</th><th>Dosya</th><th>Maliyet</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{incidents.map(incident=><tr key={incident.id}><td>{new Date(incident.occurredAt).toLocaleString("tr-TR")}</td><td><b>{incident.vehiclePlate}</b><br/><small>{incident.driverName??"Sürücü belirtilmedi"}</small></td><td>{incident.incidentType} · {incident.severity}<br/><small>{incident.description}</small></td><td>{incident.insuranceClaimNumber??incident.policeReportNumber??"—"}</td><td>{(incident.actualCost??incident.estimatedCost)?.toLocaleString("tr-TR")??"—"} ₺</td><td>{incident.status}</td><td>{user.role!=="viewer"&&(incident.status==="open"||incident.status==="reviewing")&&<button onClick={async()=>{const notes=window.prompt("Çözüm notu");if(!notes)return;const actualText=window.prompt("Gerçek maliyet (opsiyonel)")||"";await api.updateIncident(incident.id,"resolved",notes,incident.insuranceClaimNumber,actualText?Number(actualText):null);await refresh();}}>Çöz</button>}</td></tr>)}</tbody></table></div>
+          {!incidents.length&&<div className="empty"><b>Henüz kaza veya hasar kaydı yok</b><p>Operasyon olaylarını ve sigorta süreçlerini tek dosyada takip edin.</p></div>}
         </section>
       </>}
       {view === "operations" && selectedRoute && <section className="table-card spaced route-card">

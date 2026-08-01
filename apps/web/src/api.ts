@@ -1,4 +1,4 @@
-import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleInspection, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleIncidentInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -78,4 +78,7 @@ export const api = {
   ,createTireSet: (input:CreateTireSetInput) => request<{tireSetId:string}>("/api/tires",{method:"POST",body:JSON.stringify(input)})
   ,mountTireSet: (id:string,vehicleId:string,position:"front"|"rear"|"all",mountedOn:string,mountedOdometerKm:number) => request<void>(`/api/tires/${id}/mount`,{method:"POST",body:JSON.stringify({vehicleId,position,mountedOn,mountedOdometerKm})})
   ,removeTireSet: (id:string,removedOn:string,removedOdometerKm:number,reason:string) => request<void>(`/api/tires/${id}/remove`,{method:"POST",body:JSON.stringify({removedOn,removedOdometerKm,reason})})
+  ,incidents: () => request<{incidents:VehicleIncident[];summary:IncidentSummary}>("/api/incidents")
+  ,createIncident: (input:CreateVehicleIncidentInput) => request<{incident:VehicleIncident}>("/api/incidents",{method:"POST",body:JSON.stringify(input)})
+  ,updateIncident: (id:string,status:"reviewing"|"resolved"|"closed",resolutionNotes:string|null,insuranceClaimNumber:string|null,actualCost:number|null) => request<void>(`/api/incidents/${id}`,{method:"PATCH",body:JSON.stringify({status,resolutionNotes,insuranceClaimNumber,actualCost})})
 };

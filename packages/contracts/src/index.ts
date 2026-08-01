@@ -270,3 +270,15 @@ export const removeTireSetSchema=z.object({removedOn:z.string().date(),removedOd
 export type CreateTireSetInput=z.infer<typeof createTireSetSchema>;
 export type TireSet={id:string;brand:string;model:string;size:string;serialNumber:string|null;purchasedOn:string|null;initialOdometerKm:number|null;targetLifeKm:number|null;targetChangeDate:string|null;notes:string|null;status:"stored"|"mounted"|"retired";vehicleId:string|null;vehiclePlate:string|null;position:"front"|"rear"|"all"|null;mountedOn:string|null;mountedOdometerKm:number|null;currentOdometerKm:number|null;usedKm:number|null;remainingKm:number|null;displayStatus:"stored"|"mounted"|"due_soon"|"overdue"|"retired";createdAt:string};
 export type TireSummary={total:number;mounted:number;dueSoon:number;overdue:number};
+
+export const createVehicleIncidentSchema=z.object({
+  vehicleId:z.string().uuid(),driverId:z.string().uuid().nullable().default(null),
+  incidentType:z.enum(["accident","damage","theft","breakdown","other"]),severity:z.enum(["minor","major","critical"]),
+  occurredAt:z.string().datetime(),location:z.string().trim().max(240).nullable().default(null),
+  description:z.string().trim().min(5).max(2000),injuryReported:z.boolean().default(false),policeReportNumber:z.string().trim().max(120).nullable().default(null),
+  insuranceClaimNumber:z.string().trim().max(120).nullable().default(null),estimatedCost:z.number().finite().min(0).max(100_000_000).nullable().default(null)
+}).superRefine((value,context)=>{if(value.injuryReported&&value.incidentType!=="accident")context.addIssue({code:"custom",message:"Injury can only be reported for an accident",path:["injuryReported"]});});
+export const updateVehicleIncidentSchema=z.object({status:z.enum(["reviewing","resolved","closed"]),resolutionNotes:z.string().trim().min(3).max(2000).nullable().default(null),insuranceClaimNumber:z.string().trim().max(120).nullable().default(null),actualCost:z.number().finite().min(0).max(100_000_000).nullable().default(null)}).superRefine((value,context)=>{if((value.status==="resolved"||value.status==="closed")&&value.resolutionNotes===null)context.addIssue({code:"custom",message:"Resolution notes are required",path:["resolutionNotes"]});});
+export type CreateVehicleIncidentInput=z.infer<typeof createVehicleIncidentSchema>;
+export type VehicleIncident={id:string;vehicleId:string;vehiclePlate:string;driverId:string|null;driverName:string|null;incidentType:CreateVehicleIncidentInput["incidentType"];severity:CreateVehicleIncidentInput["severity"];occurredAt:string;location:string|null;description:string;injuryReported:boolean;policeReportNumber:string|null;insuranceClaimNumber:string|null;estimatedCost:number|null;actualCost:number|null;status:"open"|"reviewing"|"resolved"|"closed";resolutionNotes:string|null;resolvedAt:string|null;createdAt:string};
+export type IncidentSummary={total:number;open:number;critical:number;estimatedExposure:number};
