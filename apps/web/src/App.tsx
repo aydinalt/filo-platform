@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
+import type { FleetReport } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -83,8 +84,11 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [tireSummary,setTireSummary]=useState<TireSummary>({total:0,mounted:0,dueSoon:0,overdue:0});
   const [incidents,setIncidents]=useState<VehicleIncident[]>([]);
   const [incidentSummary,setIncidentSummary]=useState<IncidentSummary>({total:0,open:0,critical:0,estimatedExposure:0});
+  const [report,setReport]=useState<FleetReport|null>(null);
+  const [reportFrom,setReportFrom]=useState(new Date(Date.now()-30*86400000).toISOString().slice(0,10));
+  const [reportTo,setReportTo]=useState(new Date().toISOString().slice(0,10));
   const [expenseSummary,setExpenseSummary]=useState<ExpenseSummary>({totalAmount:0,fuelAmount:0,fuelLiters:0,entryCount:0,byVehicle:[]});
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "safety" | "inspections" | "tires" | "incidents" | "mobile" | "members" | "audit">("overview");
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "safety" | "inspections" | "tires" | "incidents" | "reports" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
   const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
@@ -263,6 +267,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "inspections" ? "active" : ""} onClick={() => setView("inspections")}>☑ Araç Kontrolleri {inspectionSummary.openDefects?`(${inspectionSummary.openDefects})`:""}</button>
       <button className={view === "tires" ? "active" : ""} onClick={() => setView("tires")}>◉ Lastikler {tireSummary.overdue?`(${tireSummary.overdue})`:""}</button>
       <button className={view === "incidents" ? "active" : ""} onClick={() => setView("incidents")}>⚑ Kaza ve Hasar {incidentSummary.open?`(${incidentSummary.open})`:""}</button>
+      <button className={view === "reports" ? "active" : ""} onClick={async()=>{setView("reports");try{setReport(await api.report(reportFrom,reportTo));}catch{setError("Rapor oluşturulamadı; tarih aralığını kontrol edin.");}}}>▥ Raporlar</button>
       {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
@@ -422,6 +427,10 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
           <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Araç / sürücü</th><th>Olay</th><th>Dosya</th><th>Maliyet</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{incidents.map(incident=><tr key={incident.id}><td>{new Date(incident.occurredAt).toLocaleString("tr-TR")}</td><td><b>{incident.vehiclePlate}</b><br/><small>{incident.driverName??"Sürücü belirtilmedi"}</small></td><td>{incident.incidentType} · {incident.severity}<br/><small>{incident.description}</small></td><td>{incident.insuranceClaimNumber??incident.policeReportNumber??"—"}</td><td>{(incident.actualCost??incident.estimatedCost)?.toLocaleString("tr-TR")??"—"} ₺</td><td>{incident.status}</td><td>{user.role!=="viewer"&&(incident.status==="open"||incident.status==="reviewing")&&<button onClick={async()=>{const notes=window.prompt("Çözüm notu");if(!notes)return;const actualText=window.prompt("Gerçek maliyet (opsiyonel)")||"";await api.updateIncident(incident.id,"resolved",notes,incident.insuranceClaimNumber,actualText?Number(actualText):null);await refresh();}}>Çöz</button>}</td></tr>)}</tbody></table></div>
           {!incidents.length&&<div className="empty"><b>Henüz kaza veya hasar kaydı yok</b><p>Operasyon olaylarını ve sigorta süreçlerini tek dosyada takip edin.</p></div>}
         </section>
+      </>}
+      {view === "reports" && <>
+        <section className="table-card spaced"><div className="section-head"><div><p className="eyebrow">FİLO PERFORMANS RAPORU</p><h2>Operasyon ve maliyet özeti</h2></div><div><input type="date" value={reportFrom} onChange={e=>setReportFrom(e.target.value)}/><input type="date" value={reportTo} onChange={e=>setReportTo(e.target.value)}/><button onClick={async()=>{try{setReport(await api.report(reportFrom,reportTo));}catch{setError("Rapor tarih aralığı geçersiz.");}}}>Raporla</button>{user.role!=="viewer"&&<button className="secondary" onClick={()=>window.open(api.reportCsvUrl(reportFrom,reportTo),"_blank")}>CSV indir</button>}</div></div></section>
+        {report&&<><section className="metrics"><article><span>Araç</span><strong>{report.summary.vehicleCount}</strong><small>rapor kapsamı</small></article><article><span>Toplam gider</span><strong>{report.summary.totalExpense.toLocaleString("tr-TR")} ₺</strong><small>{report.summary.fuelLiters.toLocaleString("tr-TR")} litre yakıt</small></article><article><span>Güvenlik / olay</span><strong>{report.summary.safetyEvents} / {report.summary.incidents}</strong><small>seçili tarih aralığı</small></article><article><span>Açık risk</span><strong>{report.summary.overdueMaintenance+report.summary.expiredDocuments+report.summary.openDefects}</strong><small>bakım, belge ve kusur</small></article></section><section className="table-card"><div className="table-wrap"><table><thead><tr><th>Araç</th><th>Km</th><th>Gider</th><th>Yakıt</th><th>Güvenlik</th><th>Olay</th><th>Bakım</th><th>Belge</th><th>Kusur</th></tr></thead><tbody>{report.vehicles.map(row=><tr key={row.vehicleId}><td><b>{row.vehiclePlate}</b></td><td>{row.distanceKm.toLocaleString("tr-TR")}</td><td>{row.totalExpense.toLocaleString("tr-TR")} ₺</td><td>{row.fuelLiters.toLocaleString("tr-TR")} L</td><td>{row.safetyEvents}</td><td>{row.incidents}</td><td>{row.overdueMaintenance}</td><td>{row.expiredDocuments}</td><td>{row.openDefects}</td></tr>)}</tbody></table></div></section></>}
       </>}
       {view === "operations" && selectedRoute && <section className="table-card spaced route-card">
         <div className="section-head"><div><p className="eyebrow">VARDİYA ROTA GEÇMİŞİ</p><h2>{selectedRoute.vehiclePlate} · {selectedRoute.driverName}</h2></div><button className="secondary" onClick={()=>setSelectedRoute(null)}>Kapat</button></div>

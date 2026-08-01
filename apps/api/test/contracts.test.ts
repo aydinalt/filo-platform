@@ -1,8 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, reportQuerySchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("validates bounded operational report ranges",()=>{
+    assert.equal(reportQuerySchema.safeParse({from:"2026-07-01",to:"2026-08-01"}).success,true);
+    assert.equal(reportQuerySchema.safeParse({from:"2026-08-02",to:"2026-08-01"}).success,false);
+    assert.equal(reportQuerySchema.safeParse({from:"2025-01-01",to:"2026-08-01"}).success,false);
+  });
   it("validates vehicle incidents and requires resolution notes",()=>{
     const vehicleId="10000000-0000-4000-8000-000000000001";
     const base={vehicleId,driverId:null,incidentType:"accident",severity:"major",occurredAt:new Date().toISOString(),description:"Arka tampon hasarı",injuryReported:false};

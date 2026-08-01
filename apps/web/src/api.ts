@@ -1,4 +1,5 @@
 import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleIncidentInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
+import type { FleetReport } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -81,4 +82,6 @@ export const api = {
   ,incidents: () => request<{incidents:VehicleIncident[];summary:IncidentSummary}>("/api/incidents")
   ,createIncident: (input:CreateVehicleIncidentInput) => request<{incident:VehicleIncident}>("/api/incidents",{method:"POST",body:JSON.stringify(input)})
   ,updateIncident: (id:string,status:"reviewing"|"resolved"|"closed",resolutionNotes:string|null,insuranceClaimNumber:string|null,actualCost:number|null) => request<void>(`/api/incidents/${id}`,{method:"PATCH",body:JSON.stringify({status,resolutionNotes,insuranceClaimNumber,actualCost})})
+  ,report: (from:string,to:string,vehicleId:string|null=null) => request<FleetReport>(`/api/reports/overview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${vehicleId?`&vehicleId=${encodeURIComponent(vehicleId)}`:""}`)
+  ,reportCsvUrl: (from:string,to:string,vehicleId:string|null=null) => `${API_URL}/api/reports/export.csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${vehicleId?`&vehicleId=${encodeURIComponent(vehicleId)}`:""}`
 };
