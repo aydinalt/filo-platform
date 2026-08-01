@@ -1,4 +1,4 @@
-import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleInspection, WorkShift } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -71,4 +71,7 @@ export const api = {
   ,safetyEvents: () => request<{events:SafetyEvent[];summary:SafetySummary}>("/api/safety-events")
   ,createSafetyEvent: (input:CreateSafetyEventInput) => request<{event:SafetyEvent}>("/api/safety-events",{method:"POST",body:JSON.stringify(input)})
   ,updateSafetyEventStatus: (id:string,status:"reviewed"|"resolved") => request<void>(`/api/safety-events/${id}/status`,{method:"PATCH",body:JSON.stringify({status})})
+  ,inspections: () => request<{inspections:VehicleInspection[];summary:InspectionSummary}>("/api/inspections")
+  ,createInspection: (input:CreateVehicleInspectionInput) => request<{inspectionId:string}>("/api/inspections",{method:"POST",body:JSON.stringify(input)})
+  ,updateInspectionDefectStatus: (id:string,status:"reviewed"|"resolved",resolutionNotes:string|null) => request<void>(`/api/inspections/defects/${id}/status`,{method:"PATCH",body:JSON.stringify({status,resolutionNotes})})
 };

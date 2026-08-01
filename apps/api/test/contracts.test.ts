@@ -1,8 +1,16 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("requires defects for unsafe inspections and resolution notes",()=>{
+    const assignmentId="10000000-0000-4000-8000-000000000001";
+    const critical={item:"Fren",severity:"critical",description:"Pedal basıncı yetersiz"};
+    assert.equal(createVehicleInspectionSchema.safeParse({assignmentId,inspectionType:"pre_shift",safeToOperate:false,defects:[critical]}).success,true);
+    assert.equal(createVehicleInspectionSchema.safeParse({assignmentId,inspectionType:"pre_shift",safeToOperate:false,defects:[]}).success,false);
+    assert.equal(createVehicleInspectionSchema.safeParse({assignmentId,inspectionType:"pre_shift",safeToOperate:true,defects:[critical]}).success,false);
+    assert.equal(updateInspectionDefectStatusSchema.safeParse({status:"resolved",resolutionNotes:null}).success,false);
+  });
   it("validates safety event coordinates and severity",()=>{
     const base={assignmentId:"10000000-0000-4000-8000-000000000001",eventType:"harsh_braking",severity:"high",occurredAt:new Date().toISOString()};
     assert.equal(createSafetyEventSchema.safeParse({...base,latitude:41.01,longitude:29.01}).success,true);

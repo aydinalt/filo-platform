@@ -243,3 +243,18 @@ export const updateSafetyEventStatusSchema=z.object({status:z.enum(["reviewed","
 export type CreateSafetyEventInput=z.infer<typeof createSafetyEventSchema>;
 export type SafetyEvent={id:string;assignmentId:string;vehicleId:string;vehiclePlate:string;driverId:string;driverName:string;eventType:CreateSafetyEventInput["eventType"];severity:CreateSafetyEventInput["severity"];occurredAt:string;latitude:number|null;longitude:number|null;value:number|null;notes:string|null;status:"open"|"reviewed"|"resolved";reviewedAt:string|null;resolvedAt:string|null;createdAt:string};
 export type SafetySummary={total:number;open:number;serious:number;assignmentCount:number};
+
+export const createVehicleInspectionSchema=z.object({
+  assignmentId:z.string().uuid(),inspectionType:z.enum(["pre_shift","post_shift"]),
+  odometerKm:z.number().int().min(0).max(10_000_000).nullable().default(null),
+  safeToOperate:z.boolean(),notes:z.string().trim().max(1000).nullable().default(null),
+  defects:z.array(z.object({item:z.string().trim().min(2).max(120),severity:z.enum(["minor","major","critical"]),description:z.string().trim().min(2).max(500)})).max(50).default([])
+}).superRefine((value,context)=>{
+  if(value.safeToOperate&&value.defects.some(defect=>defect.severity==="critical"))context.addIssue({code:"custom",message:"Critical defects make the vehicle unsafe",path:["safeToOperate"]});
+  if(!value.safeToOperate&&value.defects.length===0)context.addIssue({code:"custom",message:"Unsafe inspection requires a defect",path:["defects"]});
+});
+export const updateInspectionDefectStatusSchema=z.object({status:z.enum(["reviewed","resolved"]),resolutionNotes:z.string().trim().min(2).max(1000).nullable().default(null)}).superRefine((value,context)=>{if(value.status==="resolved"&&value.resolutionNotes===null)context.addIssue({code:"custom",message:"Resolution notes are required",path:["resolutionNotes"]});});
+export type CreateVehicleInspectionInput=z.infer<typeof createVehicleInspectionSchema>;
+export type InspectionDefect={id:string;item:string;severity:"minor"|"major"|"critical";description:string;status:"open"|"reviewed"|"resolved";resolutionNotes:string|null;reviewedAt:string|null;resolvedAt:string|null};
+export type VehicleInspection={id:string;assignmentId:string;vehicleId:string;vehiclePlate:string;driverId:string;driverName:string;inspectionType:"pre_shift"|"post_shift";odometerKm:number|null;safeToOperate:boolean;notes:string|null;inspectedAt:string;defects:InspectionDefect[]};
+export type InspectionSummary={total:number;unsafe:number;openDefects:number;criticalDefects:number};

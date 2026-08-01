@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, LatestLocation, MaintenancePlan, Member, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleInspection, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -77,8 +77,10 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [documents,setDocuments]=useState<VehicleDocument[]>([]);
   const [safetyEvents,setSafetyEvents]=useState<SafetyEvent[]>([]);
   const [safetySummary,setSafetySummary]=useState<SafetySummary>({total:0,open:0,serious:0,assignmentCount:0});
+  const [inspections,setInspections]=useState<VehicleInspection[]>([]);
+  const [inspectionSummary,setInspectionSummary]=useState<InspectionSummary>({total:0,unsafe:0,openDefects:0,criticalDefects:0});
   const [expenseSummary,setExpenseSummary]=useState<ExpenseSummary>({totalAmount:0,fuelAmount:0,fuelLiters:0,entryCount:0,byVehicle:[]});
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "safety" | "mobile" | "members" | "audit">("overview");
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "safety" | "inspections" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
   const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
@@ -87,7 +89,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult,expenseResult,documentResult,safetyResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans(),api.expenses(),api.documents(),api.safetyEvents()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult,expenseResult,documentResult,safetyResult,inspectionResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans(),api.expenses(),api.documents(),api.safetyEvents(),api.inspections()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
@@ -99,6 +101,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setExpenses(expenseResult.expenses);setExpenseSummary(expenseResult.summary);
       setDocuments(documentResult.documents);
       setSafetyEvents(safetyResult.events);setSafetySummary(safetyResult.summary);
+      setInspections(inspectionResult.inspections);setInspectionSummary(inspectionResult.summary);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -221,6 +224,15 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try{await api.createSafetyEvent({assignmentId,eventType:eventType as "speeding"|"harsh_braking"|"harsh_acceleration"|"long_idle"|"manual",severity:severity as "low"|"medium"|"high"|"critical",occurredAt:new Date().toISOString(),latitude:null,longitude:null,value:null,notes});await refresh();}
     catch{setError("Güvenlik olayı kaydedilemedi; atama ID'sini kontrol edin.");}
   }
+  async function addInspection(){
+    const assignmentId=window.prompt("Kontrol yapılacak aktif atama ID'si");if(!assignmentId)return;
+    const inspectionType=window.prompt("Kontrol türü: pre_shift veya post_shift","pre_shift");if(!inspectionType||!["pre_shift","post_shift"].includes(inspectionType)){setError("Geçerli kontrol türü seçin.");return;}
+    const safeToOperate=window.confirm("Araç güvenli şekilde kullanılabilir mi? Tamam=Evet, İptal=Hayır");
+    const item=safeToOperate?window.prompt("Varsa küçük kusur kalemi (boş bırakılabilir)"):window.prompt("Kusurlu kontrol kalemi (ör. Fren)");
+    const defects=item?[{item,severity:(safeToOperate?"minor":"critical") as "minor"|"critical",description:window.prompt("Kusur açıklaması")||"Kontrolde kusur tespit edildi"}]:[];
+    try{await api.createInspection({assignmentId,inspectionType:inspectionType as "pre_shift"|"post_shift",odometerKm:null,safeToOperate,notes:null,defects});await refresh();}
+    catch{setError("Araç kontrolü kaydedilemedi; aktif atamayı ve kusur bilgilerini kontrol edin.");}
+  }
   return <div className="app-shell">
     <aside><div className="brand"><span>F</span> Filo</div><nav>
       <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>⌂ <b>Genel Bakış</b></button>
@@ -235,6 +247,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "expenses" ? "active" : ""} onClick={() => setView("expenses")}>₺ Yakıt ve Giderler</button>
       <button className={view === "documents" ? "active" : ""} onClick={() => setView("documents")}>▧ Belgeler {documents.filter(d=>d.displayStatus==="expired").length?`(${documents.filter(d=>d.displayStatus==="expired").length})`:""}</button>
       <button className={view === "safety" ? "active" : ""} onClick={() => setView("safety")}>◉ Sürücü Güvenliği {safetySummary.open?`(${safetySummary.open})`:""}</button>
+      <button className={view === "inspections" ? "active" : ""} onClick={() => setView("inspections")}>☑ Araç Kontrolleri {inspectionSummary.openDefects?`(${inspectionSummary.openDefects})`:""}</button>
       {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
@@ -354,6 +367,19 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
           <div className="section-head"><div><p className="eyebrow">SÜRÜCÜ GÜVENLİĞİ</p><h2>İhlal ve güvenlik olayları</h2></div>{user.role!=="viewer"&&<button onClick={()=>void addSafetyEvent()}>＋ Olay ekle</button>}</div>
           <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Araç / sürücü</th><th>Olay</th><th>Önem</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{safetyEvents.map(event=><tr key={event.id}><td>{new Date(event.occurredAt).toLocaleString("tr-TR")}</td><td><b>{event.vehiclePlate}</b><br/><small>{event.driverName}</small></td><td>{event.eventType}<br/><small>{event.notes??"—"}</small></td><td>{event.severity}</td><td>{event.status==="open"?"Açık":event.status==="reviewed"?"İncelendi":"Çözüldü"}</td><td>{event.status!=="resolved"&&user.role!=="viewer"&&<>{event.status==="open"&&<button className="secondary" onClick={async()=>{await api.updateSafetyEventStatus(event.id,"reviewed");await refresh();}}>İncelendi</button>}<button onClick={async()=>{await api.updateSafetyEventStatus(event.id,"resolved");await refresh();}}>Çöz</button></>}</td></tr>)}</tbody></table></div>
           {!safetyEvents.length&&<div className="empty"><b>Henüz güvenlik olayı yok</b><p>Hız, sert sürüş, uzun rölanti veya manuel olayları burada takip edin.</p></div>}
+        </section>
+      </>}
+      {view === "inspections" && <>
+        <section className="metrics">
+          <article><span>Toplam kontrol</span><strong>{inspectionSummary.total}</strong><small>vardiya kontrolleri</small></article>
+          <article><span>Güvensiz araç</span><strong>{inspectionSummary.unsafe}</strong><small>kullanıma uygun değil</small></article>
+          <article><span>Açık kusur</span><strong>{inspectionSummary.openDefects}</strong><small>müdahale bekliyor</small></article>
+          <article><span>Kritik kusur</span><strong>{inspectionSummary.criticalDefects}</strong><small>yüksek öncelik</small></article>
+        </section>
+        <section className="table-card">
+          <div className="section-head"><div><p className="eyebrow">VARDİYA ARAÇ KONTROLÜ</p><h2>Kontroller ve açık kusurlar</h2></div>{user.role!=="viewer"&&<button onClick={()=>void addInspection()}>＋ Kontrol kaydet</button>}</div>
+          <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Araç / sürücü</th><th>Tür</th><th>Uygunluk</th><th>Kusurlar</th></tr></thead><tbody>{inspections.map(inspection=><tr key={inspection.id}><td>{new Date(inspection.inspectedAt).toLocaleString("tr-TR")}</td><td><b>{inspection.vehiclePlate}</b><br/><small>{inspection.driverName}</small></td><td>{inspection.inspectionType==="pre_shift"?"Vardiya öncesi":"Vardiya sonrası"}</td><td>{inspection.safeToOperate?"Kullanılabilir":"Kullanılamaz"}</td><td>{inspection.defects.length?inspection.defects.map(defect=><div key={defect.id}><b>{defect.item}</b> · {defect.severity} · {defect.status}{defect.status!=="resolved"&&user.role!=="viewer"&&<button className="secondary" onClick={async()=>{const notes=window.prompt("Çözüm notu");if(!notes)return;await api.updateInspectionDefectStatus(defect.id,"resolved",notes);await refresh();}}>Çöz</button>}</div>):"Kusur yok"}</td></tr>)}</tbody></table></div>
+          {!inspections.length&&<div className="empty"><b>Henüz araç kontrolü yok</b><p>Aktif atama için vardiya öncesi veya sonrası kontrol kaydedin.</p></div>}
         </section>
       </>}
       {view === "operations" && selectedRoute && <section className="table-card spaced route-card">
