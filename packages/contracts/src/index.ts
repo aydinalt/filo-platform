@@ -258,3 +258,15 @@ export type CreateVehicleInspectionInput=z.infer<typeof createVehicleInspectionS
 export type InspectionDefect={id:string;item:string;severity:"minor"|"major"|"critical";description:string;status:"open"|"reviewed"|"resolved";resolutionNotes:string|null;reviewedAt:string|null;resolvedAt:string|null};
 export type VehicleInspection={id:string;assignmentId:string;vehicleId:string;vehiclePlate:string;driverId:string;driverName:string;inspectionType:"pre_shift"|"post_shift";odometerKm:number|null;safeToOperate:boolean;notes:string|null;inspectedAt:string;defects:InspectionDefect[]};
 export type InspectionSummary={total:number;unsafe:number;openDefects:number;criticalDefects:number};
+
+export const createTireSetSchema=z.object({
+  brand:z.string().trim().min(2).max(80),model:z.string().trim().min(1).max(80),size:z.string().trim().min(3).max(40),
+  serialNumber:z.string().trim().min(2).max(120).nullable().default(null),purchasedOn:z.string().date().nullable().default(null),
+  initialOdometerKm:z.number().int().min(0).max(10_000_000).nullable().default(null),targetLifeKm:z.number().int().min(1000).max(500_000).nullable().default(null),
+  targetChangeDate:z.string().date().nullable().default(null),notes:z.string().trim().max(1000).nullable().default(null)
+}).superRefine((value,context)=>{if(value.purchasedOn&&value.targetChangeDate&&value.targetChangeDate<value.purchasedOn)context.addIssue({code:"custom",message:"Target change date must follow purchase date",path:["targetChangeDate"]});});
+export const mountTireSetSchema=z.object({vehicleId:z.string().uuid(),position:z.enum(["front","rear","all"]),mountedOn:z.string().date(),mountedOdometerKm:z.number().int().min(0).max(10_000_000)});
+export const removeTireSetSchema=z.object({removedOn:z.string().date(),removedOdometerKm:z.number().int().min(0).max(10_000_000),reason:z.string().trim().min(2).max(500)});
+export type CreateTireSetInput=z.infer<typeof createTireSetSchema>;
+export type TireSet={id:string;brand:string;model:string;size:string;serialNumber:string|null;purchasedOn:string|null;initialOdometerKm:number|null;targetLifeKm:number|null;targetChangeDate:string|null;notes:string|null;status:"stored"|"mounted"|"retired";vehicleId:string|null;vehiclePlate:string|null;position:"front"|"rear"|"all"|null;mountedOn:string|null;mountedOdometerKm:number|null;currentOdometerKm:number|null;usedKm:number|null;remainingKm:number|null;displayStatus:"stored"|"mounted"|"due_soon"|"overdue"|"retired";createdAt:string};
+export type TireSummary={total:number;mounted:number;dueSoon:number;overdue:number};

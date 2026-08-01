@@ -1,8 +1,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("validates tire lifecycle targets and mount odometers",()=>{
+    const vehicleId="10000000-0000-4000-8000-000000000001";
+    assert.equal(createTireSetSchema.safeParse({brand:"Michelin",model:"Agilis",size:"215/65 R16",purchasedOn:"2026-08-01",targetChangeDate:"2028-08-01",targetLifeKm:50000}).success,true);
+    assert.equal(createTireSetSchema.safeParse({brand:"X",model:"A",size:"R1",purchasedOn:"2027-01-01",targetChangeDate:"2026-01-01"}).success,false);
+    assert.equal(mountTireSetSchema.safeParse({vehicleId,position:"all",mountedOn:"2026-08-01",mountedOdometerKm:120000}).success,true);
+    assert.equal(removeTireSetSchema.safeParse({removedOn:"2027-08-01",removedOdometerKm:160000,reason:"Diş derinliği sınırı"}).success,true);
+  });
   it("requires defects for unsafe inspections and resolution notes",()=>{
     const assignmentId="10000000-0000-4000-8000-000000000001";
     const critical={item:"Fren",severity:"critical",description:"Pedal basıncı yetersiz"};

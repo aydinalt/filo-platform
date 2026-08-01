@@ -1,4 +1,4 @@
-import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleInspection, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleInspection, WorkShift } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -74,4 +74,8 @@ export const api = {
   ,inspections: () => request<{inspections:VehicleInspection[];summary:InspectionSummary}>("/api/inspections")
   ,createInspection: (input:CreateVehicleInspectionInput) => request<{inspectionId:string}>("/api/inspections",{method:"POST",body:JSON.stringify(input)})
   ,updateInspectionDefectStatus: (id:string,status:"reviewed"|"resolved",resolutionNotes:string|null) => request<void>(`/api/inspections/defects/${id}/status`,{method:"PATCH",body:JSON.stringify({status,resolutionNotes})})
+  ,tires: () => request<{tires:TireSet[];summary:TireSummary}>("/api/tires")
+  ,createTireSet: (input:CreateTireSetInput) => request<{tireSetId:string}>("/api/tires",{method:"POST",body:JSON.stringify(input)})
+  ,mountTireSet: (id:string,vehicleId:string,position:"front"|"rear"|"all",mountedOn:string,mountedOdometerKm:number) => request<void>(`/api/tires/${id}/mount`,{method:"POST",body:JSON.stringify({vehicleId,position,mountedOn,mountedOdometerKm})})
+  ,removeTireSet: (id:string,removedOn:string,removedOdometerKm:number,reason:string) => request<void>(`/api/tires/${id}/remove`,{method:"POST",body:JSON.stringify({removedOn,removedOdometerKm,reason})})
 };
