@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createAssignmentSchema, createGeofenceSchema, createLocationEventSchema, startShiftSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createGeofenceSchema, createLocationEventSchema, startShiftSchema, updateTrackingSchema } from "@filo/contracts";
 import { withTenantTransaction } from "@filo/database";
 import { requireSession } from "../lib/auth.js";
 import { allow } from "../lib/permissions.js";
@@ -19,6 +19,35 @@ function distanceMeters(a:{latitude:number;longitude:number},b:{latitude:number;
 }
 
 export async function operationRoutes(app: FastifyInstance) {
+  app.get("/alert-rules",{preHandler:requireSession},async request=>withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async client=>{
+    const rows=(await client.query(`SELECT id,name,type,geofence_id AS "geofenceId",threshold_kph AS "thresholdKph",status,created_at AS "createdAt" FROM alert_rules ORDER BY status,name`)).rows;
+    return {rules:rows.map(row=>({...row,createdAt:row.createdAt.toISOString()}))};
+  }));
+  app.post("/alert-rules",{preHandler:[requireSession,allow("owner","admin")]},async(request,reply)=>{
+    const parsed=createAlertRuleSchema.safeParse(request.body);if(!parsed.success)return reply.code(400).send({error:"INVALID_ALERT_RULE"});
+    const user=request.sessionUser;
+    const rule=await withTenantTransaction(user.tenantId,user.id,async client=>{
+      if(parsed.data.geofenceId){const found=await client.query("SELECT 1 FROM geofences WHERE id=$1 AND status='active'",[parsed.data.geofenceId]);if(!found.rowCount)return null;}
+      const row=(await client.query(`INSERT INTO alert_rules(tenant_id,name,type,geofence_id,threshold_kph,created_by) VALUES($1,$2,$3,$4,$5,$6)
+        RETURNING id,name,type,geofence_id AS "geofenceId",threshold_kph AS "thresholdKph",status,created_at AS "createdAt"`,[user.tenantId,parsed.data.name,parsed.data.type,parsed.data.geofenceId,parsed.data.thresholdKph,user.id])).rows[0];
+      await client.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'alert_rule.created','alert_rule',$3)`,[user.tenantId,user.id,row.id]);return row;
+    });
+    return rule?reply.code(201).send({rule:{...rule,createdAt:rule.createdAt.toISOString()}}):reply.code(404).send({error:"ACTIVE_GEOFENCE_NOT_FOUND"});
+  });
+  app.get("/alerts",{preHandler:requireSession},async request=>withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async client=>{
+    const rows=(await client.query(`SELECT a.id::text,a.rule_id AS "ruleId",r.name AS "ruleName",a.type,a.assignment_id AS "assignmentId",v.plate AS "vehiclePlate",d.full_name AS "driverName",a.occurred_at AS "occurredAt",a.status,a.metadata,a.acknowledged_at AS "acknowledgedAt",a.resolved_at AS "resolvedAt"
+      FROM operational_alerts a JOIN alert_rules r ON r.id=a.rule_id JOIN vehicle_driver_assignments x ON x.id=a.assignment_id JOIN vehicles v ON v.id=x.vehicle_id JOIN drivers d ON d.id=x.driver_id ORDER BY a.occurred_at DESC LIMIT 250`)).rows;
+    return {alerts:rows.map(row=>({...row,occurredAt:row.occurredAt.toISOString(),acknowledgedAt:row.acknowledgedAt?.toISOString()??null,resolvedAt:row.resolvedAt?.toISOString()??null}))};
+  }));
+  app.patch("/alerts/:id/status",{preHandler:[requireSession,allow("owner","admin","operator")]},async(request,reply)=>{
+    const id=(request.params as {id?:string}).id,status=(request.body as {status?:string})?.status;
+    if(!id||!status||!["acknowledged","resolved"].includes(status))return reply.code(400).send({error:"INVALID_ALERT_STATUS"});
+    const user=request.sessionUser;
+    const changed=await withTenantTransaction(user.tenantId,user.id,async client=>{
+      const result=await client.query(`UPDATE operational_alerts SET status=$2,acknowledged_at=COALESCE(acknowledged_at,now()),acknowledged_by=COALESCE(acknowledged_by,$3),resolved_at=CASE WHEN $2='resolved' THEN now() ELSE resolved_at END,resolved_by=CASE WHEN $2='resolved' THEN $3 ELSE resolved_by END WHERE id=$1 AND status<>$2 RETURNING id`,[id,status,user.id]);
+      if(!result.rowCount)return false;await client.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'alert.status_changed','operational_alert',$3,jsonb_build_object('status',$4))`,[user.tenantId,user.id,id,status]);return true;
+    });return changed?reply.code(204).send():reply.code(404).send({error:"ALERT_NOT_FOUND_OR_UNCHANGED"});
+  });
   app.get("/geofences", {preHandler:requireSession}, async request =>
     withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async client=>{
       const geofences=(await client.query(`SELECT id,name,latitude,longitude,radius_meters AS "radiusMeters",status,created_at AS "createdAt"
@@ -212,8 +241,17 @@ export async function operationRoutes(app: FastifyInstance) {
           await client.query(`UPDATE geofence_assignment_states SET is_inside=$3,last_location_event_id=$4,observed_at=$5
             WHERE geofence_id=$1 AND assignment_id=$2`,[fence.id,parsed.data.assignmentId,inside,locationEventId,recordedAt]);
         }
-        await client.query(`INSERT INTO geofence_events(tenant_id,geofence_id,assignment_id,location_event_id,event_type,occurred_at)
-          VALUES($1,$2,$3,$4,$5,$6)`,[user.tenantId,fence.id,parsed.data.assignmentId,locationEventId,inside?"entered":"exited",recordedAt]);
+        const transition=inside?"entered":"exited";
+        const event=(await client.query<{id:string}>(`INSERT INTO geofence_events(tenant_id,geofence_id,assignment_id,location_event_id,event_type,occurred_at)
+          VALUES($1,$2,$3,$4,$5,$6) RETURNING id::text`,[user.tenantId,fence.id,parsed.data.assignmentId,locationEventId,transition,recordedAt])).rows[0]!;
+        await client.query(`INSERT INTO operational_alerts(tenant_id,rule_id,assignment_id,location_event_id,geofence_event_id,type,occurred_at,metadata)
+          SELECT $1,r.id,$2,$3,$4,r.type,$5,jsonb_build_object('geofenceId',$6) FROM alert_rules r
+          WHERE r.status='active' AND r.type=$7 AND r.geofence_id=$6 ON CONFLICT DO NOTHING`,[user.tenantId,parsed.data.assignmentId,locationEventId,event.id,recordedAt,fence.id,`geofence_${transition}`]);
+      }
+      if(parsed.data.speedMps!==null&&parsed.data.speedMps!==undefined){
+        await client.query(`INSERT INTO operational_alerts(tenant_id,rule_id,assignment_id,location_event_id,type,occurred_at,metadata)
+          SELECT $1,r.id,$2,$3,'speeding',$4,jsonb_build_object('speedKph',round(($5::numeric*3.6),1),'thresholdKph',r.threshold_kph)
+          FROM alert_rules r WHERE r.status='active' AND r.type='speeding' AND ($5*3.6)>=r.threshold_kph ON CONFLICT DO NOTHING`,[user.tenantId,parsed.data.assignmentId,locationEventId,recordedAt,parsed.data.speedMps]);
       }
       return "created" as const;
     });

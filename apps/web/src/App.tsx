@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { Assignment, AuditEvent, CreateVehicleInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, Member, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, Member, OperationalAlert, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -70,7 +70,9 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [selectedRoute,setSelectedRoute]=useState<ShiftRoute|null>(null);
   const [geofences,setGeofences]=useState<Geofence[]>([]);
   const [geofenceEvents,setGeofenceEvents]=useState<GeofenceEvent[]>([]);
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "mobile" | "members" | "audit">("overview");
+  const [alertRules,setAlertRules]=useState<AlertRule[]>([]);
+  const [alerts,setAlerts]=useState<OperationalAlert[]>([]);
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
   const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
@@ -79,13 +81,14 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
       setAssignments(assignmentResult.assignments);setShifts(shiftResult.shifts);setTracking(trackingResult.tracking);
       setLocations(locationResult.locations);
       setGeofences(geofenceResult.geofences);setGeofenceEvents(geofenceEventResult.events);
+      setAlertRules(alertRuleResult.rules);setAlerts(alertResult.alerts);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -156,6 +159,16 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try{await api.createGeofence({name,latitude,longitude,radiusMeters});await refresh();}
     catch(e){setError(e instanceof Error&&e.message==="GEOFENCE_NAME_EXISTS"?"Bu adla aktif bir bölge zaten var.":"Bölge oluşturulamadı; koordinat ve yarıçapı kontrol edin.");}
   }
+  async function addAlertRule(){
+    const name=window.prompt("Uyarı kuralı adı");if(!name)return;
+    const type=window.prompt("Tür: speeding, geofence_entered veya geofence_exited","speeding");
+    if(!type||!["speeding","geofence_entered","geofence_exited"].includes(type)){setError("Geçerli bir uyarı türü seçin.");return;}
+    const speeding=type==="speeding";
+    const thresholdKph=speeding?Number(window.prompt("Hız eşiği (km/sa)","120")):null;
+    const geofenceId=speeding?null:window.prompt("Bölge ID");
+    try{await api.createAlertRule({name,type:type as "speeding"|"geofence_entered"|"geofence_exited",thresholdKph,geofenceId:geofenceId||null});await refresh();}
+    catch{setError("Uyarı kuralı oluşturulamadı; tür ve hedef değerlerini kontrol edin.");}
+  }
   return <div className="app-shell">
     <aside><div className="brand"><span>F</span> Filo</div><nav>
       <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>⌂ <b>Genel Bakış</b></button>
@@ -165,6 +178,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "devices" ? "active" : ""} onClick={() => setView("devices")}>▤ Cihazlar</button>
       <button className={view === "operations" ? "active" : ""} onClick={() => setView("operations")}>↔ Operasyonlar</button>
       <button className={view === "geofences" ? "active" : ""} onClick={() => setView("geofences")}>◎ Bölgeler</button>
+      <button className={view === "alerts" ? "active" : ""} onClick={() => setView("alerts")}>⚠ Uyarılar {alerts.filter(a=>a.status==="open").length?`(${alerts.filter(a=>a.status==="open").length})`:""}</button>
       {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
@@ -237,6 +251,18 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
           <div className="section-head"><div><p className="eyebrow">GİRİŞ / ÇIKIŞ OLAYLARI</p><h2>Son bölge hareketleri</h2></div><span>{geofenceEvents.length} olay</span></div>
           <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Bölge</th><th>Araç</th><th>Sürücü</th><th>Olay</th></tr></thead><tbody>{geofenceEvents.map(e=><tr key={e.id}><td>{new Date(e.occurredAt).toLocaleString("tr-TR")}</td><td><b>{e.geofenceName}</b></td><td>{e.vehiclePlate}</td><td>{e.driverName}</td><td>{e.eventType==="entered"?"Giriş":"Çıkış"}</td></tr>)}</tbody></table></div>
           {!geofenceEvents.length&&<div className="empty"><b>Henüz giriş/çıkış olayı yok</b><p>Aktif takipteki araç bir bölge sınırını geçtiğinde otomatik oluşur.</p></div>}
+        </section>
+      </>}
+      {view === "alerts" && <>
+        <section className="table-card">
+          <div className="section-head"><div><p className="eyebrow">UYARI KURALLARI</p><h2>Operasyon kuralları</h2></div>{["owner","admin"].includes(user.role)&&<button onClick={()=>void addAlertRule()}>＋ Kural ekle</button>}</div>
+          <div className="table-wrap"><table><thead><tr><th>Kural</th><th>Tür</th><th>Hedef / eşik</th><th>Durum</th></tr></thead><tbody>{alertRules.map(rule=><tr key={rule.id}><td><b>{rule.name}</b></td><td>{rule.type}</td><td>{rule.thresholdKph?`${rule.thresholdKph} km/sa`:rule.geofenceId}</td><td>{rule.status==="active"?"Aktif":"Pasif"}</td></tr>)}</tbody></table></div>
+          {!alertRules.length&&<div className="empty"><b>Henüz uyarı kuralı yok</b><p>Hız veya bölge geçişi için ilk kuralı oluşturun.</p></div>}
+        </section>
+        <section className="table-card spaced">
+          <div className="section-head"><div><p className="eyebrow">MÜDAHALE MERKEZİ</p><h2>Operasyon uyarıları</h2></div><span>{alerts.filter(a=>a.status==="open").length} açık</span></div>
+          <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Kural</th><th>Araç / sürücü</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{alerts.map(alert=><tr key={alert.id}><td>{new Date(alert.occurredAt).toLocaleString("tr-TR")}</td><td><b>{alert.ruleName}</b><br/><small>{alert.type}</small></td><td>{alert.vehiclePlate}<br/><small>{alert.driverName}</small></td><td>{alert.status==="open"?"Açık":alert.status==="acknowledged"?"Görüldü":"Çözüldü"}</td><td>{alert.status!=="resolved"&&user.role!=="viewer"&&<>{alert.status==="open"&&<button className="secondary" onClick={async()=>{await api.updateAlertStatus(alert.id,"acknowledged");await refresh();}}>Görüldü</button>}<button onClick={async()=>{await api.updateAlertStatus(alert.id,"resolved");await refresh();}}>Çöz</button></>}</td></tr>)}</tbody></table></div>
+          {!alerts.length&&<div className="empty"><b>Henüz operasyon uyarısı yok</b><p>Aktif bir kural eşleştiğinde burada görünecek.</p></div>}
         </section>
       </>}
       {view === "operations" && selectedRoute && <section className="table-card spaced route-card">

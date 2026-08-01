@@ -1,4 +1,4 @@
-import type { Assignment, AuditEvent, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, Member, CreateVehicleInput, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, Member, OperationalAlert, CreateVehicleInput, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -56,4 +56,8 @@ export const api = {
   ,createGeofence: (input:CreateGeofenceInput) => request<{geofence:Geofence}>("/api/operations/geofences",{method:"POST",body:JSON.stringify(input)})
   ,deactivateGeofence: (id:string) => request<void>(`/api/operations/geofences/${id}/deactivate`,{method:"PATCH"})
   ,geofenceEvents: () => request<{events:GeofenceEvent[]}>("/api/operations/geofence-events")
+  ,alertRules: () => request<{rules:AlertRule[]}>("/api/operations/alert-rules")
+  ,createAlertRule: (input:CreateAlertRuleInput) => request<{rule:AlertRule}>("/api/operations/alert-rules",{method:"POST",body:JSON.stringify(input)})
+  ,alerts: () => request<{alerts:OperationalAlert[]}>("/api/operations/alerts")
+  ,updateAlertStatus: (id:string,status:"acknowledged"|"resolved") => request<void>(`/api/operations/alerts/${id}/status`,{method:"PATCH",body:JSON.stringify({status})})
 };

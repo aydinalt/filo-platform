@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
   it("normalizes email and plate", () => {
@@ -48,5 +48,11 @@ describe("API contracts", () => {
     assert.equal(createGeofenceSchema.safeParse({name:"X",latitude:41.01,longitude:29.01,radiusMeters:250}).success,false);
     assert.equal(createGeofenceSchema.safeParse({name:"Merkez",latitude:41.01,longitude:29.01,radiusMeters:25}).success,false);
     assert.equal(createGeofenceSchema.safeParse({name:"Merkez",latitude:91,longitude:29.01,radiusMeters:250}).success,false);
+  });
+  it("requires the correct alert rule target",()=>{
+    const geofenceId="10000000-0000-4000-8000-000000000001";
+    assert.equal(createAlertRuleSchema.safeParse({name:"Depo girişi",type:"geofence_entered",geofenceId,thresholdKph:null}).success,true);
+    assert.equal(createAlertRuleSchema.safeParse({name:"Hız",type:"speeding",geofenceId:null,thresholdKph:120}).success,true);
+    assert.equal(createAlertRuleSchema.safeParse({name:"Hız",type:"speeding",geofenceId:null,thresholdKph:null}).success,false);
   });
 });

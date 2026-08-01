@@ -177,3 +177,23 @@ export type GeofenceEvent = {
   vehiclePlate: string; driverName: string; eventType: "entered" | "exited";
   occurredAt: string;
 };
+
+export const createAlertRuleSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  type: z.enum(["geofence_entered", "geofence_exited", "speeding"]),
+  geofenceId: z.string().uuid().nullable().default(null),
+  thresholdKph: z.number().int().min(20).max(250).nullable().default(null)
+}).superRefine((value, context) => {
+  if (value.type === "speeding" && value.thresholdKph === null)
+    context.addIssue({code:"custom",message:"Speeding rule requires a threshold",path:["thresholdKph"]});
+  if (value.type !== "speeding" && value.geofenceId === null)
+    context.addIssue({code:"custom",message:"Geofence rule requires a geofence",path:["geofenceId"]});
+});
+export type CreateAlertRuleInput = z.infer<typeof createAlertRuleSchema>;
+export type AlertRule = CreateAlertRuleInput & { id:string; status:"active"|"inactive"; createdAt:string };
+export type OperationalAlert = {
+  id:string; ruleId:string; ruleName:string; type:CreateAlertRuleInput["type"];
+  assignmentId:string; vehiclePlate:string; driverName:string; occurredAt:string;
+  status:"open"|"acknowledged"|"resolved"; metadata:Record<string,unknown>;
+  acknowledgedAt:string|null; resolvedAt:string|null;
+};
