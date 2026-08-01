@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createVehicleExpenseSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
   it("normalizes email and plate", () => {
@@ -67,5 +67,12 @@ describe("API contracts", () => {
     assert.equal(createVehicleExpenseSchema.safeParse({vehicleId,category:"fuel",occurredOn:"2026-08-01",amount:2250,liters:null}).success,false);
     assert.equal(createVehicleExpenseSchema.safeParse({vehicleId,category:"parking",occurredOn:"2026-08-01",amount:250,liters:5}).success,false);
     assert.equal(createVehicleExpenseSchema.safeParse({vehicleId,category:"toll",occurredOn:"2026-08-01",amount:-1,liters:null}).success,false);
+  });
+  it("validates vehicle document dates and expiry requirements",()=>{
+    const vehicleId="10000000-0000-4000-8000-000000000001";
+    assert.equal(createVehicleDocumentSchema.safeParse({vehicleId,documentType:"inspection",validFrom:"2026-08-01",expiresOn:"2027-08-01"}).success,true);
+    assert.equal(createVehicleDocumentSchema.safeParse({vehicleId,documentType:"traffic_insurance",expiresOn:null}).success,false);
+    assert.equal(createVehicleDocumentSchema.safeParse({vehicleId,documentType:"registration",expiresOn:null}).success,true);
+    assert.equal(createVehicleDocumentSchema.safeParse({vehicleId,documentType:"casco",validFrom:"2027-01-01",expiresOn:"2026-01-01"}).success,false);
   });
 });

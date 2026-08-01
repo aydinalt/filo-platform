@@ -220,3 +220,15 @@ export const createVehicleExpenseSchema=z.object({
 export type CreateVehicleExpenseInput=z.infer<typeof createVehicleExpenseSchema>;
 export type VehicleExpense={id:string;vehicleId:string;vehiclePlate:string;category:CreateVehicleExpenseInput["category"];occurredOn:string;amount:number;odometerKm:number|null;liters:number|null;description:string|null;createdAt:string};
 export type ExpenseSummary={totalAmount:number;fuelAmount:number;fuelLiters:number;entryCount:number;byVehicle:Array<{vehicleId:string;vehiclePlate:string;totalAmount:number;fuelLiters:number;entryCount:number}>};
+
+export const createVehicleDocumentSchema=z.object({
+  vehicleId:z.string().uuid(),documentType:z.enum(["traffic_insurance","casco","inspection","registration","other"]),
+  documentNumber:z.string().trim().min(2).max(120).nullable().default(null),validFrom:z.string().date().nullable().default(null),
+  expiresOn:z.string().date().nullable().default(null),notes:z.string().trim().max(1000).nullable().default(null)
+}).superRefine((value,context)=>{
+  if(value.documentType!=="registration"&&value.expiresOn===null)context.addIssue({code:"custom",message:"Expiry date is required",path:["expiresOn"]});
+  if(value.validFrom&&value.expiresOn&&value.expiresOn<value.validFrom)context.addIssue({code:"custom",message:"Expiry must follow validity start",path:["expiresOn"]});
+});
+export const updateVehicleDocumentStatusSchema=z.object({status:z.enum(["renewed","cancelled"])});
+export type CreateVehicleDocumentInput=z.infer<typeof createVehicleDocumentSchema>;
+export type VehicleDocument={id:string;vehicleId:string;vehiclePlate:string;documentType:CreateVehicleDocumentInput["documentType"];documentNumber:string|null;validFrom:string|null;expiresOn:string|null;notes:string|null;status:"active"|"renewed"|"cancelled";displayStatus:"valid"|"expiring_soon"|"expired"|"renewed"|"cancelled";daysUntilExpiry:number|null;renewedByDocumentId:string|null;createdAt:string};
