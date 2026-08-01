@@ -197,3 +197,12 @@ export type OperationalAlert = {
   status:"open"|"acknowledged"|"resolved"; metadata:Record<string,unknown>;
   acknowledgedAt:string|null; resolvedAt:string|null;
 };
+
+export const createMaintenancePlanSchema=z.object({
+  vehicleId:z.string().uuid(),title:z.string().trim().min(2).max(120),
+  dueDate:z.string().date().nullable().default(null),dueOdometerKm:z.number().int().positive().max(10_000_000).nullable().default(null),
+  notes:z.string().trim().max(1000).nullable().default(null)
+}).superRefine((value,context)=>{if(value.dueDate===null&&value.dueOdometerKm===null)context.addIssue({code:"custom",message:"Date or odometer target is required"});});
+export const completeMaintenanceSchema=z.object({completedOdometerKm:z.number().int().min(0).max(10_000_000).nullable().default(null)});
+export type CreateMaintenancePlanInput=z.infer<typeof createMaintenancePlanSchema>;
+export type MaintenancePlan={id:string;vehicleId:string;vehiclePlate:string;title:string;dueDate:string|null;dueOdometerKm:number|null;status:"scheduled"|"completed"|"cancelled";displayStatus:"scheduled"|"due_soon"|"overdue"|"completed"|"cancelled";notes:string|null;completedAt:string|null;completedOdometerKm:number|null;createdAt:string};

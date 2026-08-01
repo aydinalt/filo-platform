@@ -1,4 +1,4 @@
-import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, Member, OperationalAlert, CreateVehicleInput, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -60,4 +60,7 @@ export const api = {
   ,createAlertRule: (input:CreateAlertRuleInput) => request<{rule:AlertRule}>("/api/operations/alert-rules",{method:"POST",body:JSON.stringify(input)})
   ,alerts: () => request<{alerts:OperationalAlert[]}>("/api/operations/alerts")
   ,updateAlertStatus: (id:string,status:"acknowledged"|"resolved") => request<void>(`/api/operations/alerts/${id}/status`,{method:"PATCH",body:JSON.stringify({status})})
+  ,maintenancePlans: () => request<{plans:MaintenancePlan[]}>("/api/maintenance")
+  ,createMaintenancePlan: (input:CreateMaintenancePlanInput) => request<{plan:MaintenancePlan}>("/api/maintenance",{method:"POST",body:JSON.stringify(input)})
+  ,completeMaintenance: (id:string,completedOdometerKm:number|null) => request<void>(`/api/maintenance/${id}/complete`,{method:"PATCH",body:JSON.stringify({completedOdometerKm})})
 };

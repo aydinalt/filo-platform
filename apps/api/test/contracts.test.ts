@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
   it("normalizes email and plate", () => {
@@ -54,5 +54,11 @@ describe("API contracts", () => {
     assert.equal(createAlertRuleSchema.safeParse({name:"Depo girişi",type:"geofence_entered",geofenceId,thresholdKph:null}).success,true);
     assert.equal(createAlertRuleSchema.safeParse({name:"Hız",type:"speeding",geofenceId:null,thresholdKph:120}).success,true);
     assert.equal(createAlertRuleSchema.safeParse({name:"Hız",type:"speeding",geofenceId:null,thresholdKph:null}).success,false);
+  });
+  it("requires a date or odometer maintenance target",()=>{
+    const vehicleId="10000000-0000-4000-8000-000000000001";
+    assert.equal(createMaintenancePlanSchema.safeParse({vehicleId,title:"Periyodik bakım",dueDate:"2026-09-01",dueOdometerKm:null}).success,true);
+    assert.equal(createMaintenancePlanSchema.safeParse({vehicleId,title:"Yağ değişimi",dueDate:null,dueOdometerKm:120000}).success,true);
+    assert.equal(createMaintenancePlanSchema.safeParse({vehicleId,title:"Bakım",dueDate:null,dueOdometerKm:null}).success,false);
   });
 });

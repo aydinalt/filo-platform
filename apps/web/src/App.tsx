@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, Member, OperationalAlert, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, Geofence, GeofenceEvent, LatestLocation, MaintenancePlan, Member, OperationalAlert, SessionUser, ShiftRoute, TrackingStatus, Vehicle, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -72,7 +72,8 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [geofenceEvents,setGeofenceEvents]=useState<GeofenceEvent[]>([]);
   const [alertRules,setAlertRules]=useState<AlertRule[]>([]);
   const [alerts,setAlerts]=useState<OperationalAlert[]>([]);
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "mobile" | "members" | "audit">("overview");
+  const [maintenance,setMaintenance]=useState<MaintenancePlan[]>([]);
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
   const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
@@ -81,7 +82,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
@@ -89,6 +90,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setLocations(locationResult.locations);
       setGeofences(geofenceResult.geofences);setGeofenceEvents(geofenceEventResult.events);
       setAlertRules(alertRuleResult.rules);setAlerts(alertResult.alerts);
+      setMaintenance(maintenanceResult.plans);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -169,6 +171,15 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try{await api.createAlertRule({name,type:type as "speeding"|"geofence_entered"|"geofence_exited",thresholdKph,geofenceId:geofenceId||null});await refresh();}
     catch{setError("Uyarı kuralı oluşturulamadı; tür ve hedef değerlerini kontrol edin.");}
   }
+  async function addMaintenance(){
+    const vehicleId=window.prompt("Bakım planlanacak araç ID");if(!vehicleId)return;
+    const title=window.prompt("Bakım adı (ör. Periyodik bakım)");if(!title)return;
+    const dueDate=window.prompt("Hedef tarih (YYYY-AA-GG, boş bırakılabilir)")||null;
+    const kmText=window.prompt("Hedef kilometre (boş bırakılabilir)")||"";
+    const dueOdometerKm=kmText?Number(kmText):null;
+    try{await api.createMaintenancePlan({vehicleId,title,dueDate,dueOdometerKm,notes:null});await refresh();}
+    catch{setError("Bakım planı oluşturulamadı; araç ID, tarih veya kilometre hedefini kontrol edin.");}
+  }
   return <div className="app-shell">
     <aside><div className="brand"><span>F</span> Filo</div><nav>
       <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>⌂ <b>Genel Bakış</b></button>
@@ -179,6 +190,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "operations" ? "active" : ""} onClick={() => setView("operations")}>↔ Operasyonlar</button>
       <button className={view === "geofences" ? "active" : ""} onClick={() => setView("geofences")}>◎ Bölgeler</button>
       <button className={view === "alerts" ? "active" : ""} onClick={() => setView("alerts")}>⚠ Uyarılar {alerts.filter(a=>a.status==="open").length?`(${alerts.filter(a=>a.status==="open").length})`:""}</button>
+      <button className={view === "maintenance" ? "active" : ""} onClick={() => setView("maintenance")}>⚙ Bakım {maintenance.filter(p=>p.displayStatus==="overdue").length?`(${maintenance.filter(p=>p.displayStatus==="overdue").length})`:""}</button>
       {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
@@ -265,6 +277,11 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
           {!alerts.length&&<div className="empty"><b>Henüz operasyon uyarısı yok</b><p>Aktif bir kural eşleştiğinde burada görünecek.</p></div>}
         </section>
       </>}
+      {view === "maintenance" && <section className="table-card">
+        <div className="section-head"><div><p className="eyebrow">ARAÇ BAKIM YÖNETİMİ</p><h2>Bakım planları</h2></div>{user.role!=="viewer"&&<button onClick={()=>void addMaintenance()}>＋ Bakım planla</button>}</div>
+        <div className="table-wrap"><table><thead><tr><th>Araç</th><th>Bakım</th><th>Hedef tarih</th><th>Hedef km</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{maintenance.map(plan=><tr key={plan.id}><td><b>{plan.vehiclePlate}</b></td><td>{plan.title}</td><td>{plan.dueDate?new Date(`${plan.dueDate}T00:00:00`).toLocaleDateString("tr-TR"):"—"}</td><td>{plan.dueOdometerKm?.toLocaleString("tr-TR")??"—"}</td><td>{plan.displayStatus==="overdue"?"Gecikmiş":plan.displayStatus==="due_soon"?"Yaklaşıyor":plan.status==="completed"?"Tamamlandı":"Planlandı"}</td><td>{plan.status==="scheduled"&&user.role!=="viewer"&&<button onClick={async()=>{const value=window.prompt("Tamamlanma kilometresi (opsiyonel)");await api.completeMaintenance(plan.id,value?Number(value):null);await refresh();}}>Tamamla</button>}</td></tr>)}</tbody></table></div>
+        {!maintenance.length&&<div className="empty"><b>Henüz bakım planı yok</b><p>Araç için tarih veya kilometre hedefli ilk bakım planını oluşturun.</p></div>}
+      </section>}
       {view === "operations" && selectedRoute && <section className="table-card spaced route-card">
         <div className="section-head"><div><p className="eyebrow">VARDİYA ROTA GEÇMİŞİ</p><h2>{selectedRoute.vehiclePlate} · {selectedRoute.driverName}</h2></div><button className="secondary" onClick={()=>setSelectedRoute(null)}>Kapat</button></div>
         <section className="route-metrics"><article><span>Konum noktası</span><strong>{selectedRoute.pointCount}</strong></article><article><span>Tahmini mesafe</span><strong>{(selectedRoute.distanceMeters/1000).toFixed(2)} km</strong></article><article><span>Hareket</span><strong>{Math.round(selectedRoute.movingSeconds/60)} dk</strong></article><article><span>Duraklama</span><strong>{Math.round(selectedRoute.stoppedSeconds/60)} dk</strong></article></section>
