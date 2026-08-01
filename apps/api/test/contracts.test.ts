@@ -1,8 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
+import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleSchema, loginSchema, updateMemberRoleSchema, updateTrackingSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("validates safety event coordinates and severity",()=>{
+    const base={assignmentId:"10000000-0000-4000-8000-000000000001",eventType:"harsh_braking",severity:"high",occurredAt:new Date().toISOString()};
+    assert.equal(createSafetyEventSchema.safeParse({...base,latitude:41.01,longitude:29.01}).success,true);
+    assert.equal(createSafetyEventSchema.safeParse({...base,latitude:41.01,longitude:null}).success,false);
+    assert.equal(createSafetyEventSchema.safeParse({...base,severity:"extreme"}).success,false);
+  });
   it("normalizes email and plate", () => {
     assert.equal(loginSchema.parse({ email: "ADMIN@DEMO.FILO", password: "12345678" }).email,
       "admin@demo.filo");

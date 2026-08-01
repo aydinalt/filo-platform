@@ -232,3 +232,14 @@ export const createVehicleDocumentSchema=z.object({
 export const updateVehicleDocumentStatusSchema=z.object({status:z.enum(["renewed","cancelled"])});
 export type CreateVehicleDocumentInput=z.infer<typeof createVehicleDocumentSchema>;
 export type VehicleDocument={id:string;vehicleId:string;vehiclePlate:string;documentType:CreateVehicleDocumentInput["documentType"];documentNumber:string|null;validFrom:string|null;expiresOn:string|null;notes:string|null;status:"active"|"renewed"|"cancelled";displayStatus:"valid"|"expiring_soon"|"expired"|"renewed"|"cancelled";daysUntilExpiry:number|null;renewedByDocumentId:string|null;createdAt:string};
+
+export const createSafetyEventSchema=z.object({
+  assignmentId:z.string().uuid(),eventType:z.enum(["speeding","harsh_braking","harsh_acceleration","long_idle","manual"]),
+  severity:z.enum(["low","medium","high","critical"]),occurredAt:z.string().datetime(),
+  latitude:z.number().finite().min(-90).max(90).nullable().default(null),longitude:z.number().finite().min(-180).max(180).nullable().default(null),
+  value:z.number().finite().min(0).max(100000).nullable().default(null),notes:z.string().trim().max(1000).nullable().default(null)
+}).superRefine((value,context)=>{if((value.latitude===null)!==(value.longitude===null))context.addIssue({code:"custom",message:"Coordinates must be supplied together",path:["latitude"]});});
+export const updateSafetyEventStatusSchema=z.object({status:z.enum(["reviewed","resolved"])});
+export type CreateSafetyEventInput=z.infer<typeof createSafetyEventSchema>;
+export type SafetyEvent={id:string;assignmentId:string;vehicleId:string;vehiclePlate:string;driverId:string;driverName:string;eventType:CreateSafetyEventInput["eventType"];severity:CreateSafetyEventInput["severity"];occurredAt:string;latitude:number|null;longitude:number|null;value:number|null;notes:string|null;status:"open"|"reviewed"|"resolved";reviewedAt:string|null;resolvedAt:string|null;createdAt:string};
+export type SafetySummary={total:number;open:number;serious:number;assignmentCount:number};

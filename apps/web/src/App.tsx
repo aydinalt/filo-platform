@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, LatestLocation, MaintenancePlan, Member, OperationalAlert, SessionUser, ShiftRoute, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, WorkShift } from "@filo/contracts";
+import type { AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, LatestLocation, MaintenancePlan, Member, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, WorkShift } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -75,8 +75,10 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [maintenance,setMaintenance]=useState<MaintenancePlan[]>([]);
   const [expenses,setExpenses]=useState<VehicleExpense[]>([]);
   const [documents,setDocuments]=useState<VehicleDocument[]>([]);
+  const [safetyEvents,setSafetyEvents]=useState<SafetyEvent[]>([]);
+  const [safetySummary,setSafetySummary]=useState<SafetySummary>({total:0,open:0,serious:0,assignmentCount:0});
   const [expenseSummary,setExpenseSummary]=useState<ExpenseSummary>({totalAmount:0,fuelAmount:0,fuelLiters:0,entryCount:0,byVehicle:[]});
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "mobile" | "members" | "audit">("overview");
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "safety" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
   const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
@@ -85,7 +87,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult,expenseResult,documentResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans(),api.expenses(),api.documents()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult,expenseResult,documentResult,safetyResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans(),api.expenses(),api.documents(),api.safetyEvents()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
@@ -96,6 +98,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setMaintenance(maintenanceResult.plans);
       setExpenses(expenseResult.expenses);setExpenseSummary(expenseResult.summary);
       setDocuments(documentResult.documents);
+      setSafetyEvents(safetyResult.events);setSafetySummary(safetyResult.summary);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -208,6 +211,16 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
     try{await api.createDocument({vehicleId,documentType:documentType as "traffic_insurance"|"casco"|"inspection"|"registration"|"other",documentNumber,validFrom,expiresOn,notes});await refresh();}
     catch(e){setError(e instanceof Error&&e.message==="ACTIVE_DOCUMENT_EXISTS"?"Bu araçta aynı türde aktif belge zaten var; önce mevcut belgeyi yenilendi olarak kapatın.":"Belge kaydedilemedi; araç ve tarih alanlarını kontrol edin.");}
   }
+  async function addSafetyEvent(){
+    const assignmentId=window.prompt("Olayın atama ID'si");if(!assignmentId)return;
+    const eventType=window.prompt("Tür: speeding, harsh_braking, harsh_acceleration, long_idle veya manual","manual");
+    if(!eventType||!["speeding","harsh_braking","harsh_acceleration","long_idle","manual"].includes(eventType)){setError("Geçerli bir güvenlik olayı türü seçin.");return;}
+    const severity=window.prompt("Önem: low, medium, high veya critical","medium");
+    if(!severity||!["low","medium","high","critical"].includes(severity)){setError("Geçerli bir önem seviyesi seçin.");return;}
+    const notes=window.prompt("Olay açıklaması (opsiyonel)")||null;
+    try{await api.createSafetyEvent({assignmentId,eventType:eventType as "speeding"|"harsh_braking"|"harsh_acceleration"|"long_idle"|"manual",severity:severity as "low"|"medium"|"high"|"critical",occurredAt:new Date().toISOString(),latitude:null,longitude:null,value:null,notes});await refresh();}
+    catch{setError("Güvenlik olayı kaydedilemedi; atama ID'sini kontrol edin.");}
+  }
   return <div className="app-shell">
     <aside><div className="brand"><span>F</span> Filo</div><nav>
       <button className={view === "overview" ? "active" : ""} onClick={() => setView("overview")}>⌂ <b>Genel Bakış</b></button>
@@ -221,6 +234,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "maintenance" ? "active" : ""} onClick={() => setView("maintenance")}>⚙ Bakım {maintenance.filter(p=>p.displayStatus==="overdue").length?`(${maintenance.filter(p=>p.displayStatus==="overdue").length})`:""}</button>
       <button className={view === "expenses" ? "active" : ""} onClick={() => setView("expenses")}>₺ Yakıt ve Giderler</button>
       <button className={view === "documents" ? "active" : ""} onClick={() => setView("documents")}>▧ Belgeler {documents.filter(d=>d.displayStatus==="expired").length?`(${documents.filter(d=>d.displayStatus==="expired").length})`:""}</button>
+      <button className={view === "safety" ? "active" : ""} onClick={() => setView("safety")}>◉ Sürücü Güvenliği {safetySummary.open?`(${safetySummary.open})`:""}</button>
       {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
@@ -329,6 +343,19 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <div className="table-wrap"><table><thead><tr><th>Araç</th><th>Belge</th><th>Numara</th><th>Başlangıç</th><th>Bitiş</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{documents.map(document=><tr key={document.id}><td><b>{document.vehiclePlate}</b></td><td>{document.documentType==="traffic_insurance"?"Trafik sigortası":document.documentType==="casco"?"Kasko":document.documentType==="inspection"?"Muayene":document.documentType==="registration"?"Ruhsat":"Diğer"}</td><td>{document.documentNumber??"—"}</td><td>{document.validFrom?new Date(`${document.validFrom}T00:00:00`).toLocaleDateString("tr-TR"):"—"}</td><td>{document.expiresOn?new Date(`${document.expiresOn}T00:00:00`).toLocaleDateString("tr-TR"):"Süresiz"}</td><td>{document.displayStatus==="expired"?"Süresi doldu":document.displayStatus==="expiring_soon"?`Yaklaşıyor (${document.daysUntilExpiry} gün)`:document.displayStatus==="valid"?"Geçerli":document.status==="renewed"?"Yenilendi":"İptal"}</td><td>{document.status==="active"&&["owner","admin"].includes(user.role)&&<><button onClick={async()=>{await api.updateDocumentStatus(document.id,"renewed");await refresh();}}>Yenilendi</button><button className="secondary" onClick={async()=>{await api.updateDocumentStatus(document.id,"cancelled");await refresh();}}>İptal</button></>}</td></tr>)}</tbody></table></div>
         {!documents.length&&<div className="empty"><b>Henüz araç belgesi yok</b><p>İlk trafik sigortası, muayene veya ruhsat kaydını ekleyin.</p></div>}
       </section>}
+      {view === "safety" && <>
+        <section className="metrics">
+          <article><span>Toplam olay</span><strong>{safetySummary.total}</strong><small>güvenlik kaydı</small></article>
+          <article><span>Açık olay</span><strong>{safetySummary.open}</strong><small>inceleme bekliyor</small></article>
+          <article><span>Ciddi olay</span><strong>{safetySummary.serious}</strong><small>yüksek / kritik</small></article>
+          <article><span>Etkilenen atama</span><strong>{safetySummary.assignmentCount}</strong><small>araç-sürücü eşleşmesi</small></article>
+        </section>
+        <section className="table-card spaced">
+          <div className="section-head"><div><p className="eyebrow">SÜRÜCÜ GÜVENLİĞİ</p><h2>İhlal ve güvenlik olayları</h2></div>{user.role!=="viewer"&&<button onClick={()=>void addSafetyEvent()}>＋ Olay ekle</button>}</div>
+          <div className="table-wrap"><table><thead><tr><th>Zaman</th><th>Araç / sürücü</th><th>Olay</th><th>Önem</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{safetyEvents.map(event=><tr key={event.id}><td>{new Date(event.occurredAt).toLocaleString("tr-TR")}</td><td><b>{event.vehiclePlate}</b><br/><small>{event.driverName}</small></td><td>{event.eventType}<br/><small>{event.notes??"—"}</small></td><td>{event.severity}</td><td>{event.status==="open"?"Açık":event.status==="reviewed"?"İncelendi":"Çözüldü"}</td><td>{event.status!=="resolved"&&user.role!=="viewer"&&<>{event.status==="open"&&<button className="secondary" onClick={async()=>{await api.updateSafetyEventStatus(event.id,"reviewed");await refresh();}}>İncelendi</button>}<button onClick={async()=>{await api.updateSafetyEventStatus(event.id,"resolved");await refresh();}}>Çöz</button></>}</td></tr>)}</tbody></table></div>
+          {!safetyEvents.length&&<div className="empty"><b>Henüz güvenlik olayı yok</b><p>Hız, sert sürüş, uzun rölanti veya manuel olayları burada takip edin.</p></div>}
+        </section>
+      </>}
       {view === "operations" && selectedRoute && <section className="table-card spaced route-card">
         <div className="section-head"><div><p className="eyebrow">VARDİYA ROTA GEÇMİŞİ</p><h2>{selectedRoute.vehiclePlate} · {selectedRoute.driverName}</h2></div><button className="secondary" onClick={()=>setSelectedRoute(null)}>Kapat</button></div>
         <section className="route-metrics"><article><span>Konum noktası</span><strong>{selectedRoute.pointCount}</strong></article><article><span>Tahmini mesafe</span><strong>{(selectedRoute.distanceMeters/1000).toFixed(2)} km</strong></article><article><span>Hareket</span><strong>{Math.round(selectedRoute.movingSeconds/60)} dk</strong></article><article><span>Duraklama</span><strong>{Math.round(selectedRoute.stoppedSeconds/60)} dk</strong></article></section>

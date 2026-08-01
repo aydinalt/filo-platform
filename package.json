@@ -1,7 +1,7 @@
 {
   "name": "filo-platform-v1",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.12.0",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "npm run dev --workspace @filo/api & npm run dev --workspace @filo/web",
