@@ -1,4 +1,4 @@
-import type { AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleIncidentInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
+import type { ActionItem, CreateActionItemInput, AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleIncidentInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 import type { FleetReport } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
@@ -84,4 +84,8 @@ export const api = {
   ,updateIncident: (id:string,status:"reviewing"|"resolved"|"closed",resolutionNotes:string|null,insuranceClaimNumber:string|null,actualCost:number|null) => request<void>(`/api/incidents/${id}`,{method:"PATCH",body:JSON.stringify({status,resolutionNotes,insuranceClaimNumber,actualCost})})
   ,report: (from:string,to:string,vehicleId:string|null=null) => request<FleetReport>(`/api/reports/overview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${vehicleId?`&vehicleId=${encodeURIComponent(vehicleId)}`:""}`)
   ,reportCsvUrl: (from:string,to:string,vehicleId:string|null=null) => `${API_URL}/api/reports/export.csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${vehicleId?`&vehicleId=${encodeURIComponent(vehicleId)}`:""}`
+  ,actions: (status?:ActionItem["status"]) => request<{actions:ActionItem[]}>(`/api/actions${status?`?status=${status}`:""}`)
+  ,generateActions: () => request<{created:number}>("/api/actions/generate",{method:"POST"})
+  ,createAction: (input:CreateActionItemInput) => request<{action:ActionItem}>("/api/actions",{method:"POST",body:JSON.stringify(input)})
+  ,updateAction: (id:string,status:ActionItem["status"],assignedUserId:string|null,dueOn:string|null) => request<void>(`/api/actions/${id}`,{method:"PATCH",body:JSON.stringify({status,assignedUserId,dueOn})})
 };

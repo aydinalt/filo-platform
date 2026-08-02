@@ -1,8 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, reportQuerySchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
+import { actionQuerySchema, createActionItemSchema, updateActionItemSchema, createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, reportQuerySchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("validates action priorities, states and filters",()=>{
+    assert.equal(createActionItemSchema.safeParse({title:"Muayeneyi yenile",priority:"high",vehicleId:null,assignedUserId:null,dueOn:"2026-08-10"}).success,true);
+    assert.equal(createActionItemSchema.safeParse({title:"X",priority:"urgent"}).success,false);
+    assert.equal(updateActionItemSchema.safeParse({status:"completed",assignedUserId:null,dueOn:null}).success,true);
+    assert.equal(actionQuerySchema.safeParse({status:"unknown"}).success,false);
+  });
   it("validates bounded operational report ranges",()=>{
     assert.equal(reportQuerySchema.safeParse({from:"2026-07-01",to:"2026-08-01"}).success,true);
     assert.equal(reportQuerySchema.safeParse({from:"2026-08-02",to:"2026-08-01"}).success,false);
