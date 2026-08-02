@@ -3,7 +3,8 @@ export const config = {
   webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
   sessionSecret: process.env.SESSION_SECRET ?? "",
   sessionTtlHours: Number(process.env.SESSION_TTL_HOURS ?? 12),
-  cookieSecure: process.env.COOKIE_SECURE === "true"
+  cookieSecure: process.env.COOKIE_SECURE === "true",
+  notificationWorkerKey: process.env.NOTIFICATION_WORKER_KEY ?? ""
 };
 
 if (config.sessionSecret.length < 32) {
