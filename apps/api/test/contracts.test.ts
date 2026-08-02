@@ -1,8 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { actionQuerySchema, createActionItemSchema, updateActionItemSchema, createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, reportQuerySchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
+import { actionQuerySchema, createActionItemSchema, updateActionItemSchema, createNotificationRuleSchema, notificationQuerySchema, createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, reportQuerySchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("validates notification rules and inbox filters",()=>{
+    assert.equal(createNotificationRuleSchema.safeParse({name:"Aksiyon son tarihi",sourceType:"action",leadDays:7,severity:"warning",targetRole:"operator"}).success,true);
+    assert.equal(createNotificationRuleSchema.safeParse({name:"X",sourceType:"unknown",leadDays:500,severity:"urgent"}).success,false);
+    assert.equal(notificationQuerySchema.safeParse({status:"unread",severity:"critical"}).success,true);
+    assert.equal(notificationQuerySchema.safeParse({status:"deleted"}).success,false);
+  });
   it("validates action priorities, states and filters",()=>{
     assert.equal(createActionItemSchema.safeParse({title:"Muayeneyi yenile",priority:"high",vehicleId:null,assignedUserId:null,dueOn:"2026-08-10"}).success,true);
     assert.equal(createActionItemSchema.safeParse({title:"X",priority:"urgent"}).success,false);

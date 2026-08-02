@@ -1,4 +1,4 @@
-import type { ActionItem, CreateActionItemInput, AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleIncidentInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
+import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, NotificationItem, NotificationRule, AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleIncidentInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 import type { FleetReport } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
@@ -88,4 +88,10 @@ export const api = {
   ,generateActions: () => request<{created:number}>("/api/actions/generate",{method:"POST"})
   ,createAction: (input:CreateActionItemInput) => request<{action:ActionItem}>("/api/actions",{method:"POST",body:JSON.stringify(input)})
   ,updateAction: (id:string,status:ActionItem["status"],assignedUserId:string|null,dueOn:string|null) => request<void>(`/api/actions/${id}`,{method:"PATCH",body:JSON.stringify({status,assignedUserId,dueOn})})
+  ,notificationRules: () => request<{rules:NotificationRule[]}>("/api/notifications/rules")
+  ,createNotificationRule: (input:CreateNotificationRuleInput) => request<{rule:NotificationRule}>("/api/notifications/rules",{method:"POST",body:JSON.stringify(input)})
+  ,updateNotificationRule: (id:string,status:"active"|"inactive") => request<void>(`/api/notifications/rules/${id}`,{method:"PATCH",body:JSON.stringify({status})})
+  ,notifications: (status:"unread"|"read"|"all"="all") => request<{notifications:NotificationItem[];unread:number}>(`/api/notifications?status=${status}`)
+  ,generateNotifications: () => request<{created:number}>("/api/notifications/generate",{method:"POST"})
+  ,markNotificationRead: (id:string) => request<void>(`/api/notifications/${id}/read`,{method:"PATCH"})
 };

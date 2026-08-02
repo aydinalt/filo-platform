@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { ActionItem, AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
+import type { ActionItem, AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, NotificationItem, NotificationRule, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 import type { FleetReport } from "@filo/contracts";
 import { api } from "./api";
 
@@ -86,10 +86,12 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [incidentSummary,setIncidentSummary]=useState<IncidentSummary>({total:0,open:0,critical:0,estimatedExposure:0});
   const [report,setReport]=useState<FleetReport|null>(null);
   const [actions,setActions]=useState<ActionItem[]>([]);
+  const [notifications,setNotifications]=useState<NotificationItem[]>([]);
+  const [notificationRules,setNotificationRules]=useState<NotificationRule[]>([]);
   const [reportFrom,setReportFrom]=useState(new Date(Date.now()-30*86400000).toISOString().slice(0,10));
   const [reportTo,setReportTo]=useState(new Date().toISOString().slice(0,10));
   const [expenseSummary,setExpenseSummary]=useState<ExpenseSummary>({totalAmount:0,fuelAmount:0,fuelLiters:0,entryCount:0,byVehicle:[]});
-  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "safety" | "inspections" | "tires" | "incidents" | "reports" | "actions" | "mobile" | "members" | "audit">("overview");
+  const [view, setView] = useState<"overview" | "vehicles" | "drivers" | "devices" | "operations" | "geofences" | "alerts" | "maintenance" | "expenses" | "documents" | "safety" | "inspections" | "tires" | "incidents" | "reports" | "actions" | "notifications" | "mobile" | "members" | "audit">("overview");
   const [error, setError] = useState("");
   const [mobileAssignment,setMobileAssignment]=useState("");
   const [mobileMessage,setMobileMessage]=useState("Takip kapalı");
@@ -98,7 +100,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   async function refresh() {
     setError("");
     try {
-      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult,expenseResult,documentResult,safetyResult,inspectionResult,tireResult,incidentResult,actionResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans(),api.expenses(),api.documents(),api.safetyEvents(),api.inspections(),api.tires(),api.incidents(),api.actions()]);
+      const [vehicleResult, auditResult, driverResult, deviceResult,assignmentResult,shiftResult,trackingResult,locationResult,geofenceResult,geofenceEventResult,alertRuleResult,alertResult,maintenanceResult,expenseResult,documentResult,safetyResult,inspectionResult,tireResult,incidentResult,actionResult,notificationResult,notificationRuleResult] = await Promise.all([api.vehicles(), api.auditEvents(), api.drivers(), api.devices(),api.assignments(),api.shifts(),api.tracking(),api.latestLocations(),api.geofences(),api.geofenceEvents(),api.alertRules(),api.alerts(),api.maintenancePlans(),api.expenses(),api.documents(),api.safetyEvents(),api.inspections(),api.tires(),api.incidents(),api.actions(),api.notifications(),api.notificationRules()]);
       setVehicles(vehicleResult.vehicles);
       setEvents(auditResult.events);
       setDrivers(driverResult.drivers); setDevices(deviceResult.devices);
@@ -114,6 +116,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setTires(tireResult.tires);setTireSummary(tireResult.summary);
       setIncidents(incidentResult.incidents);setIncidentSummary(incidentResult.summary);
       setActions(actionResult.actions);
+      setNotifications(notificationResult.notifications);setNotificationRules(notificationRuleResult.rules);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -271,6 +274,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       <button className={view === "incidents" ? "active" : ""} onClick={() => setView("incidents")}>⚑ Kaza ve Hasar {incidentSummary.open?`(${incidentSummary.open})`:""}</button>
       <button className={view === "reports" ? "active" : ""} onClick={async()=>{setView("reports");try{setReport(await api.report(reportFrom,reportTo));}catch{setError("Rapor oluşturulamadı; tarih aralığını kontrol edin.");}}}>▥ Raporlar</button>
       <button className={view === "actions" ? "active" : ""} onClick={() => setView("actions")}>◆ Aksiyon Merkezi {actions.filter(a=>a.status==="open"||a.status==="in_progress").length?`(${actions.filter(a=>a.status==="open"||a.status==="in_progress").length})`:""}</button>
+      <button className={view === "notifications" ? "active" : ""} onClick={() => setView("notifications")}>● Bildirimler {notifications.filter(n=>!n.readAt).length?`(${notifications.filter(n=>!n.readAt).length})`:""}</button>
       {user.role!=="viewer"&&<button className={view === "mobile" ? "active" : ""} onClick={() => setView("mobile")}>⌖ Telefon Takibi</button>}
       {["owner","admin"].includes(user.role) && <button className={view === "members" ? "active" : ""} onClick={() => setView("members")}>♟ Kullanıcılar</button>}
     </nav><div className="aside-foot"><small>AKTİF TENANT</small><strong>{user.tenantName}</strong></div></aside>
@@ -440,6 +444,11 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <div className="table-wrap"><table><thead><tr><th>Öncelik</th><th>Aksiyon</th><th>Araç</th><th>Sorumlu</th><th>Son tarih</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{actions.map(action=><tr key={action.id}><td><b>{action.priority}</b></td><td>{action.title}<br/><small>{action.sourceType}</small></td><td>{action.vehiclePlate??"—"}</td><td>{action.assignedUserName??"Atanmadı"}</td><td>{action.dueOn??"—"}</td><td>{action.status}</td><td>{user.role!=="viewer"&&action.status!=="completed"&&action.status!=="cancelled"&&<button onClick={async()=>{await api.updateAction(action.id,"completed",action.assignedUserId,action.dueOn);await refresh();}}>Tamamla</button>}</td></tr>)}</tbody></table></div>
         {!actions.length&&<div className="empty"><b>Henüz aksiyon yok</b><p>Operasyon risklerinden yinelenmeyen görevler üretin veya manuel aksiyon ekleyin.</p></div>}
       </section>}
+      {view === "notifications" && <><section className="table-card spaced">
+        <div className="section-head"><div><p className="eyebrow">UYGULAMA İÇİ BİLDİRİM KUTUSU</p><h2>Bildirimler</h2></div>{user.role!=="viewer"&&<button onClick={async()=>{await api.generateNotifications();await refresh();}}>Bildirimleri üret</button>}</div>
+        <div className="table-wrap"><table><thead><tr><th>Önem</th><th>Bildirim</th><th>Araç</th><th>Zaman</th><th>Durum</th></tr></thead><tbody>{notifications.map(item=><tr key={item.id}><td><b>{item.severity}</b></td><td>{item.title}<br/><small>{item.message}</small></td><td>{item.vehiclePlate??"—"}</td><td>{new Date(item.createdAt).toLocaleString("tr-TR")}</td><td>{item.readAt?"Okundu":<button onClick={async()=>{await api.markNotificationRead(item.id);await refresh();}}>Okundu işaretle</button>}</td></tr>)}</tbody></table></div>
+        {!notifications.length&&<div className="empty"><b>Henüz bildirim yok</b><p>Aktif kurallardan yinelenmeyen uygulama içi bildirimler üretin.</p></div>}
+      </section>{["owner","admin"].includes(user.role)&&<section className="table-card spaced"><div className="section-head"><div><p className="eyebrow">TENANT BİLDİRİM KURALLARI</p><h2>Kurallar</h2></div><button onClick={async()=>{const name=window.prompt("Kural adı");if(!name)return;await api.createNotificationRule({name,sourceType:"action",leadDays:7,severity:"warning",targetRole:null});await refresh();}}>＋ Kural ekle</button></div><div className="table-wrap"><table><thead><tr><th>Kural</th><th>Kaynak</th><th>Ön süre</th><th>Önem</th><th>Hedef</th><th>Durum</th></tr></thead><tbody>{notificationRules.map(rule=><tr key={rule.id}><td><b>{rule.name}</b></td><td>{rule.sourceType}</td><td>{rule.leadDays} gün</td><td>{rule.severity}</td><td>{rule.targetRole??"Tüm roller"}</td><td><button className="secondary" onClick={async()=>{await api.updateNotificationRule(rule.id,rule.status==="active"?"inactive":"active");await refresh();}}>{rule.status}</button></td></tr>)}</tbody></table></div></section>}</>}
       {view === "operations" && selectedRoute && <section className="table-card spaced route-card">
         <div className="section-head"><div><p className="eyebrow">VARDİYA ROTA GEÇMİŞİ</p><h2>{selectedRoute.vehiclePlate} · {selectedRoute.driverName}</h2></div><button className="secondary" onClick={()=>setSelectedRoute(null)}>Kapat</button></div>
         <section className="route-metrics"><article><span>Konum noktası</span><strong>{selectedRoute.pointCount}</strong></article><article><span>Tahmini mesafe</span><strong>{(selectedRoute.distanceMeters/1000).toFixed(2)} km</strong></article><article><span>Hareket</span><strong>{Math.round(selectedRoute.movingSeconds/60)} dk</strong></article><article><span>Duraklama</span><strong>{Math.round(selectedRoute.stoppedSeconds/60)} dk</strong></article></section>

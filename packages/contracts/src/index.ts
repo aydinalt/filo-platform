@@ -292,3 +292,10 @@ export const createActionItemSchema=z.object({title:z.string().trim().min(2).max
 export const updateActionItemSchema=z.object({status:z.enum(["open","in_progress","completed","cancelled"]),assignedUserId:z.string().uuid().nullable().default(null),dueOn:z.string().date().nullable().default(null)});
 export type CreateActionItemInput=z.infer<typeof createActionItemSchema>;
 export type ActionItem={id:string;sourceType:"maintenance"|"document"|"defect"|"safety_event"|"incident"|"manual";sourceId:string|null;title:string;description:string|null;priority:"low"|"medium"|"high"|"critical";status:"open"|"in_progress"|"completed"|"cancelled";vehicleId:string|null;vehiclePlate:string|null;assignedUserId:string|null;assignedUserName:string|null;dueOn:string|null;completedAt:string|null;createdAt:string};
+
+export const notificationQuerySchema=z.object({status:z.enum(["unread","read","all"]).default("unread"),severity:z.enum(["info","warning","critical"]).optional()});
+export const createNotificationRuleSchema=z.object({name:z.string().trim().min(2).max(120),sourceType:z.enum(["maintenance","document","action","safety_event","incident"]),leadDays:z.number().int().min(0).max(365).default(0),severity:z.enum(["info","warning","critical"]),targetRole:z.enum(["owner","admin","operator","viewer"]).nullable().default(null)});
+export const updateNotificationRuleSchema=z.object({status:z.enum(["active","inactive"])});
+export type CreateNotificationRuleInput=z.infer<typeof createNotificationRuleSchema>;
+export type NotificationRule={id:string;name:string;sourceType:CreateNotificationRuleInput["sourceType"];leadDays:number;severity:CreateNotificationRuleInput["severity"];targetRole:CreateNotificationRuleInput["targetRole"];status:"active"|"inactive";createdAt:string};
+export type NotificationItem={id:string;ruleId:string|null;sourceType:CreateNotificationRuleInput["sourceType"];sourceId:string;title:string;message:string;severity:"info"|"warning"|"critical";vehicleId:string|null;vehiclePlate:string|null;recipientUserId:string;readAt:string|null;createdAt:string};
