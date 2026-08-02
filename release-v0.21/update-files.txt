@@ -1,0 +1,15 @@
+apps/api/package.json
+apps/api/src/app.ts
+apps/api/src/lib/template-renderer.ts
+apps/api/src/routes/deliveries.ts
+apps/api/src/routes/delivery-worker.ts
+apps/api/src/routes/notification-templates.ts
+apps/api/test/template-renderer.test.ts
+apps/web/src/App.tsx
+apps/web/src/api.ts
+docs/LOCAL_UPDATE_v0.21.md
+package-lock.json
+package.json
+packages/contracts/src/index.ts
+packages/database/migrations/021_notification_templates.sql
+release-v0.21/update-files.txt

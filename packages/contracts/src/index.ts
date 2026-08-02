@@ -308,5 +308,11 @@ export type NotificationDelivery={id:string;notificationId:string;title:string;r
 
 export const claimDeliveriesSchema=z.object({tenantId:z.string().uuid(),actorUserId:z.string().uuid(),workerId:z.string().trim().min(3).max(120),limit:z.number().int().min(1).max(100).default(25)});
 export const completeDeliverySchema=z.object({tenantId:z.string().uuid(),actorUserId:z.string().uuid(),leaseToken:z.string().uuid(),outcome:z.enum(["delivered","failed"]),providerMessageId:z.string().trim().max(240).nullable().default(null),error:z.string().trim().min(2).max(1000).nullable().default(null)}).superRefine((value,context)=>{if(value.outcome==="failed"&&!value.error)context.addIssue({code:"custom",message:"Failed delivery requires an error",path:["error"]});});
-export type ClaimedDelivery={id:string;leaseToken:string;notificationId:string;recipientUserId:string;recipientEmail:string;channel:"email"|"push";title:string;message:string;attemptCount:number;leaseExpiresAt:string};
+export type ClaimedDelivery={id:string;leaseToken:string;notificationId:string;recipientUserId:string;recipientEmail:string;channel:"email"|"push";locale:string;title:string;message:string;attemptCount:number;leaseExpiresAt:string};
 export type DeliveryMetrics={pending:number;processing:number;delivered:number;failed:number;cancelled:number;ready:number;oldestReadyAt:string|null};
+
+export const createNotificationTemplateSchema=z.object({key:z.string().trim().regex(/^[a-z][a-z0-9_.-]{2,79}$/),channel:z.enum(["email","push"]),locale:z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/),subjectTemplate:z.string().trim().min(1).max(240),bodyTemplate:z.string().trim().min(1).max(5000),requiredVariables:z.array(z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]*$/)).max(30).default([])});
+export const previewNotificationTemplateSchema=z.object({subjectTemplate:z.string().max(240),bodyTemplate:z.string().max(5000),variables:z.record(z.string(),z.string().max(1000))});
+export const updateNotificationTemplateSchema=z.object({status:z.enum(["active","inactive"])});
+export type CreateNotificationTemplateInput=z.infer<typeof createNotificationTemplateSchema>;
+export type NotificationTemplate=CreateNotificationTemplateInput&{id:string;status:"active"|"inactive";createdAt:string};
