@@ -293,6 +293,11 @@ export const updateActionItemSchema=z.object({status:z.enum(["open","in_progress
 export type CreateActionItemInput=z.infer<typeof createActionItemSchema>;
 export type ActionItem={id:string;sourceType:"maintenance"|"document"|"defect"|"safety_event"|"incident"|"manual";sourceId:string|null;title:string;description:string|null;priority:"low"|"medium"|"high"|"critical";status:"open"|"in_progress"|"completed"|"cancelled";vehicleId:string|null;vehiclePlate:string|null;assignedUserId:string|null;assignedUserName:string|null;dueOn:string|null;completedAt:string|null;createdAt:string};
 
+export const createNotificationProviderSchema=z.object({name:z.string().trim().min(2).max(120),channel:z.enum(["email","push"]),provider:z.string().trim().regex(/^[a-z0-9][a-z0-9_-]{1,39}$/),credentialEnvRef:z.string().trim().regex(/^[A-Z][A-Z0-9_]{2,79}$/),webhookSecretEnvRef:z.string().trim().regex(/^[A-Z][A-Z0-9_]{2,79}$/).nullable().default(null),status:z.enum(["active","inactive"]).default("inactive")});
+export const updateNotificationProviderSchema=z.object({status:z.enum(["active","inactive"])});
+export const providerWebhookSchema=z.object({eventId:z.string().trim().min(1).max(200),deliveryId:z.string().uuid(),event:z.enum(["delivered","bounced","complained"]),providerMessageId:z.string().trim().max(300).nullable().default(null),occurredAt:z.string().datetime(),metadata:z.record(z.string(),z.unknown()).default({})});
+export type CreateNotificationProviderInput=z.infer<typeof createNotificationProviderSchema>;
+
 export const notificationQuerySchema=z.object({status:z.enum(["unread","read","all"]).default("unread"),severity:z.enum(["info","warning","critical"]).optional()});
 export const createNotificationRuleSchema=z.object({name:z.string().trim().min(2).max(120),sourceType:z.enum(["maintenance","document","action","safety_event","incident"]),leadDays:z.number().int().min(0).max(365).default(0),severity:z.enum(["info","warning","critical"]),targetRole:z.enum(["owner","admin","operator","viewer"]).nullable().default(null)});
 export const updateNotificationRuleSchema=z.object({status:z.enum(["active","inactive"])});

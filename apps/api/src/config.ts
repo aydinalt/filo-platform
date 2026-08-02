@@ -4,7 +4,8 @@ export const config = {
   sessionSecret: process.env.SESSION_SECRET ?? "",
   sessionTtlHours: Number(process.env.SESSION_TTL_HOURS ?? 12),
   cookieSecure: process.env.COOKIE_SECURE === "true",
-  notificationWorkerKey: process.env.NOTIFICATION_WORKER_KEY ?? ""
+  notificationWorkerKey: process.env.NOTIFICATION_WORKER_KEY ?? "",
+  notificationWebhookSecret: process.env.NOTIFICATION_WEBHOOK_SECRET ?? ""
 };
 
 if (config.sessionSecret.length < 32) {

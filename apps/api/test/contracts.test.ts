@@ -1,9 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { deliveryQuerySchema, updateDeliveryStatusSchema, updateNotificationPreferencesSchema } from "@filo/contracts";
+import { createNotificationProviderSchema, deliveryQuerySchema, providerWebhookSchema, updateDeliveryStatusSchema, updateNotificationPreferencesSchema } from "@filo/contracts";
 import { actionQuerySchema, createActionItemSchema, updateActionItemSchema, createNotificationRuleSchema, notificationQuerySchema, createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, reportQuerySchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("validates provider references and delivery webhook events",()=>{
+    const provider={name:"Primary email",channel:"email",provider:"resend",credentialEnvRef:"FILO_EMAIL_PROVIDER_KEY",webhookSecretEnvRef:"FILO_EMAIL_WEBHOOK_SECRET",status:"active"};
+    assert.equal(createNotificationProviderSchema.safeParse(provider).success,true);
+    assert.equal(createNotificationProviderSchema.safeParse({...provider,credentialEnvRef:"actual-secret-value"}).success,false);
+    const callback={eventId:"evt-1",deliveryId:"10000000-0000-4000-8000-000000000001",event:"bounced",occurredAt:new Date().toISOString(),metadata:{reason:"mailbox_full"}};
+    assert.equal(providerWebhookSchema.safeParse(callback).success,true);
+    assert.equal(providerWebhookSchema.safeParse({...callback,event:"opened"}).success,false);
+  });
   it("validates delivery preferences, filters and terminal updates",()=>{
     const base={emailEnabled:true,pushEnabled:false,quietHoursEnabled:true,quietStart:"22:00",quietEnd:"07:00",timezone:"Europe/Istanbul"};
     assert.equal(updateNotificationPreferencesSchema.safeParse(base).success,true);
