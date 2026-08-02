@@ -1,8 +1,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { deliveryQuerySchema, updateDeliveryStatusSchema, updateNotificationPreferencesSchema } from "@filo/contracts";
 import { actionQuerySchema, createActionItemSchema, updateActionItemSchema, createNotificationRuleSchema, notificationQuerySchema, createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, reportQuerySchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("validates delivery preferences, filters and terminal updates",()=>{
+    const base={emailEnabled:true,pushEnabled:false,quietHoursEnabled:true,quietStart:"22:00",quietEnd:"07:00",timezone:"Europe/Istanbul"};
+    assert.equal(updateNotificationPreferencesSchema.safeParse(base).success,true);
+    assert.equal(updateNotificationPreferencesSchema.safeParse({...base,quietStart:null}).success,false);
+    assert.equal(deliveryQuerySchema.safeParse({status:"failed"}).success,true);
+    assert.equal(deliveryQuerySchema.safeParse({status:"unknown"}).success,false);
+    assert.equal(updateDeliveryStatusSchema.safeParse({status:"failed",error:null}).success,false);
+    assert.equal(updateDeliveryStatusSchema.safeParse({status:"failed",error:"Provider timeout"}).success,true);
+  });
   it("validates notification rules and inbox filters",()=>{
     assert.equal(createNotificationRuleSchema.safeParse({name:"Aksiyon son tarihi",sourceType:"action",leadDays:7,severity:"warning",targetRole:"operator"}).success,true);
     assert.equal(createNotificationRuleSchema.safeParse({name:"X",sourceType:"unknown",leadDays:500,severity:"urgent"}).success,false);

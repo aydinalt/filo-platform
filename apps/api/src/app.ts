@@ -21,6 +21,7 @@ import { incidentRoutes } from "./routes/incidents.js";
 import { reportRoutes } from "./routes/reports.js";
 import { actionRoutes } from "./routes/actions.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { deliveryRoutes } from "./routes/deliveries.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true, trustProxy: true });
@@ -47,6 +48,7 @@ export async function buildApp() {
   await app.register(reportRoutes, { prefix: "/api/reports" });
   await app.register(actionRoutes, { prefix: "/api/actions" });
   await app.register(notificationRoutes, { prefix: "/api/notifications" });
+  await app.register(deliveryRoutes, { prefix: "/api/notification-deliveries" });
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error }, "request failed");

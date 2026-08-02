@@ -1,5 +1,6 @@
 import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, NotificationItem, NotificationRule, AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleIncidentInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 import type { FleetReport } from "@filo/contracts";
+import type { NotificationDelivery, NotificationPreferences } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -94,4 +95,8 @@ export const api = {
   ,notifications: (status:"unread"|"read"|"all"="all") => request<{notifications:NotificationItem[];unread:number}>(`/api/notifications?status=${status}`)
   ,generateNotifications: () => request<{created:number}>("/api/notifications/generate",{method:"POST"})
   ,markNotificationRead: (id:string) => request<void>(`/api/notifications/${id}/read`,{method:"PATCH"})
+  ,notificationPreferences: () => request<{preferences:NotificationPreferences}>("/api/notification-deliveries/preferences")
+  ,updateNotificationPreferences: (input:Omit<NotificationPreferences,"updatedAt">) => request<void>("/api/notification-deliveries/preferences",{method:"PUT",body:JSON.stringify(input)})
+  ,notificationDeliveries: () => request<{deliveries:NotificationDelivery[]}>("/api/notification-deliveries")
+  ,enqueueNotificationDeliveries: () => request<{created:number}>("/api/notification-deliveries/enqueue",{method:"POST"})
 };
