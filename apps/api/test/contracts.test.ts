@@ -1,9 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createNotificationProviderSchema, deliveryQuerySchema, providerWebhookSchema, updateDeliveryStatusSchema, updateNotificationPreferencesSchema } from "@filo/contracts";
+import { createNotificationProviderSchema, createNotificationSuppressionSchema, deliveryQuerySchema, providerWebhookSchema, updateDeliveryStatusSchema, updateNotificationPreferencesSchema } from "@filo/contracts";
 import { actionQuerySchema, createActionItemSchema, updateActionItemSchema, createNotificationRuleSchema, notificationQuerySchema, createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, reportQuerySchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
+  it("validates manual notification suppressions",()=>{assert.equal(createNotificationSuppressionSchema.safeParse({recipientUserId:"10000000-0000-4000-8000-000000000001",channel:"email",details:"requested by owner"}).success,true);assert.equal(createNotificationSuppressionSchema.safeParse({recipientUserId:"bad",channel:"sms"}).success,false);});
   it("validates provider references and delivery webhook events",()=>{
     const provider={name:"Primary email",channel:"email",provider:"resend",credentialEnvRef:"FILO_EMAIL_PROVIDER_KEY",webhookSecretEnvRef:"FILO_EMAIL_WEBHOOK_SECRET",status:"active"};
     assert.equal(createNotificationProviderSchema.safeParse(provider).success,true);
