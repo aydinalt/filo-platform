@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { ActionItem, AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, NotificationItem, NotificationRule, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 import type { FleetReport } from "@filo/contracts";
-import type { NotificationDelivery, NotificationPreferences, NotificationTemplate } from "@filo/contracts";
+import type { NotificationAnalytics, NotificationDelivery, NotificationPreferences, NotificationTemplate } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -92,6 +92,8 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [notificationPreferences,setNotificationPreferences]=useState<NotificationPreferences>({emailEnabled:true,pushEnabled:true,quietHoursEnabled:false,quietStart:null,quietEnd:null,timezone:"Europe/Istanbul",updatedAt:null});
   const [notificationDeliveries,setNotificationDeliveries]=useState<NotificationDelivery[]>([]);
   const [notificationTemplates,setNotificationTemplates]=useState<NotificationTemplate[]>([]);
+  const [notificationAnalytics,setNotificationAnalytics]=useState<NotificationAnalytics|null>(null);
+  void notificationAnalytics;
   const [reportFrom,setReportFrom]=useState(new Date(Date.now()-30*86400000).toISOString().slice(0,10));
   const [reportTo,setReportTo]=useState(new Date().toISOString().slice(0,10));
   const [expenseSummary,setExpenseSummary]=useState<ExpenseSummary>({totalAmount:0,fuelAmount:0,fuelLiters:0,entryCount:0,byVehicle:[]});
@@ -123,6 +125,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setNotifications(notificationResult.notifications);setNotificationRules(notificationRuleResult.rules);
       setNotificationPreferences(preferenceResult.preferences);setNotificationDeliveries(deliveryResult.deliveries);
       setNotificationTemplates(templateResult.templates);
+      if(user.role!=="viewer") setNotificationAnalytics((await api.notificationAnalytics()).analytics);
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");

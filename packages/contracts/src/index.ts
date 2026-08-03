@@ -300,6 +300,8 @@ export type CreateNotificationProviderInput=z.infer<typeof createNotificationPro
 export const createNotificationSuppressionSchema=z.object({recipientUserId:z.string().uuid(),channel:z.enum(["email","push"]),details:z.string().trim().max(500).nullable().default(null)});
 export type CreateNotificationSuppressionInput=z.infer<typeof createNotificationSuppressionSchema>;
 export type NotificationSuppression={id:string;recipientUserId:string;recipientName:string;email:string;channel:"email"|"push";reason:"hard_bounce"|"complaint"|"manual";details:string|null;active:boolean;createdAt:string;liftedAt:string|null};
+export const notificationAnalyticsQuerySchema=z.object({days:z.coerce.number().int().min(1).max(90).default(30)});
+export type NotificationAnalytics={rangeDays:number;summary:{total:number;delivered:number;failed:number;cancelled:number;queued:number;averageDeliverySeconds:number;oldestReadyAgeSeconds:number};events:{bounced:number;complained:number};suppressions:{active:number;hardBounce:number;complaints:number;manual:number};breakdown:Array<{channel:"email"|"push";provider:string;status:NotificationDelivery["status"];count:number}>};
 
 export const notificationQuerySchema=z.object({status:z.enum(["unread","read","all"]).default("unread"),severity:z.enum(["info","warning","critical"]).optional()});
 export const createNotificationRuleSchema=z.object({name:z.string().trim().min(2).max(120),sourceType:z.enum(["maintenance","document","action","safety_event","incident"]),leadDays:z.number().int().min(0).max(365).default(0),severity:z.enum(["info","warning","critical"]),targetRole:z.enum(["owner","admin","operator","viewer"]).nullable().default(null)});
