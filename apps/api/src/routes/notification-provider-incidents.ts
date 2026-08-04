@@ -63,6 +63,7 @@ export async function notificationProviderIncidentRoutes(app: FastifyInstance) {
       const result = await client.query(`UPDATE notification_provider_incidents SET status=$2,acknowledged_at=COALESCE(acknowledged_at,now()),acknowledged_by=COALESCE(acknowledged_by,$3),resolved_at=CASE WHEN $2='resolved' THEN now() ELSE resolved_at END,resolved_by=CASE WHEN $2='resolved' THEN $3 ELSE resolved_by END,resolution_notes=CASE WHEN $2='resolved' THEN $4 ELSE resolution_notes END,updated_at=now() WHERE id=$1 AND status<>$2 AND status<>'resolved' RETURNING id`, [id, input.status, user.id, input.resolutionNotes]);
       if (!result.rowCount) return reply.code(404).send({ error: "ACTIVE_PROVIDER_INCIDENT_NOT_FOUND" });
       await client.query(`INSERT INTO notification_provider_incident_events(tenant_id,incident_id,event_type,actor_user_id,details) VALUES($1,$2,$3,$4,jsonb_build_object('resolutionNotes',$5::text))`, [user.tenantId, id, input.status, user.id, input.resolutionNotes]);
+      await client.query(`UPDATE in_app_notifications SET read_at=COALESCE(read_at,now()) WHERE source_type='provider_incident' AND source_id=$1 AND ($2='resolved' OR recipient_user_id=$3)`, [id, input.status, user.id]);
       await client.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_provider_incident.status_changed','notification_provider_incident',$3,jsonb_build_object('status',$4))`, [user.tenantId, user.id, id, input.status]);
       return reply.code(204).send();
     });
