@@ -1,6 +1,6 @@
 import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, NotificationItem, NotificationRule, AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleIncidentInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 import type { FleetReport } from "@filo/contracts";
-import type { NotificationAnalytics, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention } from "@filo/contracts";
+import type { NotificationAnalytics, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention, NotificationRetentionSettings } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
@@ -98,8 +98,8 @@ export const api = {
   ,markNotificationRead: (id:string) => request<void>(`/api/notifications/${id}/read`,{method:"PATCH"})
   ,markAllNotificationsRead: () => request<{updated:number}>("/api/notifications/read-all",{method:"PATCH"})
   ,notificationRetention: () => request<NotificationRetention>("/api/notifications/retention")
-  ,updateNotificationRetention: (readRetentionDays:number) => request<void>("/api/notifications/retention",{method:"PUT",body:JSON.stringify({readRetentionDays})})
-  ,archiveEligibleNotifications: () => request<{run:NotificationArchiveRun}>("/api/notifications/archive",{method:"POST"})
+  ,updateNotificationRetention: (settings:Pick<NotificationRetentionSettings,"readRetentionDays"|"automaticArchiveEnabled"|"archiveIntervalHours"|"archiveBatchSize">) => request<void>("/api/notifications/retention",{method:"PUT",body:JSON.stringify(settings)})
+  ,archiveEligibleNotifications: () => request<{skipped:false;run:NotificationArchiveRun;summary:{archivedCount:number;eligibleRemaining:number;source:"manual"|"scheduler"}}>("/api/notifications/archive",{method:"POST"})
   ,notificationPreferences: () => request<{preferences:NotificationPreferences}>("/api/notification-deliveries/preferences")
   ,updateNotificationPreferences: (input:Omit<NotificationPreferences,"updatedAt">) => request<void>("/api/notification-deliveries/preferences",{method:"PUT",body:JSON.stringify(input)})
   ,notificationDeliveries: () => request<{deliveries:NotificationDelivery[]}>("/api/notification-deliveries")
