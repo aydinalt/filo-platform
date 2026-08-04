@@ -1,6 +1,6 @@
 import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, NotificationItem, NotificationRule, AlertRule, Assignment, AuditEvent, CreateAlertRuleInput, CreateDeviceInput, CreateDriverInput, CreateGeofenceInput, CreateLocationEventInput, CreateMaintenancePlanInput, CreateSafetyEventInput, CreateTireSetInput, CreateVehicleDocumentInput, CreateVehicleExpenseInput, CreateVehicleIncidentInput, CreateVehicleInspectionInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, OperationalAlert, CreateVehicleInput, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 import type { FleetReport } from "@filo/contracts";
-import type { NotificationAnalytics, NotificationDelivery, NotificationPreferences, NotificationProviderHealth } from "@filo/contracts";
+import type { NotificationAnalytics, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
@@ -101,6 +101,9 @@ export const api = {
   ,notificationDeliveries: () => request<{deliveries:NotificationDelivery[]}>("/api/notification-deliveries")
   ,notificationAnalytics: (days=30) => request<{analytics:NotificationAnalytics}>(`/api/notification-analytics?days=${days}`)
   ,notificationProviderHealth: () => request<NotificationProviderHealth>("/api/notification-provider-health")
+  ,notificationProviderIncidents: () => request<{incidents:NotificationProviderIncident[]}>("/api/notification-provider-incidents")
+  ,syncNotificationProviderIncidents: () => request<{opened:number;refreshed:number;healthy:number}>("/api/notification-provider-incidents/sync",{method:"POST"})
+  ,updateNotificationProviderIncident: (id:string,status:"acknowledged"|"resolved",resolutionNotes:string|null) => request<void>(`/api/notification-provider-incidents/${id}`,{method:"PATCH",body:JSON.stringify({status,resolutionNotes})})
   ,enqueueNotificationDeliveries: () => request<{created:number}>("/api/notification-deliveries/enqueue",{method:"POST"})
   ,notificationTemplates: () => request<{templates:NotificationTemplate[]}>("/api/notification-templates")
   ,createNotificationTemplate: (input:CreateNotificationTemplateInput) => request<{template:NotificationTemplate}>("/api/notification-templates",{method:"POST",body:JSON.stringify(input)})

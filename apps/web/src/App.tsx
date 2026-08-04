@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { ActionItem, AlertRule, Assignment, AuditEvent, CreateVehicleInput, Device, Driver, ExpenseSummary, Geofence, GeofenceEvent, IncidentSummary, InspectionSummary, LatestLocation, MaintenancePlan, Member, NotificationItem, NotificationRule, OperationalAlert, SafetyEvent, SafetySummary, SessionUser, ShiftRoute, TireSet, TireSummary, TrackingStatus, Vehicle, VehicleDocument, VehicleExpense, VehicleIncident, VehicleInspection, WorkShift } from "@filo/contracts";
 import type { FleetReport } from "@filo/contracts";
-import type { NotificationAnalytics, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationTemplate } from "@filo/contracts";
+import type { NotificationAnalytics, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationTemplate } from "@filo/contracts";
 import { api } from "./api";
 
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
@@ -58,6 +58,14 @@ function VehicleForm({ onCreated, onClose }: { onCreated: (v: Vehicle) => void; 
   </div>;
 }
 
+function ProviderIncidentsPanel({ incidents, onSync, onUpdate }: { incidents: NotificationProviderIncident[]; onSync: () => Promise<void>; onUpdate: (id: string, status: "acknowledged" | "resolved", notes: string | null) => Promise<void> }) {
+  return <section className="table-card spaced">
+    <div className="section-head"><div><p className="eyebrow">SAĞLAYICI OLAY YÖNETİMİ</p><h2>Operasyon olayları</h2></div><button onClick={onSync}>Sağlığı tara</button></div>
+    <div className="table-wrap"><table><thead><tr><th>Sağlayıcı</th><th>Sorun</th><th>Önem</th><th>Durum</th><th>Son algılama</th><th>İşlem</th></tr></thead><tbody>{incidents.map(incident=><tr key={incident.id}><td><b>{incident.providerName}</b><br/><small>{incident.channel} · {incident.provider}</small></td><td>{incident.issueTypes.join(", ")}<br/><small>{incident.occurrenceCount} kez algılandı</small></td><td>{incident.severity}</td><td>{incident.status}</td><td>{new Date(incident.lastDetectedAt).toLocaleString("tr-TR")}</td><td>{incident.status==="open"&&<button className="secondary" onClick={()=>onUpdate(incident.id,"acknowledged",null)}>Gördüm</button>}{incident.status!=="resolved"&&<button onClick={async()=>{const notes=window.prompt("Çözüm notu");if(notes)await onUpdate(incident.id,"resolved",notes);}}>Çöz</button>}</td></tr>)}</tbody></table></div>
+    {!incidents.length&&<div className="empty"><b>Açılmış sağlayıcı olayı yok</b><p>Mevcut sağlık uyarılarını olaylaştırmak için taramayı çalıştırın.</p></div>}
+  </section>;
+}
+
 function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [events, setEvents] = useState<AuditEvent[]>([]);
@@ -94,6 +102,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
   const [notificationTemplates,setNotificationTemplates]=useState<NotificationTemplate[]>([]);
   const [notificationAnalytics,setNotificationAnalytics]=useState<NotificationAnalytics|null>(null);
   const [notificationProviderHealth,setNotificationProviderHealth]=useState<NotificationProviderHealth|null>(null);
+  const [notificationProviderIncidents,setNotificationProviderIncidents]=useState<NotificationProviderIncident[]>([]);
   const [reportFrom,setReportFrom]=useState(new Date(Date.now()-30*86400000).toISOString().slice(0,10));
   const [reportTo,setReportTo]=useState(new Date().toISOString().slice(0,10));
   const [expenseSummary,setExpenseSummary]=useState<ExpenseSummary>({totalAmount:0,fuelAmount:0,fuelLiters:0,entryCount:0,byVehicle:[]});
@@ -125,7 +134,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
       setNotifications(notificationResult.notifications);setNotificationRules(notificationRuleResult.rules);
       setNotificationPreferences(preferenceResult.preferences);setNotificationDeliveries(deliveryResult.deliveries);
       setNotificationTemplates(templateResult.templates);
-      if(user.role!=="viewer") { setNotificationAnalytics((await api.notificationAnalytics()).analytics); setNotificationProviderHealth(await api.notificationProviderHealth()); }
+      if(user.role!=="viewer") { setNotificationAnalytics((await api.notificationAnalytics()).analytics); setNotificationProviderHealth(await api.notificationProviderHealth()); setNotificationProviderIncidents((await api.notificationProviderIncidents()).incidents); }
       if (["owner","admin"].includes(user.role)) setMembers((await api.members()).members);
     } catch {
       setError("Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.");
@@ -453,7 +462,7 @@ function Dashboard({ user, onLogout }: { user: SessionUser; onLogout: () => void
         <div className="table-wrap"><table><thead><tr><th>Öncelik</th><th>Aksiyon</th><th>Araç</th><th>Sorumlu</th><th>Son tarih</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>{actions.map(action=><tr key={action.id}><td><b>{action.priority}</b></td><td>{action.title}<br/><small>{action.sourceType}</small></td><td>{action.vehiclePlate??"—"}</td><td>{action.assignedUserName??"Atanmadı"}</td><td>{action.dueOn??"—"}</td><td>{action.status}</td><td>{user.role!=="viewer"&&action.status!=="completed"&&action.status!=="cancelled"&&<button onClick={async()=>{await api.updateAction(action.id,"completed",action.assignedUserId,action.dueOn);await refresh();}}>Tamamla</button>}</td></tr>)}</tbody></table></div>
         {!actions.length&&<div className="empty"><b>Henüz aksiyon yok</b><p>Operasyon risklerinden yinelenmeyen görevler üretin veya manuel aksiyon ekleyin.</p></div>}
       </section>}
-      {view === "notifications" && <><section className="table-card spaced">
+      {view === "notifications" && <>{user.role!=="viewer"&&<ProviderIncidentsPanel incidents={notificationProviderIncidents} onSync={async()=>{await api.syncNotificationProviderIncidents();await refresh();}} onUpdate={async(id,status,notes)=>{await api.updateNotificationProviderIncident(id,status,notes);await refresh();}}/>}<section className="table-card spaced">
         <div className="section-head"><div><p className="eyebrow">UYGULAMA İÇİ BİLDİRİM KUTUSU</p><h2>Bildirimler</h2></div>{user.role!=="viewer"&&<button onClick={async()=>{await api.generateNotifications();await refresh();}}>Bildirimleri üret</button>}</div>
         <div className="table-wrap"><table><thead><tr><th>Önem</th><th>Bildirim</th><th>Araç</th><th>Zaman</th><th>Durum</th></tr></thead><tbody>{notifications.map(item=><tr key={item.id}><td><b>{item.severity}</b></td><td>{item.title}<br/><small>{item.message}</small></td><td>{item.vehiclePlate??"—"}</td><td>{new Date(item.createdAt).toLocaleString("tr-TR")}</td><td>{item.readAt?"Okundu":<button onClick={async()=>{await api.markNotificationRead(item.id);await refresh();}}>Okundu işaretle</button>}</td></tr>)}</tbody></table></div>
         {!notifications.length&&<div className="empty"><b>Henüz bildirim yok</b><p>Aktif kurallardan yinelenmeyen uygulama içi bildirimler üretin.</p></div>}

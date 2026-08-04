@@ -29,6 +29,7 @@ import { providerWebhookRoutes } from "./routes/provider-webhooks.js";
 import { notificationSuppressionRoutes } from "./routes/notification-suppressions.js";
 import { notificationAnalyticsRoutes } from "./routes/notification-analytics.js";
 import { notificationProviderHealthRoutes } from "./routes/notification-provider-health.js";
+import { notificationProviderIncidentRoutes } from "./routes/notification-provider-incidents.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true, trustProxy: true });
@@ -63,6 +64,7 @@ export async function buildApp() {
   await app.register(notificationSuppressionRoutes, { prefix: "/api/notification-suppressions" });
   await app.register(notificationAnalyticsRoutes, { prefix: "/api/notification-analytics" });
   await app.register(notificationProviderHealthRoutes, { prefix: "/api/notification-provider-health" });
+  await app.register(notificationProviderIncidentRoutes, { prefix: "/api/notification-provider-incidents" });
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error({ err: error }, "request failed");
