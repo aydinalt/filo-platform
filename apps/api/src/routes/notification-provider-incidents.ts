@@ -1,16 +1,20 @@
 import type { FastifyInstance } from "fastify";
-import { notificationProviderIncidentQuerySchema, updateNotificationProviderIncidentSchema } from "@filo/contracts";
+import { randomUUID } from "node:crypto";
+import { notificationProviderIncidentQuerySchema, updateNotificationProviderIncidentSchema, updateNotificationProviderIncidentScanSettingsSchema } from "@filo/contracts";
 import { withTenantTransaction } from "@filo/database";
 import { requireSession } from "../lib/auth.js";
 import { allow } from "../lib/permissions.js";
-import { loadNotificationProviderHealth } from "../lib/notification-provider-health.js";
+import { loadIncidentScanStatus, runNotificationProviderIncidentScan } from "../lib/notification-provider-incident-scan.js";
 
 const guard = { preHandler: [requireSession, allow("owner", "admin", "operator")] };
-const incidentSelect = `SELECT i.id,i.provider_profile_id AS "providerProfileId",p.name AS "providerName",p.channel,p.provider,i.issue_types AS "issueTypes",i.severity,i.status,i.occurrence_count AS "occurrenceCount",i.snapshot,i.opened_at AS "openedAt",i.last_detected_at AS "lastDetectedAt",i.acknowledged_at AS "acknowledgedAt",i.resolved_at AS "resolvedAt",i.resolution_notes AS "resolutionNotes" FROM notification_provider_incidents i JOIN notification_provider_profiles p ON p.id=i.provider_profile_id`;
+const writeGuard = { preHandler: [requireSession, allow("owner", "admin")] };
+const incidentSelect = `SELECT i.id,i.provider_profile_id AS "providerProfileId",p.name AS "providerName",p.channel,p.provider,i.issue_types AS "issueTypes",i.severity,i.status,i.occurrence_count AS "occurrenceCount",i.snapshot,i.opened_at AS "openedAt",i.last_detected_at AS "lastDetectedAt",i.last_checked_at AS "lastCheckedAt",i.healthy_scan_count AS "healthyScanCount",i.recovery_candidate_at AS "recoveryCandidateAt",i.acknowledged_at AS "acknowledgedAt",i.resolved_at AS "resolvedAt",i.resolution_notes AS "resolutionNotes" FROM notification_provider_incidents i JOIN notification_provider_profiles p ON p.id=i.provider_profile_id`;
 const shapeIncident = (row: Record<string, any>, events: Record<string, any>[] = []) => ({
   ...row,
   openedAt: row.openedAt.toISOString(),
   lastDetectedAt: row.lastDetectedAt.toISOString(),
+  lastCheckedAt: row.lastCheckedAt?.toISOString() ?? null,
+  recoveryCandidateAt: row.recoveryCandidateAt?.toISOString() ?? null,
   acknowledgedAt: row.acknowledgedAt?.toISOString() ?? null,
   resolvedAt: row.resolvedAt?.toISOString() ?? null,
   events: events.map(event => ({ ...event, createdAt: event.createdAt.toISOString() }))
@@ -27,23 +31,26 @@ export async function notificationProviderIncidentRoutes(app: FastifyInstance) {
       const rows = (await client.query(`${incidentSelect} ${where} ORDER BY CASE i.status WHEN 'open' THEN 0 WHEN 'acknowledged' THEN 1 ELSE 2 END,i.last_detected_at DESC LIMIT 250`, values)).rows;
       const ids = rows.map(row => row.id);
       const events = ids.length ? (await client.query(`SELECT incident_id AS "incidentId",event_type AS "eventType",details,created_at AS "createdAt" FROM notification_provider_incident_events WHERE incident_id=ANY($1::uuid[]) ORDER BY created_at`, [ids])).rows : [];
-      return { incidents: rows.map(row => shapeIncident(row, events.filter(event => event.incidentId === row.id))) };
+      return { incidents: rows.map(row => shapeIncident(row, events.filter(event => event.incidentId === row.id))), scanStatus: await loadIncidentScanStatus(client) };
     });
   });
 
   app.post("/sync", guard, async (request, reply) => {
     const user = request.sessionUser;
     return withTenantTransaction(user.tenantId, user.id, async client => {
-      const health = await loadNotificationProviderHealth(client);
-      let opened = 0, refreshed = 0;
-      for (const provider of health.providers.filter(item => item.health === "warning")) {
-        const severity = provider.issues.includes("inactive") || provider.failureRatePercent >= health.settings.failureRateWarningPercent * 2 || provider.oldestReadyAgeSeconds >= health.settings.queueAgeWarningSeconds * 2 ? "critical" : "warning";
-        const result = (await client.query(`INSERT INTO notification_provider_incidents(tenant_id,provider_profile_id,issue_types,severity,snapshot) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(tenant_id,provider_profile_id) WHERE status IN ('open','acknowledged') DO UPDATE SET issue_types=EXCLUDED.issue_types,severity=EXCLUDED.severity,snapshot=EXCLUDED.snapshot,occurrence_count=notification_provider_incidents.occurrence_count+1,last_detected_at=now(),updated_at=now() RETURNING id,(xmax=0) AS inserted`, [user.tenantId, provider.id, provider.issues, severity, JSON.stringify(provider)])).rows[0];
-        await client.query(`INSERT INTO notification_provider_incident_events(tenant_id,incident_id,event_type,actor_user_id,details) VALUES($1,$2,$3,$4,jsonb_build_object('issues',$5::text[],'severity',$6))`, [user.tenantId, result.id, result.inserted ? "opened" : "refreshed", user.id, provider.issues, severity]);
-        result.inserted ? opened++ : refreshed++;
-      }
-      await client.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_provider_incidents.synced','notification_provider_incidents',$1,jsonb_build_object('opened',$3,'refreshed',$4))`, [user.tenantId, user.id, opened, refreshed]);
-      return reply.code(202).send({ opened, refreshed, healthy: health.providers.filter(item => item.health === "healthy").length });
+      const result = await runNotificationProviderIncidentScan(client, user.tenantId, user.id, `manual-${randomUUID()}`, "manual", true);
+      return reply.code(202).send(result);
+    });
+  });
+
+  app.put("/scan-settings", writeGuard, async (request, reply) => {
+    const parsed = updateNotificationProviderIncidentScanSettingsSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_PROVIDER_SCAN_SETTINGS" });
+    const user = request.sessionUser, input = parsed.data;
+    return withTenantTransaction(user.tenantId, user.id, async client => {
+      await client.query(`INSERT INTO notification_provider_incident_scan_settings(tenant_id,enabled,interval_minutes,recovery_confirmation_scans,updated_by) VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id) DO UPDATE SET enabled=EXCLUDED.enabled,interval_minutes=EXCLUDED.interval_minutes,recovery_confirmation_scans=EXCLUDED.recovery_confirmation_scans,updated_by=EXCLUDED.updated_by,updated_at=now()`, [user.tenantId, input.enabled, input.intervalMinutes, input.recoveryConfirmationScans, user.id]);
+      await client.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_provider_incident_scan.settings_updated','notification_provider_incident_scan_settings',$1,$3::jsonb)`, [user.tenantId, user.id, JSON.stringify(input)]);
+      return reply.send({ scanStatus: await loadIncidentScanStatus(client) });
     });
   });
 
