@@ -1,6 +1,6 @@
 import type {FastifyInstance} from "fastify";
-import {runNotificationArchiveSchema} from "@filo/contracts";
-import {executeNotificationArchiveAttempt} from "../lib/notification-retention.js";
+import {reconcileNotificationArchiveAttemptsSchema,runNotificationArchiveSchema} from "@filo/contracts";
+import {executeNotificationArchiveAttempt,reconcileStaleNotificationArchiveAttempts} from "../lib/notification-retention.js";
 import {requireNotificationWorker} from "../lib/worker-auth.js";
 
 export async function notificationRetentionWorkerRoutes(app:FastifyInstance){
@@ -12,5 +12,12 @@ export async function notificationRetentionWorkerRoutes(app:FastifyInstance){
     if(!result.accepted)return reply.code(result.reason==="invalid_actor"?403:200).send(result);
     if(result.failed)return reply.code(503).send(result);
     return reply.code(result.result.skipped?200:202).send(result);
+  });
+  app.post("/reconcile-attempts",{preHandler:requireNotificationWorker},async(request,reply)=>{
+    const parsed=reconcileNotificationArchiveAttemptsSchema.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:"INVALID_NOTIFICATION_ARCHIVE_RECONCILIATION"});
+    const result=await reconcileStaleNotificationArchiveAttempts(parsed.data);
+    if(!result.accepted)return reply.code(result.reason==="invalid_actor"?403:200).send(result);
+    return reply.code(result.reconciledCount>0?202:200).send(result);
   });
 }

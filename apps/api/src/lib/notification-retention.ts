@@ -8,7 +8,8 @@ type ArchiveSkipReason =
   | "archive_in_progress"
   | "disabled"
   | "not_due"
-  | "duplicate";
+  | "duplicate"
+  | "attempt_not_running";
 
 const outcomeCodeBySkipReason: Record<ArchiveSkipReason, string> = {
   invalid_actor: "INVALID_ACTOR",
@@ -16,6 +17,7 @@ const outcomeCodeBySkipReason: Record<ArchiveSkipReason, string> = {
   disabled: "AUTOMATION_DISABLED",
   not_due: "ARCHIVE_NOT_DUE",
   duplicate: "DUPLICATE_RUN_KEY",
+  attempt_not_running: "ATTEMPT_NOT_RUNNING",
 };
 
 export async function loadNotificationRetentionState(client: TenantClient) {
@@ -68,6 +70,7 @@ export async function runNotificationArchive(
   runKey: string,
   source: ArchiveSource,
   force = false,
+  attemptId: string | null = null,
 ) {
   const actor = await client.query(
     `SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2`,
@@ -84,6 +87,15 @@ export async function runNotificationArchive(
   ).rows[0];
   if (!lock?.acquired)
     return { skipped: true as const, reason: "archive_in_progress" as const };
+
+  if (attemptId) {
+    const activeAttempt = await client.query(
+      `UPDATE notification_archive_attempts SET heartbeat_at=now() WHERE id=$1 AND status='running' RETURNING id`,
+      [attemptId],
+    );
+    if (!activeAttempt.rowCount)
+      return { skipped: true as const, reason: "attempt_not_running" as const };
+  }
 
   const settings = await loadNotificationRetentionState(client);
   if (!force && !settings.automaticArchiveEnabled)
@@ -155,6 +167,12 @@ export async function runNotificationArchive(
       }),
     ],
   );
+  if (attemptId) {
+    await client.query(
+      `UPDATE notification_archive_attempts SET heartbeat_at=now() WHERE id=$1 AND status='running'`,
+      [attemptId],
+    );
+  }
   return {
     skipped: false as const,
     run: {
@@ -171,7 +189,9 @@ function shapeAttempt(row: any) {
   return {
     ...row,
     startedAt: row.startedAt.toISOString(),
+    heartbeatAt: row.heartbeatAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
+    reconciledAt: row.reconciledAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -214,7 +234,7 @@ async function beginArchiveAttempt(
       return { created: false as const, reason: "retry_not_allowed" as const };
     const row = (
       await client.query(
-        `INSERT INTO notification_archive_attempts(tenant_id,run_key,source,retry_of_attempt_id,retry_number,initiated_by) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING id,run_key AS "runKey",source,status,outcome_code AS "outcomeCode",retry_of_attempt_id AS "retryOfAttemptId",retry_number AS "retryNumber",initiated_by AS "initiatedBy",archived_count AS "archivedCount",eligible_remaining AS "eligibleRemaining",started_at AS "startedAt",completed_at AS "completedAt",created_at AS "createdAt"`,
+        `INSERT INTO notification_archive_attempts(tenant_id,run_key,source,retry_of_attempt_id,retry_number,initiated_by) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING id,run_key AS "runKey",source,status,outcome_code AS "outcomeCode",retry_of_attempt_id AS "retryOfAttemptId",retry_number AS "retryNumber",initiated_by AS "initiatedBy",archived_count AS "archivedCount",eligible_remaining AS "eligibleRemaining",started_at AS "startedAt",heartbeat_at AS "heartbeatAt",completed_at AS "completedAt",reconciled_at AS "reconciledAt",reconciled_by AS "reconciledBy",reconciliation_id AS "reconciliationId",created_at AS "createdAt"`,
         [
           tenantId,
           runKey,
@@ -242,7 +262,7 @@ async function finishArchiveAttempt(
   return withTenantTransaction(tenantId, actorUserId, async (client) => {
     const row = (
       await client.query(
-        `UPDATE notification_archive_attempts SET status=$2,outcome_code=$3,archived_count=$4,eligible_remaining=$5,completed_at=now() WHERE id=$1 AND status='running' RETURNING id,run_key AS "runKey",source,status,outcome_code AS "outcomeCode",retry_of_attempt_id AS "retryOfAttemptId",retry_number AS "retryNumber",initiated_by AS "initiatedBy",archived_count AS "archivedCount",eligible_remaining AS "eligibleRemaining",started_at AS "startedAt",completed_at AS "completedAt",created_at AS "createdAt"`,
+        `UPDATE notification_archive_attempts SET status=$2,outcome_code=$3,archived_count=$4,eligible_remaining=$5,heartbeat_at=now(),completed_at=now() WHERE id=$1 AND status='running' RETURNING id,run_key AS "runKey",source,status,outcome_code AS "outcomeCode",retry_of_attempt_id AS "retryOfAttemptId",retry_number AS "retryNumber",initiated_by AS "initiatedBy",archived_count AS "archivedCount",eligible_remaining AS "eligibleRemaining",started_at AS "startedAt",heartbeat_at AS "heartbeatAt",completed_at AS "completedAt",reconciled_at AS "reconciledAt",reconciled_by AS "reconciledBy",reconciliation_id AS "reconciliationId",created_at AS "createdAt"`,
         [attemptId, status, outcomeCode, archivedCount, eligibleRemaining],
       )
     ).rows[0];
@@ -297,6 +317,7 @@ export async function executeNotificationArchiveAttempt(input: {
           input.runKey,
           archiveSource,
           input.force ?? input.source !== "scheduler",
+          started.attempt.id,
         ),
     );
   } catch (error) {
@@ -317,6 +338,8 @@ export async function executeNotificationArchiveAttempt(input: {
     };
   }
   if (result.skipped) {
+    if (result.reason === "attempt_not_running")
+      return { accepted: false as const, reason: result.reason };
     const attempt = await finishArchiveAttempt(
       input.tenantId,
       input.actorUserId,
@@ -338,4 +361,79 @@ export async function executeNotificationArchiveAttempt(input: {
     result.summary.eligibleRemaining,
   );
   return { accepted: true as const, failed: false as const, attempt, result };
+}
+
+export async function reconcileStaleNotificationArchiveAttempts(input: {
+  tenantId: string;
+  actorUserId: string;
+  reconciliationKey: string;
+  staleAfterMinutes: number;
+}) {
+  return withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
+    const actor = await client.query(
+      `SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2`,
+      [input.actorUserId, input.tenantId],
+    );
+    if (!actor.rowCount)
+      return { accepted: false as const, reason: "invalid_actor" as const };
+
+    const lock = (
+      await client.query(
+        `SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired`,
+        [`notification-retention:${input.tenantId}`],
+      )
+    ).rows[0];
+    if (!lock?.acquired)
+      return { accepted: false as const, reason: "archive_in_progress" as const };
+
+    const reconciliation = (
+      await client.query(
+        `INSERT INTO notification_archive_reconciliations(tenant_id,reconciliation_key,stale_after_minutes,initiated_by) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id,created_at AS "createdAt"`,
+        [
+          input.tenantId,
+          input.reconciliationKey,
+          input.staleAfterMinutes,
+          input.actorUserId,
+        ],
+      )
+    ).rows[0];
+    if (!reconciliation)
+      return { accepted: false as const, reason: "duplicate" as const };
+
+    const reconciled = await client.query(
+      `UPDATE notification_archive_attempts SET status='failed',outcome_code='ATTEMPT_HEARTBEAT_EXPIRED',heartbeat_at=now(),completed_at=now(),reconciled_at=now(),reconciled_by=$2,reconciliation_id=$3 WHERE tenant_id=$1 AND status='running' AND heartbeat_at<now()-($4::integer*interval '1 minute') RETURNING id`,
+      [
+        input.tenantId,
+        input.actorUserId,
+        reconciliation.id,
+        input.staleAfterMinutes,
+      ],
+    );
+    const reconciledCount = reconciled.rowCount ?? 0;
+    await client.query(
+      `UPDATE notification_archive_reconciliations SET reconciled_count=$2 WHERE id=$1`,
+      [reconciliation.id, reconciledCount],
+    );
+    await client.query(
+      `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_archive.attempts_reconciled','notification_archive_reconciliation',$3,$4::jsonb)`,
+      [
+        input.tenantId,
+        input.actorUserId,
+        reconciliation.id,
+        JSON.stringify({
+          reconciliationKey: input.reconciliationKey,
+          staleAfterMinutes: input.staleAfterMinutes,
+          reconciledCount,
+        }),
+      ],
+    );
+    return {
+      accepted: true as const,
+      reconciliationId: reconciliation.id as string,
+      reconciliationKey: input.reconciliationKey,
+      staleAfterMinutes: input.staleAfterMinutes,
+      reconciledCount,
+      createdAt: reconciliation.createdAt.toISOString(),
+    };
+  });
 }
