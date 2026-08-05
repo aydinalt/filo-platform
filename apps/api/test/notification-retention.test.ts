@@ -1,6 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { archiveReconciliationNotificationCopy } from "../src/lib/notification-retention.js";
+import {
+  archiveReconciliationHandlingDeadline,
+  archiveReconciliationNotificationCopy,
+} from "../src/lib/notification-retention.js";
 
 describe("archive reconciliation notifications", () => {
   it("does not create notification copy when reconciliation found no stale attempts", () => {
@@ -13,5 +16,46 @@ describe("archive reconciliation notifications", () => {
     assert.equal(copy?.severity, "warning");
     assert.equal(copy?.actionTarget, null);
     assert.match(copy?.message ?? "", /^3 /);
+  });
+});
+
+describe("archive reconciliation handling deadlines", () => {
+  it("flags only the active lifecycle deadline when it is overdue", () => {
+    const now = new Date("2026-08-05T12:00:00.000Z");
+    const acknowledgementDueAt = new Date("2026-08-05T11:00:00.000Z");
+    const resolutionDueAt = new Date("2026-08-06T11:00:00.000Z");
+    assert.deepEqual(
+      archiveReconciliationHandlingDeadline(
+        "open",
+        acknowledgementDueAt,
+        resolutionDueAt,
+        now,
+      ),
+      {
+        handlingDeadlineAt: acknowledgementDueAt.toISOString(),
+        isHandlingOverdue: true,
+      },
+    );
+    assert.deepEqual(
+      archiveReconciliationHandlingDeadline(
+        "acknowledged",
+        acknowledgementDueAt,
+        resolutionDueAt,
+        now,
+      ),
+      {
+        handlingDeadlineAt: resolutionDueAt.toISOString(),
+        isHandlingOverdue: false,
+      },
+    );
+    assert.deepEqual(
+      archiveReconciliationHandlingDeadline(
+        "resolved",
+        acknowledgementDueAt,
+        resolutionDueAt,
+        now,
+      ),
+      { handlingDeadlineAt: null, isHandlingOverdue: false },
+    );
   });
 });

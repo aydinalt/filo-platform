@@ -10,6 +10,7 @@ aside nav button small{font-size:10px}
 .status-select{border:0;border-radius:20px;padding:7px 28px 7px 10px;background:#e3f4ef;color:#08715f;font-weight:700;font-size:11px}
 .status-select.maintenance{background:#fff0d6;color:#9a6500}
 .status-select.inactive{background:#edf0f4;color:#657084}
+.overdue-label{display:inline-block;margin-top:6px;color:#b42318;background:#fff0ee;border-radius:20px;padding:4px 7px;font-weight:800}
 .page-error{margin:-10px 0 18px}
 .audit-list{display:grid}
 .audit-list article{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid #edf0f4}

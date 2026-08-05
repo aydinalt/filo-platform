@@ -33,6 +33,24 @@ export function archiveReconciliationNotificationCopy(
   };
 }
 
+export function archiveReconciliationHandlingDeadline(
+  handlingStatus: "not_required" | "open" | "acknowledged" | "resolved",
+  acknowledgementDueAt: Date | null,
+  resolutionDueAt: Date | null,
+  now = new Date(),
+) {
+  const deadline =
+    handlingStatus === "open"
+      ? acknowledgementDueAt
+      : handlingStatus === "acknowledged"
+        ? resolutionDueAt
+        : null;
+  return {
+    handlingDeadlineAt: deadline?.toISOString() ?? null,
+    isHandlingOverdue: deadline ? deadline.getTime() < now.getTime() : false,
+  };
+}
+
 export async function loadNotificationRetentionState(client: TenantClient) {
   const row = (
     await client.query(
@@ -497,7 +515,7 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
         reconciledCount,
       );
     await client.query(
-      `UPDATE notification_archive_reconciliations SET reconciled_count=$2,notifications_created=$3,handling_status=CASE WHEN $2>0 THEN 'open' ELSE 'not_required' END,updated_at=now() WHERE id=$1`,
+      `UPDATE notification_archive_reconciliations SET reconciled_count=$2,notifications_created=$3,handling_status=CASE WHEN $2>0 THEN 'open' ELSE 'not_required' END,acknowledgement_due_at=CASE WHEN $2>0 THEN now()+interval '1 hour' ELSE NULL END,resolution_due_at=CASE WHEN $2>0 THEN now()+interval '24 hours' ELSE NULL END,updated_at=now() WHERE id=$1`,
       [reconciliation.id, reconciledCount, notificationsCreated],
     );
     const summary = { reconciledCount, notificationsCreated, source };

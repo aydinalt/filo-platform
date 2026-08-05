@@ -3533,6 +3533,7 @@ function Dashboard({
                         <th>Uzlaştırılan</th>
                         <th>Uyarı</th>
                         <th>Durum</th>
+                        <th>Hedef süre</th>
                         <th>İşlem</th>
                       </tr>
                     </thead>
@@ -3564,12 +3565,25 @@ function Dashboard({
                                       "acknowledged"
                                     ? "Ele alındı"
                                     : "Çözüldü"}
+                              {reconciliation.isHandlingOverdue ? (
+                                <>
+                                  <br />
+                                  <small className="overdue-label">Gecikti</small>
+                                </>
+                              ) : null}
                               {reconciliation.resolutionNotes ? (
                                 <>
                                   <br />
                                   <small>{reconciliation.resolutionNotes}</small>
                                 </>
                               ) : null}
+                            </td>
+                            <td>
+                              {reconciliation.handlingDeadlineAt
+                                ? new Date(
+                                    reconciliation.handlingDeadlineAt,
+                                  ).toLocaleString("tr-TR")
+                                : "—"}
                             </td>
                             <td>
                               {["owner", "admin"].includes(user.role) &&
