@@ -51,6 +51,26 @@ export function archiveReconciliationHandlingDeadline(
   };
 }
 
+export function archiveReconciliationOverdueReminderCopy(
+  handlingStatus: "open" | "acknowledged",
+) {
+  return handlingStatus === "open"
+    ? {
+        stage: "acknowledgement" as const,
+        title: "Uzlaştırma ele alma süresi aşıldı",
+        message:
+          "Açık uzlaştırma işi bir saatlik ele alma hedefini geçti. İş kaydını inceleyip sorumlu kişiye atayın veya ele alın.",
+        severity: "warning" as const,
+      }
+    : {
+        stage: "resolution" as const,
+        title: "Uzlaştırma çözüm süresi aşıldı",
+        message:
+          "Ele alınan uzlaştırma işi yirmi dört saatlik çözüm hedefini geçti. Çözüm durumunu ve zorunlu kapanış notunu güncelleyin.",
+        severity: "critical" as const,
+      };
+}
+
 export async function loadNotificationRetentionState(client: TenantClient) {
   const row = (
     await client.query(
@@ -153,7 +173,7 @@ export async function runNotificationArchive(
   attemptId: string | null = null,
 ) {
   const actor = await client.query(
-    `SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2`,
+    `SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.user_id=$1 AND m.tenant_id=$2 AND m.role IN ('owner','admin','operator') AND u.disabled_at IS NULL`,
     [actorUserId, tenantId],
   );
   if (!actor.rowCount)
@@ -304,7 +324,7 @@ async function beginArchiveAttempt(
 ) {
   return withTenantTransaction(tenantId, actorUserId, async (client) => {
     const actor = await client.query(
-      `SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2`,
+      `SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.user_id=$1 AND m.tenant_id=$2 AND m.role IN ('owner','admin','operator') AND u.disabled_at IS NULL`,
       [actorUserId, tenantId],
     );
     if (!actor.rowCount)
@@ -452,7 +472,7 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
 }) {
   return withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
     const actor = await client.query(
-      `SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2`,
+      `SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.user_id=$1 AND m.tenant_id=$2 AND m.role IN ('owner','admin','operator') AND u.disabled_at IS NULL`,
       [input.actorUserId, input.tenantId],
     );
     if (!actor.rowCount)
@@ -554,5 +574,139 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
       createdAt: reconciliation.createdAt.toISOString(),
       settings: await loadNotificationRetentionState(client),
     };
+  });
+}
+
+export async function runArchiveReconciliationOverdueReminders(input: {
+  tenantId: string;
+  actorUserId: string;
+  runKey: string;
+  source?: ArchiveSource;
+}) {
+  return withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
+    const actor = await client.query(
+      `SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.user_id=$1 AND m.tenant_id=$2 AND m.role IN ('owner','admin','operator') AND u.disabled_at IS NULL`,
+      [input.actorUserId, input.tenantId],
+    );
+    if (!actor.rowCount)
+      return { accepted: false as const, reason: "invalid_actor" as const };
+
+    const lock = (
+      await client.query(
+        `SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired`,
+        [`notification-reconciliation-reminders:${input.tenantId}`],
+      )
+    ).rows[0];
+    if (!lock?.acquired)
+      return { accepted: false as const, reason: "scan_in_progress" as const };
+
+    const source = input.source ?? "scheduler";
+    const run = (
+      await client.query(
+        `INSERT INTO notification_archive_reconciliation_reminder_runs(tenant_id,run_key,source,initiated_by) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id`,
+        [input.tenantId, input.runKey, source, input.actorUserId],
+      )
+    ).rows[0];
+    if (!run)
+      return { accepted: false as const, reason: "duplicate" as const };
+
+    const overdue = (
+      await client.query(
+        `SELECT id,handling_status AS "handlingStatus",assigned_to AS "assignedTo"
+         FROM notification_archive_reconciliations
+         WHERE (
+           handling_status='open'
+           AND acknowledgement_due_at<now()
+           AND acknowledgement_overdue_notified_at IS NULL
+         ) OR (
+           handling_status='acknowledged'
+           AND resolution_due_at<now()
+           AND resolution_overdue_notified_at IS NULL
+         )
+         ORDER BY CASE WHEN handling_status='acknowledged' THEN 0 ELSE 1 END,created_at
+         LIMIT 100
+         FOR UPDATE SKIP LOCKED`,
+      )
+    ).rows as Array<{
+      id: string;
+      handlingStatus: "open" | "acknowledged";
+      assignedTo: string | null;
+    }>;
+
+    let notificationsCreated = 0;
+    let acknowledgementOverdue = 0;
+    let resolutionOverdue = 0;
+    for (const reconciliation of overdue) {
+      const copy = archiveReconciliationOverdueReminderCopy(
+        reconciliation.handlingStatus,
+      );
+      let recipients = (
+        await client.query(
+          reconciliation.assignedTo
+            ? `SELECT m.user_id AS id FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.tenant_id=$1 AND m.user_id=$2 AND m.role IN ('owner','admin','operator') AND u.disabled_at IS NULL`
+            : `SELECT m.user_id AS id FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.tenant_id=$1 AND m.role IN ('owner','admin') AND u.disabled_at IS NULL`,
+          reconciliation.assignedTo
+            ? [input.tenantId, reconciliation.assignedTo]
+            : [input.tenantId],
+        )
+      ).rows as Array<{ id: string }>;
+      if (!recipients.length && reconciliation.assignedTo) {
+        recipients = (
+          await client.query(
+            `SELECT m.user_id AS id FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.tenant_id=$1 AND m.role IN ('owner','admin') AND u.disabled_at IS NULL`,
+            [input.tenantId],
+          )
+        ).rows as Array<{ id: string }>;
+      }
+      if (!recipients.length) continue;
+
+      for (const recipient of recipients) {
+        const inserted = await client.query(
+          `INSERT INTO in_app_notifications(tenant_id,rule_id,source_type,source_id,title,message,severity,vehicle_id,recipient_user_id,dedupe_key)
+           VALUES($1,NULL,'archive_reconciliation',$2,$3,$4,$5,NULL,$6,$7)
+           ON CONFLICT DO NOTHING`,
+          [
+            input.tenantId,
+            reconciliation.id,
+            copy.title,
+            copy.message,
+            copy.severity,
+            recipient.id,
+            `archive-reconciliation-overdue:${reconciliation.id}:${copy.stage}`,
+          ],
+        );
+        notificationsCreated += inserted.rowCount ?? 0;
+      }
+
+      if (copy.stage === "acknowledgement") {
+        acknowledgementOverdue += 1;
+        await client.query(
+          `UPDATE notification_archive_reconciliations SET acknowledgement_overdue_notified_at=COALESCE(acknowledgement_overdue_notified_at,now()),updated_at=now() WHERE id=$1`,
+          [reconciliation.id],
+        );
+      } else {
+        resolutionOverdue += 1;
+        await client.query(
+          `UPDATE notification_archive_reconciliations SET resolution_overdue_notified_at=COALESCE(resolution_overdue_notified_at,now()),updated_at=now() WHERE id=$1`,
+          [reconciliation.id],
+        );
+      }
+    }
+
+    const summary = {
+      scannedCount: overdue.length,
+      notificationsCreated,
+      acknowledgementOverdue,
+      resolutionOverdue,
+    };
+    await client.query(
+      `UPDATE notification_archive_reconciliation_reminder_runs SET scanned_count=$2,notifications_created=$3 WHERE id=$1`,
+      [run.id, summary.scannedCount, summary.notificationsCreated],
+    );
+    await client.query(
+      `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_archive.reconciliation_overdue_reminders_scanned','notification_archive_reconciliation_reminder_run',$3,$4::jsonb)`,
+      [input.tenantId, input.actorUserId, run.id, JSON.stringify({ ...summary, source })],
+    );
+    return { accepted: true as const, runId: run.id as string, source, summary };
   });
 }

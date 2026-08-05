@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   archiveReconciliationHandlingDeadline,
   archiveReconciliationNotificationCopy,
+  archiveReconciliationOverdueReminderCopy,
 } from "../src/lib/notification-retention.js";
 
 describe("archive reconciliation notifications", () => {
@@ -57,5 +58,21 @@ describe("archive reconciliation handling deadlines", () => {
       ),
       { handlingDeadlineAt: null, isHandlingOverdue: false },
     );
+  });
+});
+
+describe("archive reconciliation overdue reminders", () => {
+  it("uses a bounded warning for acknowledgement delay", () => {
+    const copy = archiveReconciliationOverdueReminderCopy("open");
+    assert.equal(copy.stage, "acknowledgement");
+    assert.equal(copy.severity, "warning");
+    assert.match(copy.message, /ele alma hedefini geçti/);
+  });
+
+  it("uses a critical reminder for resolution delay", () => {
+    const copy = archiveReconciliationOverdueReminderCopy("acknowledged");
+    assert.equal(copy.stage, "resolution");
+    assert.equal(copy.severity, "critical");
+    assert.match(copy.message, /çözüm hedefini geçti/);
   });
 });

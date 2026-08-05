@@ -11,6 +11,7 @@ aside nav button small{font-size:10px}
 .status-select.maintenance{background:#fff0d6;color:#9a6500}
 .status-select.inactive{background:#edf0f4;color:#657084}
 .overdue-label{display:inline-block;margin-top:6px;color:#b42318;background:#fff0ee;border-radius:20px;padding:4px 7px;font-weight:800}
+.reconciliation-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 24px 18px;padding:14px 16px;border:1px solid #e4e9ef;border-radius:14px;background:#f8fafc}.reconciliation-toolbar p{margin:0;font-size:12px;font-weight:700;color:#4b5563}.reconciliation-toolbar label{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700}.reconciliation-toolbar select{min-width:150px}
 .page-error{margin:-10px 0 18px}
 .audit-list{display:grid}
 .audit-list article{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid #edf0f4}

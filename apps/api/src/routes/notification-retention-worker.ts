@@ -1,6 +1,6 @@
 import type {FastifyInstance} from "fastify";
-import {reconcileNotificationArchiveAttemptsSchema,runNotificationArchiveSchema} from "@filo/contracts";
-import {executeNotificationArchiveAttempt,reconcileStaleNotificationArchiveAttempts} from "../lib/notification-retention.js";
+import {reconcileNotificationArchiveAttemptsSchema,runNotificationArchiveReconciliationReminderSchema,runNotificationArchiveSchema} from "@filo/contracts";
+import {executeNotificationArchiveAttempt,reconcileStaleNotificationArchiveAttempts,runArchiveReconciliationOverdueReminders} from "../lib/notification-retention.js";
 import {requireNotificationWorker} from "../lib/worker-auth.js";
 
 export async function notificationRetentionWorkerRoutes(app:FastifyInstance){
@@ -19,5 +19,12 @@ export async function notificationRetentionWorkerRoutes(app:FastifyInstance){
     const result=await reconcileStaleNotificationArchiveAttempts({...parsed.data,source:"scheduler"});
     if(!result.accepted)return reply.code(result.reason==="invalid_actor"?403:200).send(result);
     return reply.code(result.reconciledCount>0?202:200).send(result);
+  });
+  app.post("/notify-overdue-reconciliations",{preHandler:requireNotificationWorker},async(request,reply)=>{
+    const parsed=runNotificationArchiveReconciliationReminderSchema.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:"INVALID_NOTIFICATION_ARCHIVE_REMINDER_SCAN"});
+    const result=await runArchiveReconciliationOverdueReminders({...parsed.data,source:"scheduler"});
+    if(!result.accepted)return reply.code(result.reason==="invalid_actor"?403:200).send(result);
+    return reply.code(result.summary.notificationsCreated>0?202:200).send(result);
   });
 }

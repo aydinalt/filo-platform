@@ -419,6 +419,9 @@ function Dashboard({
   ] = useState<NotificationProviderIncidentScanStatus | null>(null);
   const [notificationRetention, setNotificationRetention] =
     useState<NotificationRetention | null>(null);
+  const [reconciliationFilter, setReconciliationFilter] = useState<
+    "active" | "overdue" | "unassigned" | "resolved" | "all"
+  >("active");
   const [focusedProviderIncidentId, setFocusedProviderIncidentId] = useState<
     string | null
   >(null);
@@ -461,6 +464,24 @@ function Dashboard({
   const [mobileAssignment, setMobileAssignment] = useState("");
   const [mobileMessage, setMobileMessage] = useState("Takip kapalı");
   const watchId = useRef<number | null>(null);
+
+  const filteredReconciliations =
+    notificationRetention?.recentReconciliations.filter((reconciliation) => {
+      if (reconciliationFilter === "all") return true;
+      if (reconciliationFilter === "active")
+        return ["open", "acknowledged"].includes(
+          reconciliation.handlingStatus,
+        );
+      if (reconciliationFilter === "overdue")
+        return reconciliation.isHandlingOverdue;
+      if (reconciliationFilter === "unassigned")
+        return (
+          ["open", "acknowledged"].includes(
+            reconciliation.handlingStatus,
+          ) && !reconciliation.assignedTo
+        );
+      return reconciliation.handlingStatus === "resolved";
+    }) ?? [];
 
   async function refresh() {
     setError("");
@@ -3322,6 +3343,21 @@ function Dashboard({
                         >
                           Şimdi uzlaştır
                         </button>
+                        <button
+                          className="secondary"
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                "Geciken açık uzlaştırma işleri için yinelenmeyen uygulama içi hatırlatmalar oluşturulsun mu? E-posta veya push gönderilmez.",
+                              )
+                            )
+                              return;
+                            await api.notifyOverdueArchiveReconciliations();
+                            await refresh();
+                          }}
+                        >
+                          Gecikenleri hatırlat
+                        </button>
                       </>
                     )}
                     <button
@@ -3523,6 +3559,33 @@ function Dashboard({
                   </div>
                   <small>Uzlaştırma, yeniden denemeyi otomatik başlatmaz.</small>
                 </div>
+                <div className="reconciliation-toolbar">
+                  <p>
+                    Aktif: {notificationRetention.reconciliationSummary.active}
+                    {" · "}Açık: {notificationRetention.reconciliationSummary.open}
+                    {" · "}Ele alındı: {notificationRetention.reconciliationSummary.acknowledged}
+                    {" · "}Geciken: {notificationRetention.reconciliationSummary.overdue}
+                    {" · "}Atanmamış: {notificationRetention.reconciliationSummary.unassigned}
+                    {" · "}Çözüldü: {notificationRetention.reconciliationSummary.resolved}
+                  </p>
+                  <label>
+                    Görünüm
+                    <select
+                      value={reconciliationFilter}
+                      onChange={(event) =>
+                        setReconciliationFilter(
+                          event.target.value as typeof reconciliationFilter,
+                        )
+                      }
+                    >
+                      <option value="active">Aktif işler</option>
+                      <option value="overdue">Gecikenler</option>
+                      <option value="unassigned">Atanmamışlar</option>
+                      <option value="resolved">Çözülenler</option>
+                      <option value="all">Tümü</option>
+                    </select>
+                  </label>
+                </div>
                 <div className="table-wrap">
                   <table>
                     <thead>
@@ -3534,11 +3597,12 @@ function Dashboard({
                         <th>Uyarı</th>
                         <th>Durum</th>
                         <th>Hedef süre</th>
+                        <th>Sorumlu</th>
                         <th>İşlem</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {notificationRetention.recentReconciliations.map(
+                      {filteredReconciliations.map(
                         (reconciliation) => (
                           <tr key={reconciliation.id}>
                             <td>
@@ -3584,6 +3648,46 @@ function Dashboard({
                                     reconciliation.handlingDeadlineAt,
                                   ).toLocaleString("tr-TR")
                                 : "—"}
+                            </td>
+                            <td>
+                              {reconciliation.assignedToName ?? "Atanmadı"}
+                              {reconciliation.assignedToRole ? (
+                                <>
+                                  <br />
+                                  <small>{reconciliation.assignedToRole}</small>
+                                </>
+                              ) : null}
+                              {["owner", "admin"].includes(user.role) &&
+                              ["open", "acknowledged"].includes(
+                                reconciliation.handlingStatus,
+                              ) ? (
+                                <select
+                                  value={reconciliation.assignedTo ?? ""}
+                                  onChange={async (event) => {
+                                    await api.assignArchiveReconciliation(
+                                      reconciliation.id,
+                                      event.target.value || null,
+                                    );
+                                    await refresh();
+                                  }}
+                                >
+                                  <option value="">Atanmamış</option>
+                                  {members
+                                    .filter((member) =>
+                                      ["owner", "admin", "operator"].includes(
+                                        member.role,
+                                      ),
+                                    )
+                                    .map((member) => (
+                                      <option
+                                        key={member.userId}
+                                        value={member.userId}
+                                      >
+                                        {member.fullName}
+                                      </option>
+                                    ))}
+                                </select>
+                              ) : null}
                             </td>
                             <td>
                               {["owner", "admin"].includes(user.role) &&
@@ -3637,9 +3741,9 @@ function Dashboard({
                     </tbody>
                   </table>
                 </div>
-                {!notificationRetention.recentReconciliations.length && (
+                {!filteredReconciliations.length && (
                   <div className="empty">
-                    <b>Henüz uzlaştırma çalıştırması yok</b>
+                    <b>Bu görünümde uzlaştırma kaydı yok</b>
                   </div>
                 )}
               </section>

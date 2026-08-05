@@ -61,7 +61,7 @@ export async function runNotificationProviderIncidentScan(
   source: "manual" | "scheduler",
   force = false
 ) {
-  const actor = await client.query(`SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2`, [actorUserId, tenantId]);
+  const actor = await client.query(`SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.user_id=$1 AND m.tenant_id=$2 AND m.role IN ('owner','admin','operator') AND u.disabled_at IS NULL`, [actorUserId, tenantId]);
   if (!actor.rowCount) return { skipped: true as const, reason: "invalid_actor" as const };
 
   const lock = (await client.query(`SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired`, [`notification-provider-scan:${tenantId}`])).rows[0];
