@@ -497,7 +497,7 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
         reconciledCount,
       );
     await client.query(
-      `UPDATE notification_archive_reconciliations SET reconciled_count=$2,notifications_created=$3 WHERE id=$1`,
+      `UPDATE notification_archive_reconciliations SET reconciled_count=$2,notifications_created=$3,handling_status=CASE WHEN $2>0 THEN 'open' ELSE 'not_required' END,updated_at=now() WHERE id=$1`,
       [reconciliation.id, reconciledCount, notificationsCreated],
     );
     const summary = { reconciledCount, notificationsCreated, source };

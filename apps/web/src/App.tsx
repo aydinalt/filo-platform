@@ -3532,6 +3532,8 @@ function Dashboard({
                         <th>Süre aşımı</th>
                         <th>Uzlaştırılan</th>
                         <th>Uyarı</th>
+                        <th>Durum</th>
+                        <th>İşlem</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3553,6 +3555,68 @@ function Dashboard({
                             </td>
                             <td>{reconciliation.reconciledCount}</td>
                             <td>{reconciliation.notificationsCreated}</td>
+                            <td>
+                              {reconciliation.handlingStatus === "not_required"
+                                ? "İşlem gerekmiyor"
+                                : reconciliation.handlingStatus === "open"
+                                  ? "Açık"
+                                  : reconciliation.handlingStatus ===
+                                      "acknowledged"
+                                    ? "Ele alındı"
+                                    : "Çözüldü"}
+                              {reconciliation.resolutionNotes ? (
+                                <>
+                                  <br />
+                                  <small>{reconciliation.resolutionNotes}</small>
+                                </>
+                              ) : null}
+                            </td>
+                            <td>
+                              {["owner", "admin"].includes(user.role) &&
+                              reconciliation.handlingStatus === "open" ? (
+                                <button
+                                  className="secondary"
+                                  onClick={async () => {
+                                    await api.updateArchiveReconciliation(
+                                      reconciliation.id,
+                                      "acknowledged",
+                                      null,
+                                    );
+                                    await refresh();
+                                  }}
+                                >
+                                  Ele al
+                                </button>
+                              ) : null}
+                              {["owner", "admin"].includes(user.role) &&
+                              ["open", "acknowledged"].includes(
+                                reconciliation.handlingStatus,
+                              ) ? (
+                                <button
+                                  className="secondary"
+                                  onClick={async () => {
+                                    const notes = window.prompt(
+                                      "Çözüm notu (zorunlu)",
+                                    );
+                                    if (!notes?.trim()) return;
+                                    await api.updateArchiveReconciliation(
+                                      reconciliation.id,
+                                      "resolved",
+                                      notes.trim(),
+                                    );
+                                    await refresh();
+                                  }}
+                                >
+                                  Çöz
+                                </button>
+                              ) : null}
+                              {!["owner", "admin"].includes(user.role) ||
+                              !["open", "acknowledged"].includes(
+                                reconciliation.handlingStatus,
+                              )
+                                ? "—"
+                                : null}
+                            </td>
                           </tr>
                         ),
                       )}
