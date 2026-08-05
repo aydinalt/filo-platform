@@ -3307,6 +3307,21 @@ function Dashboard({
                             ? "Açık"
                             : "Kapalı"}
                         </button>
+                        <button
+                          className="secondary"
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                "Son temas süresini aşmış yarım kalan arşivleme denemeleri uzlaştırılsın mı? İşlem otomatik yeniden deneme başlatmaz.",
+                              )
+                            )
+                              return;
+                            await api.reconcileStaleNotificationArchives();
+                            await refresh();
+                          }}
+                        >
+                          Şimdi uzlaştır
+                        </button>
                       </>
                     )}
                     <button

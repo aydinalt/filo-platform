@@ -321,6 +321,7 @@ export const updateNotificationRetentionSchema=z.object({readRetentionDays:z.num
 export const runNotificationArchiveSchema=z.object({tenantId:z.string().uuid(),actorUserId:z.string().uuid(),runKey:z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/)});
 export const retryNotificationArchiveSchema=z.object({attemptId:z.string().uuid()});
 export const reconcileNotificationArchiveAttemptsSchema=z.object({tenantId:z.string().uuid(),actorUserId:z.string().uuid(),reconciliationKey:z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/)});
+export const manualReconcileNotificationArchiveSchema=z.object({confirmation:z.literal("RECONCILE_STALE_ATTEMPTS")});
 export const createNotificationRuleSchema=z.object({name:z.string().trim().min(2).max(120),sourceType:z.enum(["maintenance","document","action","safety_event","incident"]),leadDays:z.number().int().min(0).max(365).default(0),severity:z.enum(["info","warning","critical"]),targetRole:z.enum(["owner","admin","operator","viewer"]).nullable().default(null)});
 export const updateNotificationRuleSchema=z.object({status:z.enum(["active","inactive"])});
 export type CreateNotificationRuleInput=z.infer<typeof createNotificationRuleSchema>;

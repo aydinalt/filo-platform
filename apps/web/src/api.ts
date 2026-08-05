@@ -100,6 +100,7 @@ export const api = {
   ,notificationRetention: () => request<NotificationRetention>("/api/notifications/retention")
   ,updateNotificationRetention: (settings:Pick<NotificationRetentionSettings,"readRetentionDays"|"automaticArchiveEnabled"|"archiveIntervalHours"|"archiveBatchSize"|"automaticReconciliationEnabled"|"reconciliationIntervalMinutes"|"reconciliationStaleAfterMinutes">) => request<void>("/api/notifications/retention",{method:"PUT",body:JSON.stringify(settings)})
   ,archiveEligibleNotifications: () => request<{accepted:true;failed:boolean;attempt:NotificationArchiveAttempt;result?:{skipped:boolean;run?:NotificationArchiveRun}}>("/api/notifications/archive",{method:"POST"})
+  ,reconcileStaleNotificationArchives: () => request<{accepted:true;reconciledCount:number;source:"manual"}|{accepted:false;reason:"duplicate"}>("/api/notifications/retention/reconcile",{method:"POST",body:JSON.stringify({confirmation:"RECONCILE_STALE_ATTEMPTS"})})
   ,retryNotificationArchive: (attemptId:string) => request<{accepted:true;failed:boolean;attempt:NotificationArchiveAttempt}>(`/api/notifications/retention/attempts/${attemptId}/retry`,{method:"POST"})
   ,notificationPreferences: () => request<{preferences:NotificationPreferences}>("/api/notification-deliveries/preferences")
   ,updateNotificationPreferences: (input:Omit<NotificationPreferences,"updatedAt">) => request<void>("/api/notification-deliveries/preferences",{method:"PUT",body:JSON.stringify(input)})
