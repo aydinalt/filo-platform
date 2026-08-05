@@ -20,6 +20,19 @@ const outcomeCodeBySkipReason: Record<ArchiveSkipReason, string> = {
   attempt_not_running: "ATTEMPT_NOT_RUNNING",
 };
 
+export function archiveReconciliationNotificationCopy(
+  reconciledCount: number,
+) {
+  if (!Number.isInteger(reconciledCount) || reconciledCount < 1) return null;
+  return {
+    sourceType: "archive_reconciliation" as const,
+    title: "Arşivleme denemeleri uzlaştırıldı",
+    message: `${reconciledCount} yarım kalmış arşivleme denemesi güvenli biçimde başarısız olarak işaretlendi. Kontrollü yeniden deneme gerekebilir.`,
+    severity: "warning" as const,
+    actionTarget: null,
+  };
+}
+
 export async function loadNotificationRetentionState(client: TenantClient) {
   const row = (
     await client.query(
@@ -83,6 +96,33 @@ export async function countEligibleNotifications(
     )
   ).rows[0];
   return row?.count ?? 0;
+}
+
+async function createArchiveReconciliationNotifications(
+  client: TenantClient,
+  tenantId: string,
+  reconciliationId: string,
+  reconciledCount: number,
+) {
+  const copy = archiveReconciliationNotificationCopy(reconciledCount);
+  if (!copy) return 0;
+  const result = await client.query(
+    `INSERT INTO in_app_notifications(tenant_id,rule_id,source_type,source_id,title,message,severity,vehicle_id,recipient_user_id,dedupe_key)
+     SELECT $1,NULL,$2,$3,$4,$5,$6,NULL,m.user_id,$7
+     FROM memberships m
+     WHERE m.tenant_id=$1 AND m.role IN ('owner','admin','operator')
+     ON CONFLICT DO NOTHING`,
+    [
+      tenantId,
+      copy.sourceType,
+      reconciliationId,
+      copy.title,
+      copy.message,
+      copy.severity,
+      `archive-reconciliation:${reconciliationId}`,
+    ],
+  );
+  return result.rowCount ?? 0;
 }
 
 export async function runNotificationArchive(
@@ -449,11 +489,18 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
       ],
     );
     const reconciledCount = reconciled.rowCount ?? 0;
+    const notificationsCreated =
+      await createArchiveReconciliationNotifications(
+        client,
+        input.tenantId,
+        reconciliation.id,
+        reconciledCount,
+      );
     await client.query(
-      `UPDATE notification_archive_reconciliations SET reconciled_count=$2 WHERE id=$1`,
-      [reconciliation.id, reconciledCount],
+      `UPDATE notification_archive_reconciliations SET reconciled_count=$2,notifications_created=$3 WHERE id=$1`,
+      [reconciliation.id, reconciledCount, notificationsCreated],
     );
-    const summary = { reconciledCount, source };
+    const summary = { reconciledCount, notificationsCreated, source };
     await client.query(
       `INSERT INTO notification_retention_settings(tenant_id,updated_by,last_reconciliation_at,last_reconciliation_key,last_reconciliation_summary) VALUES($1,$2,now(),$3,$4::jsonb) ON CONFLICT(tenant_id) DO UPDATE SET last_reconciliation_at=EXCLUDED.last_reconciliation_at,last_reconciliation_key=EXCLUDED.last_reconciliation_key,last_reconciliation_summary=EXCLUDED.last_reconciliation_summary,updated_at=now()`,
       [
@@ -473,6 +520,7 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
           reconciliationKey: input.reconciliationKey,
           staleAfterMinutes: settings.reconciliationStaleAfterMinutes,
           reconciledCount,
+          notificationsCreated,
           source,
         }),
       ],
@@ -483,6 +531,7 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
       reconciliationKey: input.reconciliationKey,
       staleAfterMinutes: settings.reconciliationStaleAfterMinutes,
       reconciledCount,
+      notificationsCreated,
       source,
       createdAt: reconciliation.createdAt.toISOString(),
       settings: await loadNotificationRetentionState(client),

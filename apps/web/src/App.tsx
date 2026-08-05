@@ -3531,6 +3531,7 @@ function Dashboard({
                         <th>Kaynak</th>
                         <th>Süre aşımı</th>
                         <th>Uzlaştırılan</th>
+                        <th>Uyarı</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3551,6 +3552,7 @@ function Dashboard({
                               {reconciliation.staleAfterMinutes} dakika
                             </td>
                             <td>{reconciliation.reconciledCount}</td>
+                            <td>{reconciliation.notificationsCreated}</td>
                           </tr>
                         ),
                       )}
