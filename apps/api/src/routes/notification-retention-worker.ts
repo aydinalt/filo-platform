@@ -16,7 +16,7 @@ export async function notificationRetentionWorkerRoutes(app:FastifyInstance){
   app.post("/reconcile-attempts",{preHandler:requireNotificationWorker},async(request,reply)=>{
     const parsed=reconcileNotificationArchiveAttemptsSchema.safeParse(request.body);
     if(!parsed.success)return reply.code(400).send({error:"INVALID_NOTIFICATION_ARCHIVE_RECONCILIATION"});
-    const result=await reconcileStaleNotificationArchiveAttempts(parsed.data);
+    const result=await reconcileStaleNotificationArchiveAttempts({...parsed.data,source:"scheduler"});
     if(!result.accepted)return reply.code(result.reason==="invalid_actor"?403:200).send(result);
     return reply.code(result.reconciledCount>0?202:200).send(result);
   });

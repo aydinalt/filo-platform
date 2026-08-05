@@ -23,13 +23,21 @@ const outcomeCodeBySkipReason: Record<ArchiveSkipReason, string> = {
 export async function loadNotificationRetentionState(client: TenantClient) {
   const row = (
     await client.query(
-      `SELECT read_retention_days AS "readRetentionDays",automatic_archive_enabled AS "automaticArchiveEnabled",archive_interval_hours AS "archiveIntervalHours",archive_batch_size AS "archiveBatchSize",last_archive_at AS "lastArchiveAt",last_archive_key AS "lastArchiveKey",last_archive_summary AS "lastArchiveSummary",updated_at AS "updatedAt" FROM notification_retention_settings`,
+      `SELECT read_retention_days AS "readRetentionDays",automatic_archive_enabled AS "automaticArchiveEnabled",archive_interval_hours AS "archiveIntervalHours",archive_batch_size AS "archiveBatchSize",last_archive_at AS "lastArchiveAt",last_archive_key AS "lastArchiveKey",last_archive_summary AS "lastArchiveSummary",automatic_reconciliation_enabled AS "automaticReconciliationEnabled",reconciliation_interval_minutes AS "reconciliationIntervalMinutes",reconciliation_stale_after_minutes AS "reconciliationStaleAfterMinutes",last_reconciliation_at AS "lastReconciliationAt",last_reconciliation_key AS "lastReconciliationKey",last_reconciliation_summary AS "lastReconciliationSummary",updated_at AS "updatedAt" FROM notification_retention_settings`,
     )
   ).rows[0];
   const readRetentionDays = row?.readRetentionDays ?? 90;
   const automaticArchiveEnabled = row?.automaticArchiveEnabled ?? false;
   const archiveIntervalHours = row?.archiveIntervalHours ?? 24;
   const lastArchiveAt = row?.lastArchiveAt?.toISOString() ?? null;
+  const automaticReconciliationEnabled =
+    row?.automaticReconciliationEnabled ?? false;
+  const reconciliationIntervalMinutes =
+    row?.reconciliationIntervalMinutes ?? 15;
+  const reconciliationStaleAfterMinutes =
+    row?.reconciliationStaleAfterMinutes ?? 15;
+  const lastReconciliationAt =
+    row?.lastReconciliationAt?.toISOString() ?? null;
   return {
     readRetentionDays,
     automaticArchiveEnabled,
@@ -43,6 +51,20 @@ export async function loadNotificationRetentionState(client: TenantClient) {
         ? new Date(
             new Date(lastArchiveAt).getTime() +
               archiveIntervalHours * 3_600_000,
+          ).toISOString()
+        : new Date().toISOString()
+      : null,
+    automaticReconciliationEnabled,
+    reconciliationIntervalMinutes,
+    reconciliationStaleAfterMinutes,
+    lastReconciliationAt,
+    lastReconciliationKey: row?.lastReconciliationKey ?? null,
+    lastReconciliationSummary: row?.lastReconciliationSummary ?? null,
+    nextReconciliationDueAt: automaticReconciliationEnabled
+      ? lastReconciliationAt
+        ? new Date(
+            new Date(lastReconciliationAt).getTime() +
+              reconciliationIntervalMinutes * 60_000,
           ).toISOString()
         : new Date().toISOString()
       : null,
@@ -367,7 +389,8 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
   tenantId: string;
   actorUserId: string;
   reconciliationKey: string;
-  staleAfterMinutes: number;
+  source?: "manual" | "scheduler";
+  force?: boolean;
 }) {
   return withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
     const actor = await client.query(
@@ -386,14 +409,30 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
     if (!lock?.acquired)
       return { accepted: false as const, reason: "archive_in_progress" as const };
 
+    const settings = await loadNotificationRetentionState(client);
+    const source = input.source ?? "scheduler";
+    if (!input.force && !settings.automaticReconciliationEnabled)
+      return { accepted: false as const, reason: "disabled" as const };
+    if (
+      !input.force &&
+      settings.nextReconciliationDueAt &&
+      new Date(settings.nextReconciliationDueAt).getTime() > Date.now()
+    )
+      return {
+        accepted: false as const,
+        reason: "not_due" as const,
+        nextDueAt: settings.nextReconciliationDueAt,
+      };
+
     const reconciliation = (
       await client.query(
-        `INSERT INTO notification_archive_reconciliations(tenant_id,reconciliation_key,stale_after_minutes,initiated_by) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id,created_at AS "createdAt"`,
+        `INSERT INTO notification_archive_reconciliations(tenant_id,reconciliation_key,stale_after_minutes,initiated_by,source) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id,created_at AS "createdAt"`,
         [
           input.tenantId,
           input.reconciliationKey,
-          input.staleAfterMinutes,
+          settings.reconciliationStaleAfterMinutes,
           input.actorUserId,
+          source,
         ],
       )
     ).rows[0];
@@ -406,13 +445,23 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
         input.tenantId,
         input.actorUserId,
         reconciliation.id,
-        input.staleAfterMinutes,
+        settings.reconciliationStaleAfterMinutes,
       ],
     );
     const reconciledCount = reconciled.rowCount ?? 0;
     await client.query(
       `UPDATE notification_archive_reconciliations SET reconciled_count=$2 WHERE id=$1`,
       [reconciliation.id, reconciledCount],
+    );
+    const summary = { reconciledCount, source };
+    await client.query(
+      `INSERT INTO notification_retention_settings(tenant_id,updated_by,last_reconciliation_at,last_reconciliation_key,last_reconciliation_summary) VALUES($1,$2,now(),$3,$4::jsonb) ON CONFLICT(tenant_id) DO UPDATE SET last_reconciliation_at=EXCLUDED.last_reconciliation_at,last_reconciliation_key=EXCLUDED.last_reconciliation_key,last_reconciliation_summary=EXCLUDED.last_reconciliation_summary,updated_at=now()`,
+      [
+        input.tenantId,
+        input.actorUserId,
+        input.reconciliationKey,
+        JSON.stringify(summary),
+      ],
     );
     await client.query(
       `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_archive.attempts_reconciled','notification_archive_reconciliation',$3,$4::jsonb)`,
@@ -422,8 +471,9 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
         reconciliation.id,
         JSON.stringify({
           reconciliationKey: input.reconciliationKey,
-          staleAfterMinutes: input.staleAfterMinutes,
+          staleAfterMinutes: settings.reconciliationStaleAfterMinutes,
           reconciledCount,
+          source,
         }),
       ],
     );
@@ -431,9 +481,11 @@ export async function reconcileStaleNotificationArchiveAttempts(input: {
       accepted: true as const,
       reconciliationId: reconciliation.id as string,
       reconciliationKey: input.reconciliationKey,
-      staleAfterMinutes: input.staleAfterMinutes,
+      staleAfterMinutes: settings.reconciliationStaleAfterMinutes,
       reconciledCount,
+      source,
       createdAt: reconciliation.createdAt.toISOString(),
+      settings: await loadNotificationRetentionState(client),
     };
   });
 }

@@ -3289,6 +3289,24 @@ function Dashboard({
                             ? "Açık"
                             : "Kapalı"}
                         </button>
+                        <button
+                          className="secondary"
+                          onClick={async () => {
+                            await api.updateNotificationRetention({
+                              ...notificationRetention.settings,
+                              automaticReconciliationEnabled:
+                                !notificationRetention.settings
+                                  .automaticReconciliationEnabled,
+                            });
+                            await refresh();
+                          }}
+                        >
+                          Uzlaştırma:{" "}
+                          {notificationRetention.settings
+                            .automaticReconciliationEnabled
+                            ? "Açık"
+                            : "Kapalı"}
+                        </button>
                       </>
                     )}
                     <button
@@ -3320,6 +3338,31 @@ function Dashboard({
                   {notificationRetention.settings.nextDueAt
                     ? new Date(
                         notificationRetention.settings.nextDueAt,
+                      ).toLocaleString("tr-TR")
+                    : "—"}
+                </p>
+                <p>
+                  Yarım kalan deneme uzlaştırması:{" "}
+                  {notificationRetention.settings
+                    .automaticReconciliationEnabled
+                    ? `${notificationRetention.settings.reconciliationIntervalMinutes} dakikada bir`
+                    : "Kapalı"}{" "}
+                  · Süre aşımı:{" "}
+                  {
+                    notificationRetention.settings
+                      .reconciliationStaleAfterMinutes
+                  }{" "}
+                  dakika · Son çalışma:{" "}
+                  {notificationRetention.settings.lastReconciliationAt
+                    ? new Date(
+                        notificationRetention.settings.lastReconciliationAt,
+                      ).toLocaleString("tr-TR")
+                    : "—"}{" "}
+                  · Sonraki:{" "}
+                  {notificationRetention.settings.nextReconciliationDueAt
+                    ? new Date(
+                        notificationRetention.settings
+                          .nextReconciliationDueAt,
                       ).toLocaleString("tr-TR")
                     : "—"}
                 </p>
@@ -3456,6 +3499,52 @@ function Dashboard({
                 {!notificationRetention.recentAttempts.length && (
                   <div className="empty">
                     <b>Henüz çalıştırma denemesi yok</b>
+                  </div>
+                )}
+                <div className="section-head">
+                  <div>
+                    <p className="eyebrow">UZLAŞTIRMA GEÇMİŞİ</p>
+                    <h3>Yarım kalan deneme taramaları</h3>
+                  </div>
+                  <small>Uzlaştırma, yeniden denemeyi otomatik başlatmaz.</small>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Çalıştırma</th>
+                        <th>Kaynak</th>
+                        <th>Süre aşımı</th>
+                        <th>Uzlaştırılan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {notificationRetention.recentReconciliations.map(
+                        (reconciliation) => (
+                          <tr key={reconciliation.id}>
+                            <td>
+                              {new Date(
+                                reconciliation.createdAt,
+                              ).toLocaleString("tr-TR")}
+                            </td>
+                            <td>
+                              {reconciliation.source === "scheduler"
+                                ? "Zamanlayıcı"
+                                : "Manuel"}
+                            </td>
+                            <td>
+                              {reconciliation.staleAfterMinutes} dakika
+                            </td>
+                            <td>{reconciliation.reconciledCount}</td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {!notificationRetention.recentReconciliations.length && (
+                  <div className="empty">
+                    <b>Henüz uzlaştırma çalıştırması yok</b>
                   </div>
                 )}
               </section>
