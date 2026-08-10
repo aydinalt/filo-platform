@@ -75,6 +75,7 @@ export function interruptedReminderRunPolicy() {
   return {
     staleAfterMinutes: 15,
     outcomeCode: "REMINDER_SCAN_INTERRUPTED" as const,
+    maintenanceOutcomeCode: "REMINDER_MAINTENANCE_COMPLETED" as const,
   };
 }
 
@@ -103,6 +104,22 @@ export async function reconcileInterruptedArchiveReconciliationReminderRuns(inpu
       return { accepted: false as const, reason: "maintenance_in_progress" as const };
 
     const policy = interruptedReminderRunPolicy();
+    const existing = (
+      await client.query(
+        `SELECT maintenance_key AS "maintenanceKey",source,reconciled_count AS "reconciledCount",outcome_code AS "maintenanceOutcomeCode",stale_after_minutes AS "staleAfterMinutes"
+         FROM notification_archive_reconciliation_reminder_maintenance_runs
+         WHERE maintenance_key=$1`,
+        [input.maintenanceKey],
+      )
+    ).rows[0];
+    if (existing)
+      return {
+        accepted: true as const,
+        duplicate: true as const,
+        ...existing,
+        outcomeCode: policy.outcomeCode,
+      };
+
     const interrupted = (
       await client.query(
         `UPDATE notification_archive_reconciliation_reminder_runs
@@ -120,11 +137,16 @@ export async function reconcileInterruptedArchiveReconciliationReminderRuns(inpu
       );
     }
     await client.query(
+      `INSERT INTO notification_archive_reconciliation_reminder_maintenance_runs(tenant_id,maintenance_key,source,reconciled_count,outcome_code,stale_after_minutes,initiated_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7)`,
+      [input.tenantId, input.maintenanceKey, source, interrupted.length, policy.maintenanceOutcomeCode, policy.staleAfterMinutes, input.actorUserId],
+    );
+    await client.query(
       `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
        VALUES($1,$2,'notification_archive.interrupted_reminder_runs_reconciled','notification_retention',$1,$3::jsonb)`,
-      [input.tenantId, input.actorUserId, JSON.stringify({ maintenanceKey: input.maintenanceKey, source, reconciledCount: interrupted.length, outcomeCode: policy.outcomeCode, staleAfterMinutes: policy.staleAfterMinutes })],
+      [input.tenantId, input.actorUserId, JSON.stringify({ maintenanceKey: input.maintenanceKey, source, reconciledCount: interrupted.length, outcomeCode: policy.outcomeCode, maintenanceOutcomeCode: policy.maintenanceOutcomeCode, staleAfterMinutes: policy.staleAfterMinutes })],
     );
-    return { accepted: true as const, maintenanceKey: input.maintenanceKey, source, reconciledCount: interrupted.length, ...policy };
+    return { accepted: true as const, duplicate: false as const, maintenanceKey: input.maintenanceKey, source, reconciledCount: interrupted.length, ...policy };
   });
 }
 

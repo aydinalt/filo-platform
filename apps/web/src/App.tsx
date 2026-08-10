@@ -3776,6 +3776,35 @@ function Dashboard({
                 {!notificationRetention.recentReminderRuns.length && (
                   <div className="empty"><b>Henüz hatırlatma taraması yok</b></div>
                 )}
+                <div className="section-head">
+                  <div>
+                    <p className="eyebrow">BAKIM GEÇMİŞİ</p>
+                    <h3>Yarım kalan tarama temizliği</h3>
+                  </div>
+                  <small>Aynı bakım anahtarı yalnız bir kez işlenir.</small>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>Tamamlanma</th><th>Kaynak</th><th>Başlatan</th><th>Süre aşımı</th><th>Kapatılan</th><th>Sonuç</th></tr>
+                    </thead>
+                    <tbody>
+                      {notificationRetention.recentReminderMaintenanceRuns.map((run) => (
+                        <tr key={run.id}>
+                          <td>{new Date(run.completedAt).toLocaleString("tr-TR")}</td>
+                          <td>{run.source === "scheduler" ? "Zamanlayıcı" : "Manuel"}</td>
+                          <td>{run.initiatedByName ?? "Sistem kullanıcısı"}</td>
+                          <td>{run.staleAfterMinutes} dakika</td>
+                          <td>{run.reconciledCount}</td>
+                          <td>{run.outcomeCode}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!notificationRetention.recentReminderMaintenanceRuns.length && (
+                  <div className="empty"><b>Henüz bakım çalışması yok</b></div>
+                )}
               </section>
             )}
             {user.role !== "viewer" && notificationAnalytics && (

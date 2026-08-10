@@ -26,7 +26,14 @@ describe("interrupted reminder run maintenance", () => {
     assert.deepEqual(interruptedReminderRunPolicy(), {
       staleAfterMinutes: 15,
       outcomeCode: "REMINDER_SCAN_INTERRUPTED",
+      maintenanceOutcomeCode: "REMINDER_MAINTENANCE_COMPLETED",
     });
+  });
+
+  it("keeps maintenance completion evidence bounded", () => {
+    const { maintenanceOutcomeCode } = interruptedReminderRunPolicy();
+    assert.equal(maintenanceOutcomeCode, "REMINDER_MAINTENANCE_COMPLETED");
+    assert.match(maintenanceOutcomeCode, /^REMINDER_MAINTENANCE_[A-Z_]+$/);
   });
 });
 
