@@ -26,9 +26,9 @@ type LoginRateLimitSnapshot = {
 
 type LoginRateLimitBucketResult = LoginRateLimitResult & LoginRateLimitSnapshot;
 
-type PersistentLoginRateLimitResult = LoginRateLimitResult & {
-  accountSnapshot: LoginRateLimitSnapshot;
-};
+type PersistentLoginRateLimitResult =
+  | { limited: true; retryAfter: number; accountSnapshot: null }
+  | { limited: false; retryAfter: 0; accountSnapshot: LoginRateLimitSnapshot };
 
 const bucketSql = `WITH stale AS (
   SELECT scope, key_hash
@@ -68,6 +68,13 @@ SELECT attempt_count > $3::integer AS limited,
        GREATEST(1, CEIL(EXTRACT(EPOCH FROM expires_at - now())))::integer AS "retryAfter"
 FROM attempt`;
 
+const activeBucketSql = `SELECT attempt_count > $3::integer AS limited,
+       attempt_count AS "attemptCount",
+       window_started_at::text AS "windowStartedAt",
+       GREATEST(1, CEIL(EXTRACT(EPOCH FROM expires_at - now())))::integer AS "retryAfter"
+FROM auth_login_rate_limits
+WHERE scope = $1 AND key_hash = $2 AND expires_at > now()`;
+
 export function loginRateLimitKey(scope: LoginRateLimitScope, value: string) {
   return createHmac("sha256", config.sessionSecret)
     .update(`filo-login-rate-limit-v1:${scope}:${value}`)
@@ -90,6 +97,20 @@ export async function consumeLoginRateLimitBucket(
   const row = result.rows[0];
   if (!row) throw new Error("Login rate limit result is missing");
   return row;
+}
+
+export async function readActiveLoginRateLimitBucket(
+  scope: LoginRateLimitScope,
+  value: string,
+  maxAttempts: number,
+  query: RateLimitBucketQuery = (sql, values) => pool.query(sql, values),
+): Promise<LoginRateLimitBucketResult | null> {
+  const result = await query(activeBucketSql, [
+    scope,
+    loginRateLimitKey(scope, value),
+    maxAttempts,
+  ]);
+  return result.rows[0] ?? null;
 }
 
 export async function clearUnchangedLoginRateLimitBucket(
@@ -123,6 +144,22 @@ export async function consumePersistentLoginAttempt(
     config.authLoginRateLimitWindowMs,
     query,
   );
+  if (ipBucket.limited) {
+    const accountBucket = await readActiveLoginRateLimitBucket(
+      "account",
+      normalizedEmail,
+      config.authLoginRateLimitMax,
+      query,
+    );
+    return {
+      limited: true,
+      retryAfter: Math.max(
+        ipBucket.retryAfter,
+        accountBucket?.limited ? accountBucket.retryAfter : 0,
+      ),
+      accountSnapshot: null,
+    };
+  }
   const accountBucket = await consumeLoginRateLimitBucket(
     "account",
     normalizedEmail,
@@ -130,12 +167,16 @@ export async function consumePersistentLoginAttempt(
     config.authLoginRateLimitWindowMs,
     query,
   );
-  const retryAfter = [ipBucket, accountBucket]
-    .filter((bucket) => bucket.limited)
-    .reduce((longest, bucket) => Math.max(longest, bucket.retryAfter), 0);
+  if (accountBucket.limited) {
+    return {
+      limited: true,
+      retryAfter: accountBucket.retryAfter,
+      accountSnapshot: null,
+    };
+  }
   return {
-    limited: ipBucket.limited || accountBucket.limited,
-    retryAfter,
+    limited: false,
+    retryAfter: 0,
     accountSnapshot: {
       attemptCount: accountBucket.attemptCount,
       windowStartedAt: accountBucket.windowStartedAt,

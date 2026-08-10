@@ -94,7 +94,7 @@ describe("security primitives", () => {
         calls.push(values);
         return {
           rows: [{
-            limited: calls.length === 2,
+            limited: false,
             retryAfter: calls.length === 2 ? 55 : 30,
             attemptCount: calls.length,
             windowStartedAt,
@@ -108,8 +108,8 @@ describe("security primitives", () => {
     assert.equal(calls[0]?.[1], ipKey);
     assert.equal(calls[1]?.[1], accountKey);
     assert.deepEqual(combined, {
-      limited: true,
-      retryAfter: 55,
+      limited: false,
+      retryAfter: 0,
       accountSnapshot: { attemptCount: 2, windowStartedAt },
     });
   });
@@ -162,12 +162,15 @@ describe("security primitives", () => {
     );
     assert.equal(accountOnly.limited, true);
     assert.equal(accountOnly.retryAfter, 2);
+    assert.equal(accountOnly.accountSnapshot, null);
 
     const bothCalls: unknown[][] = [];
+    const bothSql: string[] = [];
     const both = await consumePersistentLoginAttempt(
       "203.0.113.27",
       "person@example.test",
-      async (_sql, values) => {
+      async (sql, values) => {
+        bothSql.push(sql);
         bothCalls.push(values);
         return {
           rows: [{
@@ -181,6 +184,51 @@ describe("security primitives", () => {
     );
     assert.equal(both.limited, true);
     assert.equal(both.retryAfter, 25);
+    assert.equal(both.accountSnapshot, null);
+    assert.match(bothSql[0] ?? "", /INSERT INTO auth_login_rate_limits/u);
+    assert.doesNotMatch(bothSql[1] ?? "", /INSERT|UPDATE|DELETE/u);
+  });
+
+  it("does not consume an account budget after the IP bucket limits login", async () => {
+    const { consumePersistentLoginAttempt, loginRateLimitKey } = await import(
+      "../src/lib/login-rate-limit.js"
+    );
+    const rawEmail = "target@example.test";
+    const sqlCalls: string[] = [];
+    const valueCalls: unknown[][] = [];
+    const result = await consumePersistentLoginAttempt(
+      "203.0.113.28",
+      rawEmail,
+      async (sql, values) => {
+        sqlCalls.push(sql);
+        valueCalls.push(values);
+        return {
+          rows: sqlCalls.length === 1
+            ? [{
+                limited: true,
+                retryAfter: 18,
+                attemptCount: 6,
+                windowStartedAt: "2026-08-10 12:00:00.123456+00",
+              }]
+            : [],
+        };
+      },
+    );
+
+    assert.deepEqual(result, {
+      limited: true,
+      retryAfter: 18,
+      accountSnapshot: null,
+    });
+    assert.equal(sqlCalls.length, 2);
+    assert.match(sqlCalls[0] ?? "", /INSERT INTO auth_login_rate_limits/u);
+    assert.match(sqlCalls[1] ?? "", /FROM auth_login_rate_limits/u);
+    assert.doesNotMatch(sqlCalls[1] ?? "", /INSERT|UPDATE|DELETE/u);
+    assert.deepEqual(valueCalls[1], [
+      "account",
+      loginRateLimitKey("account", rawEmail),
+      5,
+    ]);
   });
 
   it("passes the consumed account snapshot into the session transaction", () => {

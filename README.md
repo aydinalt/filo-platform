@@ -127,7 +127,9 @@ Sayaç güncelleme sorgusunun karşılaştırmalı sıfırlama için gereken den
 ve tam hassasiyetli pencere başlangıcını gerçekten döndürmesi regresyon testiyle
 korunur. `Retry-After` yalnız gerçekten girişe engel olan sayaçların kalan
 süresinden hesaplanır; engellememiş bir IP veya hesap penceresi kullanıcıya
-gereksiz ek bekleme süresi yüklemez.
+gereksiz ek bekleme süresi yüklemez. Kaynak IP zaten engelliyse hesap sayacı
+artırılmaz; yalnız daha uzun bir mevcut hesap kilidini bildirmek için salt okunur
+kontrol edilir. Böylece engellenmiş tek bir IP farklı hesapların bütçesini tüketemez.
 
 Korumalı her API isteğinde imzalı oturumdaki kullanıcı ve tenant kimliği mevcut
 veritabanı üyeliğiyle yeniden doğrulanır. Devre dışı bırakılan kullanıcı veya
