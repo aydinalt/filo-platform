@@ -5,6 +5,7 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { checkDatabaseConnection } from "@filo/database";
 import { config } from "./config.js";
+import { requireTrustedMutation } from "./lib/csrf.js";
 import {
   createLoggerOptions,
   createRequestId,
@@ -60,6 +61,7 @@ export async function buildApp({ readinessCheck = checkDatabaseConnection }: Bui
 
   app.addHook("onRequest", async (request, reply) => {
     reply.header("x-request-id", request.id);
+    return requireTrustedMutation(request, reply);
   });
 
   app.setErrorHandler((error, request, reply) => {

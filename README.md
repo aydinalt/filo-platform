@@ -123,5 +123,9 @@ veritabanı üyeliğiyle yeniden doğrulanır. Devre dışı bırakılan kullan�
 kaldırılan üyelik bir sonraki istekte reddedilir; rol değişikliği de yeni oturum
 açılması beklenmeden güncel yetkilendirmeye yansır.
 
+Tarayıcıdan gelen tüm durum değiştiren API istekleri özel CSRF başlığı ve, mevcutsa,
+tam `WEB_ORIGIN` eşleşmesiyle doğrulanır. Provider webhook'ları ve anahtarla korunan
+iç işçi endpoint'leri bu tarayıcı sınırından ayrı tutulur.
+
 > Gerçek kullanıcı verisi açılmadan önce seçilen PostgreSQL planında PITR ve
 > restore provası ayrıca tamamlanmalıdır.

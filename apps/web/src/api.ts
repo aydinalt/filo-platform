@@ -6,10 +6,16 @@ import type { CreateNotificationTemplateInput, NotificationTemplate } from "@fil
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const headers = new Headers(init?.headers);
+  headers.set("content-type", "application/json");
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    headers.set("x-filo-csrf", "1");
+  }
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     credentials: "include",
-    headers: { "content-type": "application/json", ...init?.headers }
+    headers
   });
   if (response.status === 204) return undefined as T;
   const body = await response.json();

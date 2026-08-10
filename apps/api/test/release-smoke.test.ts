@@ -111,12 +111,65 @@ describe("release smoke boundaries", () => {
     assert.deepEqual(response.json(), { error: "AUTH_REQUIRED" });
   });
 
+  it("rejects browser mutations without the CSRF request header", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      headers: { origin: process.env.WEB_ORIGIN! },
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.deepEqual(response.json(), { error: "CSRF_REJECTED" });
+  });
+
+  it("rejects browser mutations from a foreign origin", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      headers: {
+        origin: "https://attacker.example.test",
+        "x-filo-csrf": "1",
+      },
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.deepEqual(response.json(), { error: "CSRF_REJECTED" });
+  });
+
+  it("accepts a trusted browser mutation while keeping non-browser routes separate", async () => {
+    const logoutResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      headers: {
+        origin: process.env.WEB_ORIGIN!,
+        "x-filo-csrf": "1",
+      },
+    });
+    const workerResponse = await app.inject({
+      method: "POST",
+      url: "/api/internal/notification-retention/reconcile-interrupted-reminder-runs",
+      payload: {},
+    });
+    const webhookResponse = await app.inject({
+      method: "POST",
+      url: "/api/provider-webhooks/tenant/provider",
+      payload: {},
+    });
+
+    assert.equal(logoutResponse.statusCode, 204);
+    assert.equal(workerResponse.statusCode, 401);
+    assert.deepEqual(workerResponse.json(), { error: "INVALID_WORKER_CREDENTIAL" });
+    assert.equal(webhookResponse.statusCode, 400);
+    assert.deepEqual(webhookResponse.json(), { error: "INVALID_PROVIDER_CALLBACK" });
+  });
+
   it("throttles repeated login attempts without exposing account details", async () => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const response = await app.inject({
         method: "POST",
         url: "/api/auth/login",
         remoteAddress: "203.0.113.10",
+        headers: { "x-filo-csrf": "1" },
         payload: {},
       });
       assert.equal(response.statusCode, 400);
@@ -127,6 +180,7 @@ describe("release smoke boundaries", () => {
       method: "POST",
       url: "/api/auth/login",
       remoteAddress: "203.0.113.10",
+      headers: { "x-filo-csrf": "1" },
       payload: {},
     });
 
