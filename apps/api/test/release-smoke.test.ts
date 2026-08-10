@@ -111,6 +111,29 @@ describe("release smoke boundaries", () => {
     assert.deepEqual(response.json(), { error: "AUTH_REQUIRED" });
   });
 
+  it("prevents API responses from being stored by browsers or shared caches", async () => {
+    const protectedResponse = await app.inject({
+      method: "GET",
+      url: "/api/vehicles?status=active",
+    });
+    const logoutResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      headers: {
+        origin: process.env.WEB_ORIGIN!,
+        "x-filo-csrf": "1",
+      },
+    });
+    const healthResponse = await app.inject({ method: "GET", url: "/health/live" });
+
+    assert.equal(protectedResponse.statusCode, 401);
+    assert.equal(protectedResponse.headers["cache-control"], "no-store");
+    assert.equal(logoutResponse.statusCode, 204);
+    assert.equal(logoutResponse.headers["cache-control"], "no-store");
+    assert.equal(healthResponse.statusCode, 200);
+    assert.equal(healthResponse.headers["cache-control"], undefined);
+  });
+
   it("rejects browser mutations without the CSRF request header", async () => {
     const response = await app.inject({
       method: "POST",

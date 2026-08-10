@@ -64,6 +64,13 @@ export async function buildApp({ readinessCheck = checkDatabaseConnection }: Bui
     return requireTrustedMutation(request, reply);
   });
 
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (request.url === "/api" || request.url.startsWith("/api/")) {
+      reply.header("cache-control", "no-store");
+    }
+    return payload;
+  });
+
   app.setErrorHandler((error, request, reply) => {
     const statusCode = Number((error as { statusCode?: number }).statusCode);
     if (Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 500) {

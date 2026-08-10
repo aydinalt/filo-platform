@@ -131,6 +131,11 @@ gereksiz ek bekleme süresi yüklemez. Kaynak IP zaten engelliyse hesap sayacı
 artırılmaz; yalnız daha uzun bir mevcut hesap kilidini bildirmek için salt okunur
 kontrol edilir. Böylece engellenmiş tek bir IP farklı hesapların bütçesini tüketemez.
 
+`/api` sınırındaki başarılı ve hatalı tüm yanıtlar `Cache-Control: no-store`
+ile döner. Böylece oturum ve tenant verisi tarayıcıda, paylaşımlı önbellekte veya
+ara proxy katmanında kalıcı olarak saklanmaz. Sağlık endpoint'leri bu API veri
+sınırının dışında tutulur.
+
 Korumalı her API isteğinde imzalı oturumdaki kullanıcı ve tenant kimliği mevcut
 veritabanı üyeliğiyle yeniden doğrulanır. Devre dışı bırakılan kullanıcı veya
 kaldırılan üyelik bir sonraki istekte reddedilir; rol değişikliği de yeni oturum
