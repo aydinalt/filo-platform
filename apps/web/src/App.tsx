@@ -3746,6 +3746,34 @@ function Dashboard({
                     <b>Bu görünümde uzlaştırma kaydı yok</b>
                   </div>
                 )}
+                <div className="section-head">
+                  <div>
+                    <p className="eyebrow">HATIRLATMA GEÇMİŞİ</p>
+                    <h3>Gecikmiş iş taramaları</h3>
+                  </div>
+                  <small>Tarama geçmişi yeni işlem veya yeniden deneme başlatmaz.</small>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>Çalıştırma</th><th>Kaynak</th><th>Başlatan</th><th>Taranan</th><th>Oluşturulan uyarı</th></tr>
+                    </thead>
+                    <tbody>
+                      {notificationRetention.recentReminderRuns.map((run) => (
+                        <tr key={run.id}>
+                          <td>{new Date(run.createdAt).toLocaleString("tr-TR")}</td>
+                          <td>{run.source === "scheduler" ? "Zamanlayıcı" : "Manuel"}</td>
+                          <td>{run.initiatedByName ?? "Sistem kullanıcısı"}</td>
+                          <td>{run.scannedCount}</td>
+                          <td>{run.notificationsCreated}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!notificationRetention.recentReminderRuns.length && (
+                  <div className="empty"><b>Henüz hatırlatma taraması yok</b></div>
+                )}
               </section>
             )}
             {user.role !== "viewer" && notificationAnalytics && (

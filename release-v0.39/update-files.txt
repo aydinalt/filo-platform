@@ -1,0 +1,8 @@
+apps/api/package.json
+apps/api/src/routes/notifications.ts
+apps/web/src/App.tsx
+docs/LOCAL_UPDATE_v0.39.md
+package-lock.json
+package.json
+packages/contracts/src/index.ts
+release-v0.39/update-files.txt
