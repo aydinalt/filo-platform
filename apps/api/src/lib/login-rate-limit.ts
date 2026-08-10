@@ -130,9 +130,12 @@ export async function consumePersistentLoginAttempt(
     config.authLoginRateLimitWindowMs,
     query,
   );
+  const retryAfter = [ipBucket, accountBucket]
+    .filter((bucket) => bucket.limited)
+    .reduce((longest, bucket) => Math.max(longest, bucket.retryAfter), 0);
   return {
     limited: ipBucket.limited || accountBucket.limited,
-    retryAfter: Math.max(ipBucket.retryAfter, accountBucket.retryAfter),
+    retryAfter,
     accountSnapshot: {
       attemptCount: accountBucket.attemptCount,
       windowStartedAt: accountBucket.windowStartedAt,

@@ -1,7 +1,7 @@
 {
   "name": "filo-platform-v1",
   "private": true,
-  "version": "0.64.0",
+  "version": "0.65.0",
   "workspaces": [
     "apps/*",
     "packages/*"

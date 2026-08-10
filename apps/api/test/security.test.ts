@@ -139,6 +139,50 @@ describe("security primitives", () => {
     assert.deepEqual(clearValues, ["account", accountKey, 3, windowStartedAt]);
   });
 
+  it("reports retry time only from buckets that are actually limiting login", async () => {
+    const { consumePersistentLoginAttempt } = await import(
+      "../src/lib/login-rate-limit.js"
+    );
+    const accountOnlyCalls: unknown[][] = [];
+    const accountOnly = await consumePersistentLoginAttempt(
+      "203.0.113.26",
+      "person@example.test",
+      async (_sql, values) => {
+        accountOnlyCalls.push(values);
+        const accountBucket = accountOnlyCalls.length === 2;
+        return {
+          rows: [{
+            limited: accountBucket,
+            retryAfter: accountBucket ? 2 : 60,
+            attemptCount: accountOnlyCalls.length,
+            windowStartedAt: "2026-08-10 12:00:00.123456+00",
+          }],
+        };
+      },
+    );
+    assert.equal(accountOnly.limited, true);
+    assert.equal(accountOnly.retryAfter, 2);
+
+    const bothCalls: unknown[][] = [];
+    const both = await consumePersistentLoginAttempt(
+      "203.0.113.27",
+      "person@example.test",
+      async (_sql, values) => {
+        bothCalls.push(values);
+        return {
+          rows: [{
+            limited: true,
+            retryAfter: bothCalls.length === 1 ? 12 : 25,
+            attemptCount: bothCalls.length,
+            windowStartedAt: "2026-08-10 12:00:00.123456+00",
+          }],
+        };
+      },
+    );
+    assert.equal(both.limited, true);
+    assert.equal(both.retryAfter, 25);
+  });
+
   it("passes the consumed account snapshot into the session transaction", () => {
     const authRouteSource = readFileSync(
       new URL("../src/routes/auth.ts", import.meta.url),

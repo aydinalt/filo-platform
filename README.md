@@ -125,7 +125,9 @@ yenilemesi engellenir. Hesap sayacı yalnız doğrulama sırasında görülen s�
 değişmeden kaldıysa temizlenir; eşzamanlı yeni denemeler kaybolmaz.
 Sayaç güncelleme sorgusunun karşılaştırmalı sıfırlama için gereken deneme sayısı
 ve tam hassasiyetli pencere başlangıcını gerçekten döndürmesi regresyon testiyle
-korunur.
+korunur. `Retry-After` yalnız gerçekten girişe engel olan sayaçların kalan
+süresinden hesaplanır; engellememiş bir IP veya hesap penceresi kullanıcıya
+gereksiz ek bekleme süresi yüklemez.
 
 Korumalı her API isteğinde imzalı oturumdaki kullanıcı ve tenant kimliği mevcut
 veritabanı üyeliğiyle yeniden doğrulanır. Devre dışı bırakılan kullanıcı veya
