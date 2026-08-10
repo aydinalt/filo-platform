@@ -20,8 +20,22 @@ test("rejects unsafe relative paths", () => {
 });
 
 test("detects forbidden repository and package artifacts", () => {
-  const paths = ["node_modules/a.js", "apps/web/dist/a.js", ".env", "build.zip", "cache.tsbuildinfo"];
+  const paths = [
+    "node_modules/a.js",
+    "apps/web/dist/a.js",
+    ".env",
+    "build.zip",
+    "cache.tsbuildinfo",
+    "packages/contracts/src/README.md",
+    "packages/contracts/src/package-lock.json",
+    "packages/contracts/src/package.json",
+  ];
   assert.deepEqual(findForbiddenPaths(paths), paths);
+});
+
+test("allows legitimate package metadata outside the accidental source paths", () => {
+  const paths = ["packages/contracts/package.json", "packages/database/package.json", "README.md"];
+  assert.deepEqual(findForbiddenPaths(paths), []);
 });
 
 test("requires update manifests to be sorted and unique", () => {

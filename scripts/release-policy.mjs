@@ -12,6 +12,12 @@ const FORBIDDEN_DIRECTORY_NAMES = new Set([
   "node_modules",
 ]);
 
+const FORBIDDEN_EXACT_PATHS = new Set([
+  "packages/contracts/src/README.md",
+  "packages/contracts/src/package-lock.json",
+  "packages/contracts/src/package.json",
+]);
+
 export function isSafeRelativePath(value) {
   if (typeof value !== "string" || value.length === 0 || value !== value.trim()) return false;
   if (value.includes("\\") || value.includes("\0") || isAbsolute(value)) return false;
@@ -20,6 +26,7 @@ export function isSafeRelativePath(value) {
 }
 
 export function isForbiddenArtifactPath(value) {
+  if (FORBIDDEN_EXACT_PATHS.has(value)) return true;
   const lower = value.toLowerCase();
   const segments = lower.split("/");
   if (segments.some((segment) => FORBIDDEN_DIRECTORY_NAMES.has(segment))) return true;
