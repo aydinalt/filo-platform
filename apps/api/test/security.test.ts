@@ -112,6 +112,31 @@ describe("security primitives", () => {
     ]);
   });
 
+  it("prunes only bounded tenant-scoped dormant sessions", async () => {
+    const { pruneDormantSessions } = await import("../src/lib/auth.js");
+    const tenantId = "10000000-0000-4000-8000-000000000001";
+    const actorUserId = "20000000-0000-4000-8000-000000000001";
+    let receivedValues: unknown[] = [];
+
+    const deleted = await pruneDormantSessions(
+      tenantId,
+      actorUserId,
+      30,
+      200,
+      async (sql, values) => {
+        assert.match(sql, /WHERE tenant_id = \$1/u);
+        assert.match(sql, /GREATEST\(expires_at, COALESCE\(revoked_at, expires_at\)\)/u);
+        assert.match(sql, /LIMIT \$3/u);
+        assert.match(sql, /session\.tenant_id = \$1/u);
+        receivedValues = values;
+        return { rows: [], rowCount: 2 };
+      },
+    );
+
+    assert.equal(deleted, 2);
+    assert.deepEqual(receivedValues, [tenantId, 30, 200]);
+  });
+
   it("keeps reminder maintenance queries explicitly tenant scoped", () => {
     const retentionSource = readFileSync(
       new URL("../src/lib/notification-retention.ts", import.meta.url),

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { loginSchema, type SessionUser } from "@filo/contracts";
 import { pool, withTenantTransaction } from "@filo/database";
 import { config } from "../config.js";
-import { requireSession, revokeActiveSession } from "../lib/auth.js";
+import { pruneDormantSessions, requireSession, revokeActiveSession } from "../lib/auth.js";
 import { verifyLoginPassword } from "../lib/login-security.js";
 import { createSessionToken, readSessionToken } from "../lib/session.js";
 
@@ -50,6 +50,13 @@ export async function authRoutes(app: FastifyInstance) {
     const sessionId = randomUUID();
     const expiresAt = new Date(Date.now() + config.sessionTtlHours * 60 * 60 * 1000);
     await withTenantTransaction(user.tenantId, user.id, async (client) => {
+      await pruneDormantSessions(
+        user.tenantId,
+        user.id,
+        config.sessionRecordRetentionDays,
+        config.sessionCleanupBatchSize,
+        (sql, values) => client.query(sql, values),
+      );
       await client.query(
         `INSERT INTO user_sessions (id, tenant_id, user_id, expires_at)
          VALUES ($1, $2, $3, $4)`,

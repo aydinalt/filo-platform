@@ -21,6 +21,10 @@ services:
         value: 5
       - key: AUTH_LOGIN_RATE_LIMIT_WINDOW_MS
         value: 60000
+      - key: SESSION_RECORD_RETENTION_DAYS
+        value: 30
+      - key: SESSION_CLEANUP_BATCH_SIZE
+        value: 200
       - key: LOG_LEVEL
         value: info
       - key: DATABASE_URL

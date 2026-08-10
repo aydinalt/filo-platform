@@ -20,6 +20,8 @@ const productionEnvironment = {
   REQUEST_TIMEOUT_MS: "15000",
   AUTH_LOGIN_RATE_LIMIT_MAX: "5",
   AUTH_LOGIN_RATE_LIMIT_WINDOW_MS: "60000",
+  SESSION_RECORD_RETENTION_DAYS: "30",
+  SESSION_CLEANUP_BATCH_SIZE: "200",
   LOG_LEVEL: "info",
 };
 
@@ -37,6 +39,8 @@ describe("runtime configuration", () => {
     assert.equal(config.authLoginRateLimitWindowMs, 60_000);
     assert.equal(config.logLevel, "info");
     assert.equal(config.sessionTtlHours, 12);
+    assert.equal(config.sessionRecordRetentionDays, 30);
+    assert.equal(config.sessionCleanupBatchSize, 200);
     assert.equal(config.webOrigin, "http://localhost:5173");
     assert.equal(config.cookieSecure, false);
   });
@@ -71,6 +75,14 @@ describe("runtime configuration", () => {
     assert.throws(
       () => loadConfig({ ...base, AUTH_LOGIN_RATE_LIMIT_WINDOW_MS: "9999" }),
       /AUTH_LOGIN_RATE_LIMIT_WINDOW_MS must be between/u,
+    );
+    assert.throws(
+      () => loadConfig({ ...base, SESSION_RECORD_RETENTION_DAYS: "6" }),
+      /SESSION_RECORD_RETENTION_DAYS must be between/u,
+    );
+    assert.throws(
+      () => loadConfig({ ...base, SESSION_CLEANUP_BATCH_SIZE: "1001" }),
+      /SESSION_CLEANUP_BATCH_SIZE must be between/u,
     );
     assert.throws(
       () => loadConfig({ ...base, LOG_LEVEL: "trace" }),

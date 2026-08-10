@@ -131,6 +131,9 @@ Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Koruma
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden
 kullanılamaz ve kullanıcının diğer cihazlardaki aktif oturumları etkilenmez.
+Süresi dolmuş veya iptal edilmiş oturum kayıtları varsayılan olarak 30 gün daha
+saklanır ve başarılı girişlerde tenant kapsamlı, en fazla 200 kayıtlık batch'lerle
+temizlenir. Aktif oturumlar hiçbir zaman bu temizlik kapsamına girmez.
 
 > Gerçek kullanıcı verisi açılmadan önce seçilen PostgreSQL planında PITR ve
 > restore provası ayrıca tamamlanmalıdır.

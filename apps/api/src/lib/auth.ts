@@ -8,6 +8,11 @@ type SessionLookup = (
   values: unknown[],
 ) => Promise<{ rows: SessionUser[] }>;
 
+type SessionMaintenanceQuery = (
+  sql: string,
+  values: unknown[],
+) => Promise<{ rowCount: number | null; rows: unknown[] }>;
+
 export async function loadActiveSessionUser(
   userId: string,
   tenantId: string,
@@ -45,6 +50,33 @@ export async function revokeActiveSession(
      WHERE id = $1 AND tenant_id = $2 AND user_id = $3`,
     [sessionId, tenantId, userId],
   );
+}
+
+export async function pruneDormantSessions(
+  tenantId: string,
+  actorUserId: string,
+  retentionDays: number,
+  batchSize: number,
+  query?: SessionMaintenanceQuery,
+): Promise<number> {
+  const runQuery = query ?? ((sql: string, values: unknown[]) =>
+    withTenantTransaction(tenantId, actorUserId, (client) => client.query(sql, values)));
+  const result = await runQuery(
+    `WITH candidates AS (
+       SELECT id
+       FROM user_sessions
+       WHERE tenant_id = $1
+         AND GREATEST(expires_at, COALESCE(revoked_at, expires_at))
+             < now() - ($2::integer * interval '1 day')
+       ORDER BY GREATEST(expires_at, COALESCE(revoked_at, expires_at)), id
+       LIMIT $3
+     )
+     DELETE FROM user_sessions AS session
+     USING candidates
+     WHERE session.id = candidates.id AND session.tenant_id = $1`,
+    [tenantId, retentionDays, batchSize],
+  );
+  return result.rowCount ?? 0;
 }
 
 export async function requireSession(request: FastifyRequest, reply: FastifyReply) {
