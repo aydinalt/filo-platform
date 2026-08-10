@@ -25,6 +25,64 @@ describe("security primitives", () => {
     assert.equal(verifyLoginPassword("any-password", undefined), false);
   });
 
+  it("uses persistent opaque login buckets across API instances", async () => {
+    const {
+      consumeLoginRateLimitBucket,
+      consumePersistentLoginAttempt,
+      loginRateLimitKey,
+    } = await import("../src/lib/login-rate-limit.js");
+    const rawIp = "203.0.113.25";
+    const rawEmail = "person@example.test";
+    const ipKey = loginRateLimitKey("ip", rawIp);
+    const accountKey = loginRateLimitKey("account", rawEmail);
+
+    assert.match(ipKey, /^[0-9a-f]{64}$/u);
+    assert.match(accountKey, /^[0-9a-f]{64}$/u);
+    assert.notEqual(ipKey, accountKey);
+    assert.doesNotMatch(ipKey, /203|113|25/u);
+    assert.doesNotMatch(accountKey, /person|example/u);
+
+    let bucketSql = "";
+    let bucketValues: unknown[] = [];
+    const bucket = await consumeLoginRateLimitBucket(
+      "ip",
+      rawIp,
+      5,
+      60_000,
+      async (sql, values) => {
+        bucketSql = sql;
+        bucketValues = values;
+        return { rows: [{ limited: true, retryAfter: 42 }] };
+      },
+    );
+
+    assert.deepEqual(bucket, { limited: true, retryAfter: 42 });
+    assert.match(bucketSql, /ON CONFLICT \(scope, key_hash\) DO UPDATE/u);
+    assert.match(bucketSql, /auth_login_rate_limits\.attempt_count \+ 1/u);
+    assert.match(bucketSql, /scope <> \$1 OR key_hash <> \$2/u);
+    assert.match(bucketSql, /ORDER BY expires_at, scope, key_hash\s+LIMIT 100/u);
+    assert.doesNotMatch(bucketSql, /203\.0\.113\.25|person@example/u);
+    assert.deepEqual(bucketValues, ["ip", ipKey, 5, 60_000]);
+
+    const calls: unknown[][] = [];
+    const combined = await consumePersistentLoginAttempt(
+      rawIp,
+      rawEmail,
+      async (_sql, values) => {
+        calls.push(values);
+        return {
+          rows: [{ limited: calls.length === 2, retryAfter: calls.length === 2 ? 55 : 30 }],
+        };
+      },
+    );
+
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls.map((values) => values[0]), ["ip", "account"]);
+    assert.equal(calls[0]?.[1], ipKey);
+    assert.equal(calls[1]?.[1], accountKey);
+    assert.deepEqual(combined, { limited: true, retryAfter: 55 });
+  });
+
   it("round-trips a signed tenant session", async () => {
     const { createSessionToken, readSessionToken } = await import("../src/lib/session.js");
     const sessionId = "30000000-0000-4000-8000-000000000001";

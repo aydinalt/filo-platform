@@ -116,7 +116,9 @@ Giriş endpoint'i istemci IP'si başına varsayılan olarak dakikada 5 denemeyle
 sınırlıdır. `AUTH_LOGIN_RATE_LIMIT_MAX` ve `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`
 değerleri yalnız güvenli yapılandırma aralıklarında kabul edilir. Bilinmeyen
 hesaplar da parola doğrulama maliyetini taşır ve hesap varlığına ilişkin ayrıntı
-döndürülmez.
+döndürülmez. Aynı sınır PostgreSQL'de IP ve normalize hesap için ayrı, anahtarlı
+özet sayaçlarla da uygulanır; böylece API örnekleri veya süreç yeniden başlatmaları
+arasında parola deneme bütçesi sıfırlanmaz. Ham IP ve e-posta değerleri saklanmaz.
 
 Korumalı her API isteğinde imzalı oturumdaki kullanıcı ve tenant kimliği mevcut
 veritabanı üyeliğiyle yeniden doğrulanır. Devre dışı bırakılan kullanıcı veya

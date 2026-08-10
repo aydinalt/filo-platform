@@ -5,6 +5,7 @@ import { pool, withTenantTransaction } from "@filo/database";
 import { config } from "../config.js";
 import { pruneDormantSessions, requireSession, revokeActiveSession } from "../lib/auth.js";
 import { verifyLoginPassword } from "../lib/login-security.js";
+import { consumePersistentLoginAttempt } from "../lib/login-rate-limit.js";
 import { createSessionToken, readSessionToken } from "../lib/session.js";
 
 type LoginRow = SessionUser & { passwordHash: string; disabledAt: Date | null };
@@ -20,6 +21,12 @@ export async function authRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT" });
+
+    const rateLimit = await consumePersistentLoginAttempt(request.ip, parsed.data.email);
+    if (rateLimit.limited) {
+      reply.header("retry-after", String(rateLimit.retryAfter));
+      return reply.code(429).send({ error: "RATE_LIMITED" });
+    }
 
     const result = await pool.query<LoginRow>(
       `SELECT u.id, m.tenant_id AS "tenantId", t.name AS "tenantName",

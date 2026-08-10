@@ -1,0 +1,11 @@
+README.md
+apps/api/package.json
+apps/api/src/lib/login-rate-limit.ts
+apps/api/src/routes/auth.ts
+apps/api/test/security.test.ts
+docs/LOCAL_UPDATE_v0.61.md
+package-lock.json
+package.json
+packages/database/migrations/043_auth_login_rate_limits.sql
+release-v0.61/deleted-files.txt
+release-v0.61/update-files.txt
