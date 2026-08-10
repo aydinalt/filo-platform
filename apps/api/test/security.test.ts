@@ -83,6 +83,38 @@ describe("security primitives", () => {
     assert.deepEqual(combined, { limited: true, retryAfter: 55 });
   });
 
+  it("clears only the verified account login bucket", async () => {
+    const { clearLoginRateLimitBucket, loginRateLimitKey } = await import(
+      "../src/lib/login-rate-limit.js"
+    );
+    const rawEmail = "person@example.test";
+    const accountKey = loginRateLimitKey("account", rawEmail);
+    let clearSql = "";
+    let clearValues: unknown[] = [];
+    await clearLoginRateLimitBucket(
+      "account",
+      rawEmail,
+      async (sql, values) => {
+        clearSql = sql;
+        clearValues = values;
+        return { rows: [] };
+      },
+    );
+    assert.match(clearSql, /DELETE FROM auth_login_rate_limits/u);
+    assert.match(clearSql, /WHERE scope = \$1 AND key_hash = \$2/u);
+    assert.deepEqual(clearValues, ["account", accountKey]);
+
+    const authRouteSource = readFileSync(
+      new URL("../src/routes/auth.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(
+      authRouteSource,
+      /withTenantTransaction[\s\S]+INSERT INTO user_sessions[\s\S]+clearLoginRateLimitBucket\(\s*"account",\s*parsed\.data\.email/u,
+    );
+    assert.doesNotMatch(authRouteSource, /clearLoginRateLimitBucket\(\s*"ip"/u);
+  });
+
   it("round-trips a signed tenant session", async () => {
     const { createSessionToken, readSessionToken } = await import("../src/lib/session.js");
     const sessionId = "30000000-0000-4000-8000-000000000001";

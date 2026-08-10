@@ -119,6 +119,9 @@ hesaplar da parola doğrulama maliyetini taşır ve hesap varlığına ilişkin 
 döndürülmez. Aynı sınır PostgreSQL'de IP ve normalize hesap için ayrı, anahtarlı
 özet sayaçlarla da uygulanır; böylece API örnekleri veya süreç yeniden başlatmaları
 arasında parola deneme bütçesi sıfırlanmaz. Ham IP ve e-posta değerleri saklanmaz.
+Doğrulanmış bir giriş yalnız ilgili hesap sayacını aynı veritabanı işlemi içinde
+sıfırlar; kaynak IP sayacı korunarak başarılı bir hesabın IP deneme bütçesini
+yenilemesi engellenir.
 
 Korumalı her API isteğinde imzalı oturumdaki kullanıcı ve tenant kimliği mevcut
 veritabanı üyeliğiyle yeniden doğrulanır. Devre dışı bırakılan kullanıcı veya

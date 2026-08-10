@@ -5,7 +5,10 @@ import { pool, withTenantTransaction } from "@filo/database";
 import { config } from "../config.js";
 import { pruneDormantSessions, requireSession, revokeActiveSession } from "../lib/auth.js";
 import { verifyLoginPassword } from "../lib/login-security.js";
-import { consumePersistentLoginAttempt } from "../lib/login-rate-limit.js";
+import {
+  clearLoginRateLimitBucket,
+  consumePersistentLoginAttempt,
+} from "../lib/login-rate-limit.js";
 import { createSessionToken, readSessionToken } from "../lib/session.js";
 
 type LoginRow = SessionUser & { passwordHash: string; disabledAt: Date | null };
@@ -68,6 +71,11 @@ export async function authRoutes(app: FastifyInstance) {
         `INSERT INTO user_sessions (id, tenant_id, user_id, expires_at)
          VALUES ($1, $2, $3, $4)`,
         [sessionId, user.tenantId, user.id, expiresAt],
+      );
+      await clearLoginRateLimitBucket(
+        "account",
+        parsed.data.email,
+        (sql, values) => client.query(sql, values),
       );
     });
     const token = await createSessionToken(user, sessionId);

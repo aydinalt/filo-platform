@@ -74,6 +74,18 @@ export async function consumeLoginRateLimitBucket(
   return row;
 }
 
+export async function clearLoginRateLimitBucket(
+  scope: LoginRateLimitScope,
+  value: string,
+  query: RateLimitQuery = (sql, values) => pool.query(sql, values),
+): Promise<void> {
+  await query(
+    `DELETE FROM auth_login_rate_limits
+     WHERE scope = $1 AND key_hash = $2`,
+    [scope, loginRateLimitKey(scope, value)],
+  );
+}
+
 export async function consumePersistentLoginAttempt(
   clientIp: string,
   normalizedEmail: string,
