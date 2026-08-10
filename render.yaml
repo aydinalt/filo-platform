@@ -17,6 +17,10 @@ services:
         value: 1048576
       - key: REQUEST_TIMEOUT_MS
         value: 15000
+      - key: AUTH_LOGIN_RATE_LIMIT_MAX
+        value: 5
+      - key: AUTH_LOGIN_RATE_LIMIT_WINDOW_MS
+        value: 60000
       - key: LOG_LEVEL
         value: info
       - key: DATABASE_URL

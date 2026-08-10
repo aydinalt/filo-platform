@@ -14,6 +14,17 @@ describe("security primitives", () => {
     assert.equal(verifyPassword("wrong-password", encoded), false);
   });
 
+  it("uses a valid fallback hash for unknown login accounts", async () => {
+    const { scryptSync } = await import("node:crypto");
+    const { verifyLoginPassword } = await import("../src/lib/login-security.js");
+    const salt = "known-user-salt";
+    const encoded = `${salt}:${scryptSync("correct-password", salt, 64).toString("hex")}`;
+
+    assert.equal(verifyLoginPassword("correct-password", encoded), true);
+    assert.equal(verifyLoginPassword("wrong-password", encoded), false);
+    assert.equal(verifyLoginPassword("any-password", undefined), false);
+  });
+
   it("round-trips a signed tenant session", async () => {
     const { createSessionToken, readSessionToken } = await import("../src/lib/session.js");
     const user = {

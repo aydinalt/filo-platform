@@ -112,5 +112,11 @@ incelemesinde bu kimlik kullanılmalı; istemciden gelen istek kimliklerine
 güvenilmemelidir. Üretim log seviyesi varsayılan olarak `LOG_LEVEL=info` kalır;
 oturum, yetkilendirme ve webhook imza başlıkları merkezi olarak maskelenir.
 
+Giriş endpoint'i istemci IP'si başına varsayılan olarak dakikada 5 denemeyle
+sınırlıdır. `AUTH_LOGIN_RATE_LIMIT_MAX` ve `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`
+değerleri yalnız güvenli yapılandırma aralıklarında kabul edilir. Bilinmeyen
+hesaplar da parola doğrulama maliyetini taşır ve hesap varlığına ilişkin ayrıntı
+döndürülmez.
+
 > Gerçek kullanıcı verisi açılmadan önce seçilen PostgreSQL planında PITR ve
 > restore provası ayrıca tamamlanmalıdır.

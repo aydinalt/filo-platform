@@ -3,13 +3,20 @@ import { loginSchema, type SessionUser } from "@filo/contracts";
 import { pool } from "@filo/database";
 import { config } from "../config.js";
 import { requireSession } from "../lib/auth.js";
-import { verifyPassword } from "../lib/password.js";
+import { verifyLoginPassword } from "../lib/login-security.js";
 import { createSessionToken } from "../lib/session.js";
 
 type LoginRow = SessionUser & { passwordHash: string; disabledAt: Date | null };
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post("/login", async (request, reply) => {
+  app.post("/login", {
+    config: {
+      rateLimit: {
+        max: config.authLoginRateLimitMax,
+        timeWindow: config.authLoginRateLimitWindowMs,
+      },
+    },
+  }, async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT" });
 
@@ -26,7 +33,8 @@ export async function authRoutes(app: FastifyInstance) {
       [parsed.data.email]
     );
     const row = result.rows[0];
-    if (!row || row.disabledAt || !verifyPassword(parsed.data.password, row.passwordHash)) {
+    const passwordValid = verifyLoginPassword(parsed.data.password, row?.passwordHash);
+    if (!row || row.disabledAt || !passwordValid) {
       return reply.code(401).send({ error: "INVALID_CREDENTIALS" });
     }
 

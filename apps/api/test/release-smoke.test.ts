@@ -6,6 +6,8 @@ process.env.SESSION_SECRET = "release-smoke-session-secret-at-least-32-character
 process.env.NOTIFICATION_WORKER_KEY =
   "release-smoke-worker-secret-at-least-32-characters";
 process.env.WEB_ORIGIN = "https://fleet.example.test";
+process.env.AUTH_LOGIN_RATE_LIMIT_MAX = "3";
+process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS = "60000";
 
 describe("release smoke boundaries", () => {
   let app: FastifyInstance;
@@ -107,6 +109,31 @@ describe("release smoke boundaries", () => {
 
     assert.equal(response.statusCode, 401);
     assert.deepEqual(response.json(), { error: "AUTH_REQUIRED" });
+  });
+
+  it("throttles repeated login attempts without exposing account details", async () => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        remoteAddress: "203.0.113.10",
+        payload: {},
+      });
+      assert.equal(response.statusCode, 400);
+      assert.deepEqual(response.json(), { error: "INVALID_INPUT" });
+    }
+
+    const limited = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      remoteAddress: "203.0.113.10",
+      payload: {},
+    });
+
+    assert.equal(limited.statusCode, 429);
+    assert.deepEqual(limited.json(), { error: "RATE_LIMITED" });
+    assert.ok(Number(limited.headers["retry-after"]) >= 1);
+    assert.doesNotMatch(limited.body, /email|password|account|user/iu);
   });
 
   it("rejects internal maintenance without a valid worker credential", async () => {
