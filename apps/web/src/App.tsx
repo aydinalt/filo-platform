@@ -3790,6 +3790,16 @@ function Dashboard({
                     : notificationRetention.reminderMaintenanceHealth.status === "running"
                       ? "Tarama çalışıyor"
                       : "Sağlıklı"}
+                  {" · "}Sebep:{" "}
+                  {notificationRetention.reminderMaintenanceHealth.reason === "stale_runs"
+                    ? "Süreyi aşan tarama var"
+                    : notificationRetention.reminderMaintenanceHealth.reason === "maintenance_never_completed"
+                      ? "Bakım henüz tamamlanmadı"
+                      : notificationRetention.reminderMaintenanceHealth.reason === "maintenance_overdue"
+                        ? "Bakım zamanında çalışmadı"
+                        : notificationRetention.reminderMaintenanceHealth.reason === "active_scan"
+                          ? "Tarama devam ediyor"
+                          : "Bakım güncel"}
                   {" · "}Çalışan: {notificationRetention.reminderMaintenanceHealth.runningCount}
                   {" · "}Süreyi aşan: {notificationRetention.reminderMaintenanceHealth.staleRunningCount}
                   {" · "}En eski başlangıç:{" "}
@@ -3800,6 +3810,7 @@ function Dashboard({
                   {notificationRetention.reminderMaintenanceHealth.lastCompletedAt
                     ? new Date(notificationRetention.reminderMaintenanceHealth.lastCompletedAt).toLocaleString("tr-TR")
                     : "—"}
+                  {" · "}Güncellik sınırı: {notificationRetention.reminderMaintenanceHealth.freshnessThresholdMinutes} dakika
                 </p>
                 <div className="table-wrap">
                   <table>

@@ -74,18 +74,38 @@ export function archiveReconciliationOverdueReminderCopy(
 export function interruptedReminderRunPolicy() {
   return {
     staleAfterMinutes: 15,
+    freshnessThresholdMinutes: 30,
     outcomeCode: "REMINDER_SCAN_INTERRUPTED" as const,
     maintenanceOutcomeCode: "REMINDER_MAINTENANCE_COMPLETED" as const,
   };
 }
 
-export function reminderMaintenanceHealthStatus(
-  runningCount: number,
-  staleRunningCount: number,
-) {
-  if (staleRunningCount > 0) return "attention" as const;
-  if (runningCount > 0) return "running" as const;
-  return "healthy" as const;
+export function reminderMaintenanceHealthStatus(input: {
+  runningCount: number;
+  staleRunningCount: number;
+  lastCompletedAt: Date | null;
+  now?: Date;
+}) {
+  const policy = interruptedReminderRunPolicy();
+  const now = input.now ?? new Date();
+  if (input.staleRunningCount > 0)
+    return { status: "attention" as const, reason: "stale_runs" as const };
+  if (!input.lastCompletedAt)
+    return {
+      status: "attention" as const,
+      reason: "maintenance_never_completed" as const,
+    };
+  if (
+    now.getTime() - input.lastCompletedAt.getTime() >
+    policy.freshnessThresholdMinutes * 60_000
+  )
+    return {
+      status: "attention" as const,
+      reason: "maintenance_overdue" as const,
+    };
+  if (input.runningCount > 0)
+    return { status: "running" as const, reason: "active_scan" as const };
+  return { status: "healthy" as const, reason: "recent_maintenance" as const };
 }
 
 export async function reconcileInterruptedArchiveReconciliationReminderRuns(input: {
