@@ -5,6 +5,7 @@ import {
   archiveReconciliationNotificationCopy,
   archiveReconciliationOverdueReminderCopy,
   interruptedReminderRunPolicy,
+  reminderMaintenanceHealthStatus,
 } from "../src/lib/notification-retention.js";
 
 describe("archive reconciliation notifications", () => {
@@ -34,6 +35,12 @@ describe("interrupted reminder run maintenance", () => {
     const { maintenanceOutcomeCode } = interruptedReminderRunPolicy();
     assert.equal(maintenanceOutcomeCode, "REMINDER_MAINTENANCE_COMPLETED");
     assert.match(maintenanceOutcomeCode, /^REMINDER_MAINTENANCE_[A-Z_]+$/);
+  });
+
+  it("reports attention before running and healthy states", () => {
+    assert.equal(reminderMaintenanceHealthStatus(2, 1), "attention");
+    assert.equal(reminderMaintenanceHealthStatus(1, 0), "running");
+    assert.equal(reminderMaintenanceHealthStatus(0, 0), "healthy");
   });
 });
 

@@ -3783,6 +3783,24 @@ function Dashboard({
                   </div>
                   <small>Aynı bakım anahtarı yalnız bir kez işlenir.</small>
                 </div>
+                <p>
+                  Bakım sağlığı:{" "}
+                  {notificationRetention.reminderMaintenanceHealth.status === "attention"
+                    ? "Müdahale gerekli"
+                    : notificationRetention.reminderMaintenanceHealth.status === "running"
+                      ? "Tarama çalışıyor"
+                      : "Sağlıklı"}
+                  {" · "}Çalışan: {notificationRetention.reminderMaintenanceHealth.runningCount}
+                  {" · "}Süreyi aşan: {notificationRetention.reminderMaintenanceHealth.staleRunningCount}
+                  {" · "}En eski başlangıç:{" "}
+                  {notificationRetention.reminderMaintenanceHealth.oldestRunningStartedAt
+                    ? new Date(notificationRetention.reminderMaintenanceHealth.oldestRunningStartedAt).toLocaleString("tr-TR")
+                    : "—"}
+                  {" · "}Son bakım:{" "}
+                  {notificationRetention.reminderMaintenanceHealth.lastCompletedAt
+                    ? new Date(notificationRetention.reminderMaintenanceHealth.lastCompletedAt).toLocaleString("tr-TR")
+                    : "—"}
+                </p>
                 <div className="table-wrap">
                   <table>
                     <thead>

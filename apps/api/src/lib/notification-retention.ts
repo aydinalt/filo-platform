@@ -79,6 +79,15 @@ export function interruptedReminderRunPolicy() {
   };
 }
 
+export function reminderMaintenanceHealthStatus(
+  runningCount: number,
+  staleRunningCount: number,
+) {
+  if (staleRunningCount > 0) return "attention" as const;
+  if (runningCount > 0) return "running" as const;
+  return "healthy" as const;
+}
+
 export async function reconcileInterruptedArchiveReconciliationReminderRuns(input: {
   tenantId: string;
   actorUserId: string;
