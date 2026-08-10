@@ -41,6 +41,45 @@ describe("security primitives", () => {
     assert.equal(decoded.tenantId, user.tenantId);
   });
 
+  it("reloads the current tenant membership instead of trusting stale token claims", async () => {
+    const { loadActiveSessionUser } = await import("../src/lib/auth.js");
+    const currentUser = {
+      id: "20000000-0000-4000-8000-000000000001",
+      tenantId: "10000000-0000-4000-8000-000000000001",
+      tenantName: "Demo Filo A.Ş.",
+      email: "admin@demo.filo",
+      fullName: "Demo Yönetici",
+      role: "viewer" as const,
+    };
+    let receivedValues: unknown[] = [];
+
+    const resolved = await loadActiveSessionUser(
+      currentUser.id,
+      currentUser.tenantId,
+      async (sql, values) => {
+        assert.match(sql, /u\.disabled_at IS NULL/u);
+        assert.match(sql, /m\.tenant_id = \$2/u);
+        receivedValues = values;
+        return { rows: [currentUser] };
+      },
+    );
+
+    assert.deepEqual(receivedValues, [currentUser.id, currentUser.tenantId]);
+    assert.deepEqual(resolved, currentUser);
+    assert.equal(resolved?.role, "viewer");
+  });
+
+  it("rejects a session whose user or tenant membership is no longer active", async () => {
+    const { loadActiveSessionUser } = await import("../src/lib/auth.js");
+    const resolved = await loadActiveSessionUser(
+      "20000000-0000-4000-8000-000000000001",
+      "10000000-0000-4000-8000-000000000001",
+      async () => ({ rows: [] }),
+    );
+
+    assert.equal(resolved, null);
+  });
+
   it("keeps reminder maintenance queries explicitly tenant scoped", () => {
     const retentionSource = readFileSync(
       new URL("../src/lib/notification-retention.ts", import.meta.url),

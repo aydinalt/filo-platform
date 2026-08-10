@@ -118,5 +118,10 @@ değerleri yalnız güvenli yapılandırma aralıklarında kabul edilir. Bilinme
 hesaplar da parola doğrulama maliyetini taşır ve hesap varlığına ilişkin ayrıntı
 döndürülmez.
 
+Korumalı her API isteğinde imzalı oturumdaki kullanıcı ve tenant kimliği mevcut
+veritabanı üyeliğiyle yeniden doğrulanır. Devre dışı bırakılan kullanıcı veya
+kaldırılan üyelik bir sonraki istekte reddedilir; rol değişikliği de yeni oturum
+açılması beklenmeden güncel yetkilendirmeye yansır.
+
 > Gerçek kullanıcı verisi açılmadan önce seçilen PostgreSQL planında PITR ve
 > restore provası ayrıca tamamlanmalıdır.
