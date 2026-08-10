@@ -44,6 +44,7 @@ describe("security primitives", () => {
 
     let bucketSql = "";
     let bucketValues: unknown[] = [];
+    const firstWindowStartedAt = "2026-08-10 11:00:00.123456+00";
     const bucket = await consumeLoginRateLimitBucket(
       "ip",
       rawIp,
@@ -52,15 +53,35 @@ describe("security primitives", () => {
       async (sql, values) => {
         bucketSql = sql;
         bucketValues = values;
-        return { rows: [{ limited: true, retryAfter: 42 }] };
+        return {
+          rows: [{
+            limited: true,
+            retryAfter: 42,
+            attemptCount: 5,
+            windowStartedAt: firstWindowStartedAt,
+          }],
+        };
       },
     );
 
-    assert.deepEqual(bucket, { limited: true, retryAfter: 42 });
+    assert.deepEqual(bucket, {
+      limited: true,
+      retryAfter: 42,
+      attemptCount: 5,
+      windowStartedAt: firstWindowStartedAt,
+    });
     assert.match(bucketSql, /ON CONFLICT \(scope, key_hash\) DO UPDATE/u);
     assert.match(bucketSql, /auth_login_rate_limits\.attempt_count \+ 1/u);
     assert.match(bucketSql, /scope <> \$1 OR key_hash <> \$2/u);
     assert.match(bucketSql, /ORDER BY expires_at, scope, key_hash\s+LIMIT 100/u);
+    assert.match(
+      bucketSql,
+      /RETURNING attempt_count, window_started_at, expires_at/u,
+    );
+    assert.match(
+      bucketSql,
+      /window_started_at::text AS "windowStartedAt"/u,
+    );
     assert.doesNotMatch(bucketSql, /203\.0\.113\.25|person@example/u);
     assert.deepEqual(bucketValues, ["ip", ipKey, 5, 60_000]);
 

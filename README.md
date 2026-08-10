@@ -123,6 +123,9 @@ Doğrulanmış bir giriş yalnız ilgili hesap sayacını aynı veritabanı işl
 sıfırlar; kaynak IP sayacı korunarak başarılı bir hesabın IP deneme bütçesini
 yenilemesi engellenir. Hesap sayacı yalnız doğrulama sırasında görülen sürüm
 değişmeden kaldıysa temizlenir; eşzamanlı yeni denemeler kaybolmaz.
+Sayaç güncelleme sorgusunun karşılaştırmalı sıfırlama için gereken deneme sayısı
+ve tam hassasiyetli pencere başlangıcını gerçekten döndürmesi regresyon testiyle
+korunur.
 
 Korumalı her API isteğinde imzalı oturumdaki kullanıcı ve tenant kimliği mevcut
 veritabanı üyeliğiyle yeniden doğrulanır. Devre dışı bırakılan kullanıcı veya

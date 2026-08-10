@@ -60,7 +60,7 @@ const bucketSql = `WITH stale AS (
           THEN now() + ($4::integer * interval '1 millisecond')
         ELSE auth_login_rate_limits.expires_at
       END
-  RETURNING attempt_count, expires_at
+  RETURNING attempt_count, window_started_at, expires_at
 )
 SELECT attempt_count > $3::integer AS limited,
        attempt_count AS "attemptCount",
