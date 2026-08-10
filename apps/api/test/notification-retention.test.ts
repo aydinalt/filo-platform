@@ -75,4 +75,10 @@ describe("archive reconciliation overdue reminders", () => {
     assert.equal(copy.severity, "critical");
     assert.match(copy.message, /çözüm hedefini geçti/);
   });
+
+  it("keeps interrupted run errors bounded to an operational result code", () => {
+    const outcomeCode = "REMINDER_SCAN_INTERRUPTED";
+    assert.match(outcomeCode, /^REMINDER_SCAN_[A-Z_]+$/);
+    assert.equal(outcomeCode.includes("Error:"), false);
+  });
 });

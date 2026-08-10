@@ -592,6 +592,22 @@ export async function runArchiveReconciliationOverdueReminders(input: {
     if (!actor.rowCount)
       return { accepted: false as const, reason: "invalid_actor" as const };
 
+    const interrupted = (
+      await client.query(
+        `UPDATE notification_archive_reconciliation_reminder_runs
+         SET status='failed',outcome_code='REMINDER_SCAN_INTERRUPTED',completed_at=now()
+         WHERE status='running' AND started_at < now() - interval '15 minutes'
+         RETURNING id`,
+      )
+    ).rows as Array<{ id: string }>;
+    for (const run of interrupted) {
+      await client.query(
+        `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+         VALUES($1,$2,'notification_archive.reconciliation_overdue_reminder_run_interrupted','notification_archive_reconciliation_reminder_run',$3,jsonb_build_object('outcomeCode','REMINDER_SCAN_INTERRUPTED','staleAfterMinutes',15))`,
+        [input.tenantId, input.actorUserId, run.id],
+      );
+    }
+
     const run = (
       await client.query(
         `INSERT INTO notification_archive_reconciliation_reminder_runs(tenant_id,run_key,source,initiated_by) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id`,
