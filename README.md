@@ -93,7 +93,10 @@ olmayan uygulama rolü. API için yalnız uygulama rolünün URL'sini
 `DATABASE_URL` olarak girin. Migration sırasında `DATABASE_ADMIN_URL` kullanın.
 
 Vercel'e `VITE_API_URL=https://api-adresiniz` ekleyin. Render'a `WEB_ORIGIN`
-olarak Vercel adresini, `DATABASE_URL` olarak uygulama rolü bağlantısını girin.
+olarak Vercel adresini, `DATABASE_URL` olarak uygulama rolü bağlantısını ve
+`DATABASE_ADMIN_URL` olarak migration sahibi bağlantısını girin. Render API'yi
+başlatmadan önce bekleyen migration'ları kilit altında uygular; migration
+başarısızsa yeni sürüm başlamaz.
 `SESSION_SECRET`, `NOTIFICATION_WORKER_KEY` ve `NOTIFICATION_WEBHOOK_SECRET`
 birbirinden farklı, en az 32 rastgele karakter olmalıdır. Üretimde `WEB_ORIGIN`
 HTTPS olmalı ve `COOKIE_SECURE=true` kalmalıdır. API; eksik, yer tutucu veya

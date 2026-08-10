@@ -1,36 +1,39 @@
-import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { runMigrations } from "./migration-runner.js";
 
-const adminPool = new pg.Pool({
-  connectionString: process.env.DATABASE_ADMIN_URL ?? process.env.DATABASE_URL
-});
+function databaseUrl() {
+  const value = process.env.DATABASE_ADMIN_URL || process.env.DATABASE_URL;
+  if (!value) throw new Error("Migration database URL is missing or invalid");
+  try {
+    const parsed = new URL(value);
+    if (!["postgres:", "postgresql:"].includes(parsed.protocol) || !parsed.hostname) {
+      throw new Error();
+    }
+  } catch {
+    throw new Error("Migration database URL is missing or invalid");
+  }
+  return value;
+}
 
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "../migrations");
-await adminPool.query(`
-  CREATE TABLE IF NOT EXISTS schema_migrations (
-    name text PRIMARY KEY,
-    applied_at timestamptz NOT NULL DEFAULT now()
-  )
-`);
 
-for (const name of (await readdir(migrationsDir)).filter((file) => file.endsWith(".sql")).sort()) {
-  const applied = await adminPool.query("SELECT 1 FROM schema_migrations WHERE name = $1", [name]);
-  if (applied.rowCount) continue;
-  const sql = await readFile(join(migrationsDir, name), "utf8");
-  const client = await adminPool.connect();
+async function main() {
+  let adminPool: pg.Pool | undefined;
   try {
-    await client.query("BEGIN");
-    await client.query(sql);
-    await client.query("INSERT INTO schema_migrations(name) VALUES ($1)", [name]);
-    await client.query("COMMIT");
-    console.log(`Applied ${name}`);
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
+    adminPool = new pg.Pool({
+      connectionString: databaseUrl(),
+      connectionTimeoutMillis: 10_000,
+      max: 1,
+    });
+    await runMigrations(adminPool, migrationsDir, (name) => console.log(`Applied ${name}`));
+  } catch {
+    console.error("Database migration failed; API startup has been stopped.");
+    process.exitCode = 1;
   } finally {
-    client.release();
+    await adminPool?.end();
   }
 }
-await adminPool.end();
+
+await main();

@@ -1,7 +1,7 @@
 {
   "name": "filo-platform-v1",
   "private": true,
-  "version": "0.52.0",
+  "version": "0.53.0",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -13,6 +13,7 @@
     "test": "node --test scripts/release-policy.test.mjs && npm run test --workspaces --if-present",
     "release:verify": "node scripts/verify-release.mjs",
     "db:migrate": "npm run db:migrate --workspace @filo/database",
+    "db:migrate:deploy": "node packages/database/dist/migrate.js",
     "db:seed": "npm run db:seed --workspace @filo/database"
   },
   "engines": {

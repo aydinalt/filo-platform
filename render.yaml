@@ -4,7 +4,7 @@ services:
     runtime: node
     rootDir: .
     buildCommand: npm ci && npm run build
-    startCommand: npm run start --workspace @filo/api
+    startCommand: npm run db:migrate:deploy && npm run start --workspace @filo/api
     healthCheckPath: /health/ready
     envVars:
       - key: NODE_VERSION
@@ -12,6 +12,8 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_ADMIN_URL
         sync: false
       - key: SESSION_SECRET
         generateValue: true
