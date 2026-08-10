@@ -40,6 +40,30 @@ export async function buildApp() {
   await app.register(cors, { origin: config.webOrigin, credentials: true });
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 
+  app.setErrorHandler((error, request, reply) => {
+    const statusCode = Number((error as { statusCode?: number }).statusCode);
+    if (Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 500) {
+      const errorCode =
+        statusCode === 400
+          ? "INVALID_REQUEST"
+          : statusCode === 401
+            ? "AUTH_REQUIRED"
+            : statusCode === 403
+              ? "FORBIDDEN"
+              : statusCode === 404
+                ? "NOT_FOUND"
+                : statusCode === 413
+                  ? "PAYLOAD_TOO_LARGE"
+                  : statusCode === 429
+                    ? "RATE_LIMITED"
+                    : "REQUEST_REJECTED";
+      request.log.warn({ err: error, statusCode }, "request rejected");
+      return reply.code(statusCode).send({ error: errorCode });
+    }
+    request.log.error({ err: error }, "request failed");
+    return reply.code(500).send({ error: "INTERNAL_ERROR" });
+  });
+
   app.get("/health", async () => ({ status: "ok" }));
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(vehicleRoutes, { prefix: "/api/vehicles" });
@@ -70,9 +94,9 @@ export async function buildApp() {
   await app.register(notificationHealthScanRoutes, { prefix: "/api/internal/notification-health-scans" });
   await app.register(notificationRetentionWorkerRoutes, { prefix: "/api/internal/notification-retention" });
 
-  app.setErrorHandler((error, request, reply) => {
-    request.log.error({ err: error }, "request failed");
-    reply.code(500).send({ error: "INTERNAL_ERROR" });
+  app.setNotFoundHandler((request, reply) => {
+    request.log.warn({ method: request.method, url: request.url }, "route not found");
+    reply.code(404).send({ error: "NOT_FOUND" });
   });
   return app;
 }
