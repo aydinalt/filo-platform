@@ -583,7 +583,8 @@ export async function runArchiveReconciliationOverdueReminders(input: {
   runKey: string;
   source?: ArchiveSource;
 }) {
-  return withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
+  const source = input.source ?? "scheduler";
+  const started = await withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
     const actor = await client.query(
       `SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.user_id=$1 AND m.tenant_id=$2 AND m.role IN ('owner','admin','operator') AND u.disabled_at IS NULL`,
       [input.actorUserId, input.tenantId],
@@ -591,16 +592,6 @@ export async function runArchiveReconciliationOverdueReminders(input: {
     if (!actor.rowCount)
       return { accepted: false as const, reason: "invalid_actor" as const };
 
-    const lock = (
-      await client.query(
-        `SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired`,
-        [`notification-reconciliation-reminders:${input.tenantId}`],
-      )
-    ).rows[0];
-    if (!lock?.acquired)
-      return { accepted: false as const, reason: "scan_in_progress" as const };
-
-    const source = input.source ?? "scheduler";
     const run = (
       await client.query(
         `INSERT INTO notification_archive_reconciliation_reminder_runs(tenant_id,run_key,source,initiated_by) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id`,
@@ -609,6 +600,26 @@ export async function runArchiveReconciliationOverdueReminders(input: {
     ).rows[0];
     if (!run)
       return { accepted: false as const, reason: "duplicate" as const };
+    return { accepted: true as const, runId: run.id as string };
+  });
+  if (!started.accepted) return started;
+
+  try {
+    return await withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
+
+    const lock = (
+      await client.query(
+        `SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired`,
+        [`notification-reconciliation-reminders:${input.tenantId}`],
+      )
+    ).rows[0];
+    if (!lock?.acquired) {
+      await client.query(
+        `UPDATE notification_archive_reconciliation_reminder_runs SET status='failed',outcome_code='REMINDER_SCAN_IN_PROGRESS',completed_at=now() WHERE id=$1 AND status='running'`,
+        [started.runId],
+      );
+      return { accepted: false as const, reason: "scan_in_progress" as const };
+    }
 
     const overdue = (
       await client.query(
@@ -700,13 +711,26 @@ export async function runArchiveReconciliationOverdueReminders(input: {
       resolutionOverdue,
     };
     await client.query(
-      `UPDATE notification_archive_reconciliation_reminder_runs SET scanned_count=$2,notifications_created=$3 WHERE id=$1`,
-      [run.id, summary.scannedCount, summary.notificationsCreated],
+      `UPDATE notification_archive_reconciliation_reminder_runs SET status='succeeded',outcome_code='REMINDER_SCAN_COMPLETED',scanned_count=$2,notifications_created=$3,completed_at=now() WHERE id=$1 AND status='running'`,
+      [started.runId, summary.scannedCount, summary.notificationsCreated],
     );
     await client.query(
       `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_archive.reconciliation_overdue_reminders_scanned','notification_archive_reconciliation_reminder_run',$3,$4::jsonb)`,
-      [input.tenantId, input.actorUserId, run.id, JSON.stringify({ ...summary, source })],
+      [input.tenantId, input.actorUserId, started.runId, JSON.stringify({ ...summary, source })],
     );
-    return { accepted: true as const, runId: run.id as string, source, summary };
-  });
+    return { accepted: true as const, failed: false as const, runId: started.runId, source, summary };
+    });
+  } catch {
+    await withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
+      await client.query(
+        `UPDATE notification_archive_reconciliation_reminder_runs SET status='failed',outcome_code='REMINDER_SCAN_FAILED',completed_at=now() WHERE id=$1 AND status='running'`,
+        [started.runId],
+      );
+      await client.query(
+        `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_archive.reconciliation_overdue_reminders_failed','notification_archive_reconciliation_reminder_run',$3,jsonb_build_object('outcomeCode','REMINDER_SCAN_FAILED','source',$4::text))`,
+        [input.tenantId, input.actorUserId, started.runId, source],
+      );
+    });
+    return { accepted: true as const, failed: true as const, runId: started.runId, source, error: "NOTIFICATION_ARCHIVE_REMINDER_SCAN_FAILED" as const };
+  }
 }

@@ -25,6 +25,7 @@ export async function notificationRetentionWorkerRoutes(app:FastifyInstance){
     if(!parsed.success)return reply.code(400).send({error:"INVALID_NOTIFICATION_ARCHIVE_REMINDER_SCAN"});
     const result=await runArchiveReconciliationOverdueReminders({...parsed.data,source:"scheduler"});
     if(!result.accepted)return reply.code(result.reason==="invalid_actor"?403:200).send(result);
+    if(result.failed)return reply.code(503).send(result);
     return reply.code(result.summary.notificationsCreated>0?202:200).send(result);
   });
 }

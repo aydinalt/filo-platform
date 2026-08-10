@@ -3756,16 +3756,18 @@ function Dashboard({
                 <div className="table-wrap">
                   <table>
                     <thead>
-                      <tr><th>Çalıştırma</th><th>Kaynak</th><th>Başlatan</th><th>Taranan</th><th>Oluşturulan uyarı</th></tr>
+                      <tr><th>Başlangıç</th><th>Kaynak</th><th>Başlatan</th><th>Durum</th><th>Taranan</th><th>Oluşturulan uyarı</th><th>Tamamlanma</th></tr>
                     </thead>
                     <tbody>
                       {notificationRetention.recentReminderRuns.map((run) => (
                         <tr key={run.id}>
-                          <td>{new Date(run.createdAt).toLocaleString("tr-TR")}</td>
+                          <td>{new Date(run.startedAt).toLocaleString("tr-TR")}</td>
                           <td>{run.source === "scheduler" ? "Zamanlayıcı" : "Manuel"}</td>
                           <td>{run.initiatedByName ?? "Sistem kullanıcısı"}</td>
+                          <td>{run.status === "succeeded" ? "Başarılı" : run.status === "failed" ? `Başarısız · ${run.outcomeCode ?? "Bilinmeyen sonuç"}` : "Çalışıyor"}</td>
                           <td>{run.scannedCount}</td>
                           <td>{run.notificationsCreated}</td>
+                          <td>{run.completedAt ? new Date(run.completedAt).toLocaleString("tr-TR") : "—"}</td>
                         </tr>
                       ))}
                     </tbody>
