@@ -3,6 +3,7 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import { checkDatabaseConnection } from "@filo/database";
 import { config } from "./config.js";
 import { authRoutes } from "./routes/auth.js";
 import { vehicleRoutes } from "./routes/vehicles.js";
@@ -33,7 +34,11 @@ import { notificationProviderIncidentRoutes } from "./routes/notification-provid
 import { notificationHealthScanRoutes } from "./routes/notification-health-scans.js";
 import { notificationRetentionWorkerRoutes } from "./routes/notification-retention-worker.js";
 
-export async function buildApp() {
+type BuildAppOptions = {
+  readinessCheck?: () => Promise<void>;
+};
+
+export async function buildApp({ readinessCheck = checkDatabaseConnection }: BuildAppOptions = {}) {
   const app = Fastify({ logger: true, trustProxy: true });
   await app.register(helmet);
   await app.register(cookie);
@@ -65,6 +70,19 @@ export async function buildApp() {
   });
 
   app.get("/health", async () => ({ status: "ok" }));
+  app.get("/health/live", async () => ({ status: "ok" }));
+  app.get("/health/ready", async (request, reply) => {
+    try {
+      await readinessCheck();
+      return { status: "ready" };
+    } catch (error) {
+      request.log.warn(
+        { errorType: error instanceof Error ? error.name : "UnknownError" },
+        "readiness check failed",
+      );
+      return reply.code(503).send({ status: "unavailable" });
+    }
+  });
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(vehicleRoutes, { prefix: "/api/vehicles" });
   await app.register(auditRoutes, { prefix: "/api/audit" });

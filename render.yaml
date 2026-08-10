@@ -5,7 +5,7 @@ services:
     rootDir: .
     buildCommand: npm ci && npm run build
     startCommand: npm run start --workspace @filo/api
-    healthCheckPath: /health
+    healthCheckPath: /health/ready
     envVars:
       - key: NODE_VERSION
         value: 22

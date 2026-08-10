@@ -12,7 +12,7 @@ describe("release smoke boundaries", () => {
 
   before(async () => {
     const module = await import("../src/app.js");
-    app = await module.buildApp();
+    app = await module.buildApp({ readinessCheck: async () => undefined });
   });
 
   after(async () => {
@@ -26,6 +26,34 @@ describe("release smoke boundaries", () => {
     assert.deepEqual(response.json(), { status: "ok" });
     assert.equal(response.headers["x-content-type-options"], "nosniff");
     assert.equal(response.headers["x-frame-options"], "SAMEORIGIN");
+  });
+
+  it("separates liveness from database-backed readiness", async () => {
+    const liveResponse = await app.inject({ method: "GET", url: "/health/live" });
+    const readyResponse = await app.inject({ method: "GET", url: "/health/ready" });
+
+    assert.equal(liveResponse.statusCode, 200);
+    assert.deepEqual(liveResponse.json(), { status: "ok" });
+    assert.equal(readyResponse.statusCode, 200);
+    assert.deepEqual(readyResponse.json(), { status: "ready" });
+  });
+
+  it("returns a safe unavailable response when readiness fails", async () => {
+    const module = await import("../src/app.js");
+    const unavailableApp = await module.buildApp({
+      readinessCheck: async () => {
+        throw new Error("postgresql://private-credentials@example.test/filo");
+      },
+    });
+
+    try {
+      const response = await unavailableApp.inject({ method: "GET", url: "/health/ready" });
+      assert.equal(response.statusCode, 503);
+      assert.deepEqual(response.json(), { status: "unavailable" });
+      assert.doesNotMatch(response.body, /postgresql|private-credentials|example\.test/iu);
+    } finally {
+      await unavailableApp.close();
+    }
   });
 
   it("rejects protected operational views without a session", async () => {

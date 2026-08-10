@@ -9,6 +9,24 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5_000
 });
 
+export async function checkDatabaseConnection(): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("Database readiness check timed out")), 3_000);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+export async function closeDatabasePool(): Promise<void> {
+  await pool.end();
+}
+
 export async function withTenantTransaction<T>(
   tenantId: string,
   userId: string,

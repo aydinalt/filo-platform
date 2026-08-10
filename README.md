@@ -56,7 +56,9 @@ npm run dev
 ```
 
 Web: `http://localhost:5173`  
-API sağlık kontrolü: `http://localhost:3001/health`
+API süreç kontrolü: `http://localhost:3001/health/live`
+
+API veritabanı hazırlık kontrolü: `http://localhost:3001/health/ready`
 
 Demo giriş:
 
