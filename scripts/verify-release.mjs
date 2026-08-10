@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyReleasePolicy } from "./release-policy.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -59,6 +60,15 @@ for (const name of migrationNames) {
 
 console.log(`Release metadata verified for v${releaseVersion}.`);
 console.log(`${migrationNames.length} uniquely numbered migrations verified.`);
+
+const policyResult = await verifyReleasePolicy(root, releaseVersion);
+console.log(`${policyResult.updateEntries} safe update manifest entries verified.`);
+console.log(`${policyResult.deletedEntries} explicit deletion entries verified.`);
+if (policyResult.trackedEntries === null) {
+  console.log("Repository tracking check skipped outside a Git worktree.");
+} else {
+  console.log(`${policyResult.trackedEntries} tracked repository entries passed hygiene checks.`);
+}
 
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 run(npm, ["run", "typecheck"]);
