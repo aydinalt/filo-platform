@@ -6,7 +6,7 @@ import { config } from "../config.js";
 import { pruneDormantSessions, requireSession, revokeActiveSession } from "../lib/auth.js";
 import { verifyLoginPassword } from "../lib/login-security.js";
 import {
-  clearLoginRateLimitBucket,
+  clearUnchangedLoginRateLimitBucket,
   consumePersistentLoginAttempt,
 } from "../lib/login-rate-limit.js";
 import { createSessionToken, readSessionToken } from "../lib/session.js";
@@ -72,9 +72,10 @@ export async function authRoutes(app: FastifyInstance) {
          VALUES ($1, $2, $3, $4)`,
         [sessionId, user.tenantId, user.id, expiresAt],
       );
-      await clearLoginRateLimitBucket(
+      await clearUnchangedLoginRateLimitBucket(
         "account",
         parsed.data.email,
+        rateLimit.accountSnapshot,
         (sql, values) => client.query(sql, values),
       );
     });

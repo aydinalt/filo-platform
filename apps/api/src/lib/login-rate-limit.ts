@@ -4,14 +4,30 @@ import { config } from "../config.js";
 
 type LoginRateLimitScope = "ip" | "account";
 
-type RateLimitQuery = (
+type RateLimitBucketQuery = (
   sql: string,
   values: unknown[],
-) => Promise<{ rows: Array<{ limited: boolean; retryAfter: number }> }>;
+) => Promise<{ rows: LoginRateLimitBucketResult[] }>;
+
+type RateLimitMutationQuery = (
+  sql: string,
+  values: unknown[],
+) => Promise<{ rows: unknown[] }>;
 
 type LoginRateLimitResult = {
   limited: boolean;
   retryAfter: number;
+};
+
+type LoginRateLimitSnapshot = {
+  attemptCount: number;
+  windowStartedAt: string;
+};
+
+type LoginRateLimitBucketResult = LoginRateLimitResult & LoginRateLimitSnapshot;
+
+type PersistentLoginRateLimitResult = LoginRateLimitResult & {
+  accountSnapshot: LoginRateLimitSnapshot;
 };
 
 const bucketSql = `WITH stale AS (
@@ -47,6 +63,8 @@ const bucketSql = `WITH stale AS (
   RETURNING attempt_count, expires_at
 )
 SELECT attempt_count > $3::integer AS limited,
+       attempt_count AS "attemptCount",
+       window_started_at::text AS "windowStartedAt",
        GREATEST(1, CEIL(EXTRACT(EPOCH FROM expires_at - now())))::integer AS "retryAfter"
 FROM attempt`;
 
@@ -61,8 +79,8 @@ export async function consumeLoginRateLimitBucket(
   value: string,
   maxAttempts: number,
   windowMs: number,
-  query: RateLimitQuery = (sql, values) => pool.query(sql, values),
-): Promise<LoginRateLimitResult> {
+  query: RateLimitBucketQuery = (sql, values) => pool.query(sql, values),
+): Promise<LoginRateLimitBucketResult> {
   const result = await query(bucketSql, [
     scope,
     loginRateLimitKey(scope, value),
@@ -74,23 +92,30 @@ export async function consumeLoginRateLimitBucket(
   return row;
 }
 
-export async function clearLoginRateLimitBucket(
+export async function clearUnchangedLoginRateLimitBucket(
   scope: LoginRateLimitScope,
   value: string,
-  query: RateLimitQuery = (sql, values) => pool.query(sql, values),
+  snapshot: LoginRateLimitSnapshot,
+  query: RateLimitMutationQuery = (sql, values) => pool.query(sql, values),
 ): Promise<void> {
   await query(
     `DELETE FROM auth_login_rate_limits
-     WHERE scope = $1 AND key_hash = $2`,
-    [scope, loginRateLimitKey(scope, value)],
+     WHERE scope = $1 AND key_hash = $2
+       AND attempt_count = $3 AND window_started_at = $4::timestamptz`,
+    [
+      scope,
+      loginRateLimitKey(scope, value),
+      snapshot.attemptCount,
+      snapshot.windowStartedAt,
+    ],
   );
 }
 
 export async function consumePersistentLoginAttempt(
   clientIp: string,
   normalizedEmail: string,
-  query?: RateLimitQuery,
-): Promise<LoginRateLimitResult> {
+  query?: RateLimitBucketQuery,
+): Promise<PersistentLoginRateLimitResult> {
   const ipBucket = await consumeLoginRateLimitBucket(
     "ip",
     clientIp,
@@ -108,5 +133,9 @@ export async function consumePersistentLoginAttempt(
   return {
     limited: ipBucket.limited || accountBucket.limited,
     retryAfter: Math.max(ipBucket.retryAfter, accountBucket.retryAfter),
+    accountSnapshot: {
+      attemptCount: accountBucket.attemptCount,
+      windowStartedAt: accountBucket.windowStartedAt,
+    },
   };
 }

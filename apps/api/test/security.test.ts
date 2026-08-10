@@ -65,13 +65,19 @@ describe("security primitives", () => {
     assert.deepEqual(bucketValues, ["ip", ipKey, 5, 60_000]);
 
     const calls: unknown[][] = [];
+    const windowStartedAt = "2026-08-10 12:00:00.123456+00";
     const combined = await consumePersistentLoginAttempt(
       rawIp,
       rawEmail,
       async (_sql, values) => {
         calls.push(values);
         return {
-          rows: [{ limited: calls.length === 2, retryAfter: calls.length === 2 ? 55 : 30 }],
+          rows: [{
+            limited: calls.length === 2,
+            retryAfter: calls.length === 2 ? 55 : 30,
+            attemptCount: calls.length,
+            windowStartedAt,
+          }],
         };
       },
     );
@@ -80,20 +86,26 @@ describe("security primitives", () => {
     assert.deepEqual(calls.map((values) => values[0]), ["ip", "account"]);
     assert.equal(calls[0]?.[1], ipKey);
     assert.equal(calls[1]?.[1], accountKey);
-    assert.deepEqual(combined, { limited: true, retryAfter: 55 });
+    assert.deepEqual(combined, {
+      limited: true,
+      retryAfter: 55,
+      accountSnapshot: { attemptCount: 2, windowStartedAt },
+    });
   });
 
-  it("clears only the verified account login bucket", async () => {
-    const { clearLoginRateLimitBucket, loginRateLimitKey } = await import(
+  it("clears only an unchanged verified account login bucket", async () => {
+    const { clearUnchangedLoginRateLimitBucket, loginRateLimitKey } = await import(
       "../src/lib/login-rate-limit.js"
     );
     const rawEmail = "person@example.test";
     const accountKey = loginRateLimitKey("account", rawEmail);
+    const windowStartedAt = "2026-08-10 12:00:00.123456+00";
     let clearSql = "";
     let clearValues: unknown[] = [];
-    await clearLoginRateLimitBucket(
+    await clearUnchangedLoginRateLimitBucket(
       "account",
       rawEmail,
+      { attemptCount: 3, windowStartedAt },
       async (sql, values) => {
         clearSql = sql;
         clearValues = values;
@@ -102,17 +114,20 @@ describe("security primitives", () => {
     );
     assert.match(clearSql, /DELETE FROM auth_login_rate_limits/u);
     assert.match(clearSql, /WHERE scope = \$1 AND key_hash = \$2/u);
-    assert.deepEqual(clearValues, ["account", accountKey]);
+    assert.match(clearSql, /attempt_count = \$3 AND window_started_at = \$4::timestamptz/u);
+    assert.deepEqual(clearValues, ["account", accountKey, 3, windowStartedAt]);
+  });
 
+  it("passes the consumed account snapshot into the session transaction", () => {
     const authRouteSource = readFileSync(
       new URL("../src/routes/auth.ts", import.meta.url),
       "utf8",
     );
     assert.match(
       authRouteSource,
-      /withTenantTransaction[\s\S]+INSERT INTO user_sessions[\s\S]+clearLoginRateLimitBucket\(\s*"account",\s*parsed\.data\.email/u,
+      /withTenantTransaction[\s\S]+INSERT INTO user_sessions[\s\S]+clearUnchangedLoginRateLimitBucket\(\s*"account",\s*parsed\.data\.email,\s*rateLimit\.accountSnapshot/u,
     );
-    assert.doesNotMatch(authRouteSource, /clearLoginRateLimitBucket\(\s*"ip"/u);
+    assert.doesNotMatch(authRouteSource, /clearUnchangedLoginRateLimitBucket\(\s*"ip"/u);
   });
 
   it("round-trips a signed tenant session", async () => {

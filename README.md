@@ -121,7 +121,8 @@ döndürülmez. Aynı sınır PostgreSQL'de IP ve normalize hesap için ayrı, a
 arasında parola deneme bütçesi sıfırlanmaz. Ham IP ve e-posta değerleri saklanmaz.
 Doğrulanmış bir giriş yalnız ilgili hesap sayacını aynı veritabanı işlemi içinde
 sıfırlar; kaynak IP sayacı korunarak başarılı bir hesabın IP deneme bütçesini
-yenilemesi engellenir.
+yenilemesi engellenir. Hesap sayacı yalnız doğrulama sırasında görülen sürüm
+değişmeden kaldıysa temizlenir; eşzamanlı yeni denemeler kaybolmaz.
 
 Korumalı her API isteğinde imzalı oturumdaki kullanıcı ve tenant kimliği mevcut
 veritabanı üyeliğiyle yeniden doğrulanır. Devre dışı bırakılan kullanıcı veya
