@@ -71,6 +71,63 @@ export function archiveReconciliationOverdueReminderCopy(
       };
 }
 
+export function interruptedReminderRunPolicy() {
+  return {
+    staleAfterMinutes: 15,
+    outcomeCode: "REMINDER_SCAN_INTERRUPTED" as const,
+  };
+}
+
+export async function reconcileInterruptedArchiveReconciliationReminderRuns(input: {
+  tenantId: string;
+  actorUserId: string;
+  maintenanceKey: string;
+  source?: ArchiveSource;
+}) {
+  const source = input.source ?? "scheduler";
+  return withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
+    const actor = await client.query(
+      `SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.user_id=$1 AND m.tenant_id=$2 AND m.role IN ('owner','admin','operator') AND u.disabled_at IS NULL`,
+      [input.actorUserId, input.tenantId],
+    );
+    if (!actor.rowCount)
+      return { accepted: false as const, reason: "invalid_actor" as const };
+
+    const lock = (
+      await client.query(
+        `SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired`,
+        [`notification-reminder-maintenance:${input.tenantId}`],
+      )
+    ).rows[0];
+    if (!lock?.acquired)
+      return { accepted: false as const, reason: "maintenance_in_progress" as const };
+
+    const policy = interruptedReminderRunPolicy();
+    const interrupted = (
+      await client.query(
+        `UPDATE notification_archive_reconciliation_reminder_runs
+         SET status='failed',outcome_code=$1,completed_at=now()
+         WHERE status='running' AND started_at < now()-($2::integer*interval '1 minute')
+         RETURNING id`,
+        [policy.outcomeCode, policy.staleAfterMinutes],
+      )
+    ).rows as Array<{ id: string }>;
+    for (const run of interrupted) {
+      await client.query(
+        `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+         VALUES($1,$2,'notification_archive.reconciliation_overdue_reminder_run_interrupted','notification_archive_reconciliation_reminder_run',$3,$4::jsonb)`,
+        [input.tenantId, input.actorUserId, run.id, JSON.stringify({ outcomeCode: policy.outcomeCode, staleAfterMinutes: policy.staleAfterMinutes, maintenanceKey: input.maintenanceKey, source })],
+      );
+    }
+    await client.query(
+      `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+       VALUES($1,$2,'notification_archive.interrupted_reminder_runs_reconciled','notification_retention',$1,$3::jsonb)`,
+      [input.tenantId, input.actorUserId, JSON.stringify({ maintenanceKey: input.maintenanceKey, source, reconciledCount: interrupted.length, outcomeCode: policy.outcomeCode, staleAfterMinutes: policy.staleAfterMinutes })],
+    );
+    return { accepted: true as const, maintenanceKey: input.maintenanceKey, source, reconciledCount: interrupted.length, ...policy };
+  });
+}
+
 export async function loadNotificationRetentionState(client: TenantClient) {
   const row = (
     await client.query(
@@ -584,6 +641,13 @@ export async function runArchiveReconciliationOverdueReminders(input: {
   source?: ArchiveSource;
 }) {
   const source = input.source ?? "scheduler";
+  const maintenance = await reconcileInterruptedArchiveReconciliationReminderRuns({
+    tenantId: input.tenantId,
+    actorUserId: input.actorUserId,
+    maintenanceKey: `before-scan:${input.runKey}`,
+    source,
+  });
+  if (!maintenance.accepted) return maintenance;
   const started = await withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
     const actor = await client.query(
       `SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.user_id=$1 AND m.tenant_id=$2 AND m.role IN ('owner','admin','operator') AND u.disabled_at IS NULL`,
@@ -591,22 +655,6 @@ export async function runArchiveReconciliationOverdueReminders(input: {
     );
     if (!actor.rowCount)
       return { accepted: false as const, reason: "invalid_actor" as const };
-
-    const interrupted = (
-      await client.query(
-        `UPDATE notification_archive_reconciliation_reminder_runs
-         SET status='failed',outcome_code='REMINDER_SCAN_INTERRUPTED',completed_at=now()
-         WHERE status='running' AND started_at < now() - interval '15 minutes'
-         RETURNING id`,
-      )
-    ).rows as Array<{ id: string }>;
-    for (const run of interrupted) {
-      await client.query(
-        `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
-         VALUES($1,$2,'notification_archive.reconciliation_overdue_reminder_run_interrupted','notification_archive_reconciliation_reminder_run',$3,jsonb_build_object('outcomeCode','REMINDER_SCAN_INTERRUPTED','staleAfterMinutes',15))`,
-        [input.tenantId, input.actorUserId, run.id],
-      );
-    }
 
     const run = (
       await client.query(

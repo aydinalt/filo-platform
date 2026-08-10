@@ -4,6 +4,7 @@ import {
   archiveReconciliationHandlingDeadline,
   archiveReconciliationNotificationCopy,
   archiveReconciliationOverdueReminderCopy,
+  interruptedReminderRunPolicy,
 } from "../src/lib/notification-retention.js";
 
 describe("archive reconciliation notifications", () => {
@@ -17,6 +18,15 @@ describe("archive reconciliation notifications", () => {
     assert.equal(copy?.severity, "warning");
     assert.equal(copy?.actionTarget, null);
     assert.match(copy?.message ?? "", /^3 /);
+  });
+});
+
+describe("interrupted reminder run maintenance", () => {
+  it("uses a fixed threshold and bounded outcome code", () => {
+    assert.deepEqual(interruptedReminderRunPolicy(), {
+      staleAfterMinutes: 15,
+      outcomeCode: "REMINDER_SCAN_INTERRUPTED",
+    });
   });
 });
 

@@ -1,6 +1,6 @@
 import type {FastifyInstance} from "fastify";
-import {reconcileNotificationArchiveAttemptsSchema,runNotificationArchiveReconciliationReminderSchema,runNotificationArchiveSchema} from "@filo/contracts";
-import {executeNotificationArchiveAttempt,reconcileStaleNotificationArchiveAttempts,runArchiveReconciliationOverdueReminders} from "../lib/notification-retention.js";
+import {reconcileInterruptedNotificationArchiveReminderRunsSchema,reconcileNotificationArchiveAttemptsSchema,runNotificationArchiveReconciliationReminderSchema,runNotificationArchiveSchema} from "@filo/contracts";
+import {executeNotificationArchiveAttempt,reconcileInterruptedArchiveReconciliationReminderRuns,reconcileStaleNotificationArchiveAttempts,runArchiveReconciliationOverdueReminders} from "../lib/notification-retention.js";
 import {requireNotificationWorker} from "../lib/worker-auth.js";
 
 export async function notificationRetentionWorkerRoutes(app:FastifyInstance){
@@ -27,5 +27,12 @@ export async function notificationRetentionWorkerRoutes(app:FastifyInstance){
     if(!result.accepted)return reply.code(result.reason==="invalid_actor"?403:200).send(result);
     if(result.failed)return reply.code(503).send(result);
     return reply.code(result.summary.notificationsCreated>0?202:200).send(result);
+  });
+  app.post("/reconcile-interrupted-reminder-runs",{preHandler:requireNotificationWorker},async(request,reply)=>{
+    const parsed=reconcileInterruptedNotificationArchiveReminderRunsSchema.safeParse(request.body);
+    if(!parsed.success)return reply.code(400).send({error:"INVALID_NOTIFICATION_REMINDER_MAINTENANCE_REQUEST"});
+    const result=await reconcileInterruptedArchiveReconciliationReminderRuns({...parsed.data,source:"scheduler"});
+    if(!result.accepted)return reply.code(result.reason==="invalid_actor"?403:409).send(result);
+    return reply.code(result.reconciledCount>0?202:200).send(result);
   });
 }
