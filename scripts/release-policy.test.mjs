@@ -40,8 +40,16 @@ test("allows legitimate package metadata outside the accidental source paths", (
 
 test("requires update manifests to be sorted and unique", () => {
   assert.deepEqual(validateManifestEntries(["a.txt", "b.txt"]), []);
+  assert.match(validateManifestEntries([])[0], /manifest is empty/u);
   assert.match(validateManifestEntries(["b.txt", "a.txt"])[0], /not sorted/u);
   assert.match(validateManifestEntries(["a.txt", "a.txt"])[0], /duplicate/u);
+});
+
+test("allows an empty deletion manifest", () => {
+  assert.deepEqual(
+    validateManifestEntries([], { allowForbidden: true, allowEmpty: true }),
+    [],
+  );
 });
 
 test("rejects forbidden artifacts in update manifests", () => {

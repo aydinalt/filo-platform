@@ -92,7 +92,10 @@ olmayan uygulama rolü. API için yalnız uygulama rolünün URL'sini
 
 Vercel'e `VITE_API_URL=https://api-adresiniz` ekleyin. Render'a `WEB_ORIGIN`
 olarak Vercel adresini, `DATABASE_URL` olarak uygulama rolü bağlantısını girin.
-`SESSION_SECRET` en az 32 rastgele karakter olmalıdır.
+`SESSION_SECRET`, `NOTIFICATION_WORKER_KEY` ve `NOTIFICATION_WEBHOOK_SECRET`
+birbirinden farklı, en az 32 rastgele karakter olmalıdır. Üretimde `WEB_ORIGIN`
+HTTPS olmalı ve `COOKIE_SECURE=true` kalmalıdır. API; eksik, yer tutucu veya
+güvensiz üretim ayarlarında başlamayı reddeder.
 
 > Gerçek kullanıcı verisi açılmadan önce seçilen PostgreSQL planında PITR ve
 > restore provası ayrıca tamamlanmalıdır.

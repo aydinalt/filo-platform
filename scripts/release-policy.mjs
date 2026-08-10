@@ -41,9 +41,12 @@ export function findForbiddenPaths(paths) {
   return paths.filter((path) => !isSafeRelativePath(path) || isForbiddenArtifactPath(path));
 }
 
-export function validateManifestEntries(entries, { allowForbidden = false } = {}) {
+export function validateManifestEntries(
+  entries,
+  { allowForbidden = false, allowEmpty = false } = {},
+) {
   const errors = [];
-  if (entries.length === 0) errors.push("manifest is empty");
+  if (!allowEmpty && entries.length === 0) errors.push("manifest is empty");
 
   for (const entry of entries) {
     if (!isSafeRelativePath(entry)) errors.push(`unsafe path: ${entry}`);
@@ -101,7 +104,10 @@ export async function verifyReleasePolicy(root, releaseVersion) {
   }
 
   const deletedEntries = parseManifest(await readFile(deletionManifestPath, "utf8"));
-  assertNoErrors("invalid deletion manifest", validateManifestEntries(deletedEntries, { allowForbidden: true }));
+  assertNoErrors(
+    "invalid deletion manifest",
+    validateManifestEntries(deletedEntries, { allowForbidden: true, allowEmpty: true }),
+  );
   for (const entry of deletedEntries) {
     if (!isForbiddenArtifactPath(entry)) throw new Error(`deletion target is not a forbidden artifact: ${entry}`);
     if (await pathExists(join(root, entry))) throw new Error(`deletion target still exists: ${entry}`);

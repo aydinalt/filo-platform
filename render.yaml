@@ -15,6 +15,10 @@ services:
         sync: false
       - key: SESSION_SECRET
         generateValue: true
+      - key: NOTIFICATION_WORKER_KEY
+        generateValue: true
+      - key: NOTIFICATION_WEBHOOK_SECRET
+        generateValue: true
       - key: WEB_ORIGIN
         sync: false
       - key: COOKIE_SECURE
