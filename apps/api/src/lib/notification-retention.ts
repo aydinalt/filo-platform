@@ -137,8 +137,8 @@ export async function reconcileInterruptedArchiveReconciliationReminderRuns(inpu
       await client.query(
         `SELECT maintenance_key AS "maintenanceKey",source,reconciled_count AS "reconciledCount",outcome_code AS "maintenanceOutcomeCode",stale_after_minutes AS "staleAfterMinutes"
          FROM notification_archive_reconciliation_reminder_maintenance_runs
-         WHERE maintenance_key=$1`,
-        [input.maintenanceKey],
+         WHERE tenant_id=$1 AND maintenance_key=$2`,
+        [input.tenantId, input.maintenanceKey],
       )
     ).rows[0];
     if (existing)
@@ -153,9 +153,9 @@ export async function reconcileInterruptedArchiveReconciliationReminderRuns(inpu
       await client.query(
         `UPDATE notification_archive_reconciliation_reminder_runs
          SET status='failed',outcome_code=$1,completed_at=now()
-         WHERE status='running' AND started_at < now()-($2::integer*interval '1 minute')
+         WHERE tenant_id=$2 AND status='running' AND started_at < now()-($3::integer*interval '1 minute')
          RETURNING id`,
-        [policy.outcomeCode, policy.staleAfterMinutes],
+        [policy.outcomeCode, input.tenantId, policy.staleAfterMinutes],
       )
     ).rows as Array<{ id: string }>;
     for (const run of interrupted) {

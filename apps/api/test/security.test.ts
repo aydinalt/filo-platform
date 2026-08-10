@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 process.env.SESSION_SECRET = "test-secret-which-is-longer-than-32-characters";
 
@@ -27,5 +28,39 @@ describe("security primitives", () => {
     const decoded = await readSessionToken(token);
     assert.equal(decoded.id, user.id);
     assert.equal(decoded.tenantId, user.tenantId);
+  });
+
+  it("keeps reminder maintenance queries explicitly tenant scoped", () => {
+    const retentionSource = readFileSync(
+      new URL("../src/lib/notification-retention.ts", import.meta.url),
+      "utf8",
+    );
+    const routeSource = readFileSync(
+      new URL("../src/routes/notifications.ts", import.meta.url),
+      "utf8",
+    );
+
+    assert.match(
+      retentionSource,
+      /WHERE tenant_id=\$1 AND maintenance_key=\$2/,
+    );
+    assert.match(
+      retentionSource,
+      /WHERE tenant_id=\$2 AND status='running'/,
+    );
+    assert.match(routeSource, /WHERE rr\.tenant_id=\$1 ORDER BY/);
+    assert.match(routeSource, /WHERE mr\.tenant_id=\$1 ORDER BY/);
+    assert.match(
+      routeSource,
+      /FROM notification_archive_reconciliation_reminder_runs WHERE tenant_id=\$1/,
+    );
+    assert.match(
+      routeSource,
+      /LEFT JOIN memberships rm ON rm\.tenant_id=rr\.tenant_id AND rm\.user_id=rr\.initiated_by/,
+    );
+    assert.match(
+      routeSource,
+      /LEFT JOIN memberships mm ON mm\.tenant_id=mr\.tenant_id AND mm\.user_id=mr\.initiated_by/,
+    );
   });
 });
