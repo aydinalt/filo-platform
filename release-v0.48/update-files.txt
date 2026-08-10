@@ -1,0 +1,7 @@
+.github/workflows/release-gate.yml
+apps/api/package.json
+docs/LOCAL_UPDATE_v0.48.md
+package-lock.json
+package.json
+release-v0.48/update-files.txt
+scripts/verify-release.mjs
