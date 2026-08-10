@@ -11,6 +11,12 @@ services:
         value: 22
       - key: NODE_ENV
         value: production
+      - key: TRUST_PROXY_HOPS
+        value: 1
+      - key: REQUEST_BODY_LIMIT_BYTES
+        value: 1048576
+      - key: REQUEST_TIMEOUT_MS
+        value: 15000
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_ADMIN_URL

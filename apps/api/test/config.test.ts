@@ -15,6 +15,9 @@ const productionEnvironment = {
   COOKIE_SECURE: "true",
   NOTIFICATION_WORKER_KEY: "production-worker-secret-at-least-32-characters",
   NOTIFICATION_WEBHOOK_SECRET: "production-webhook-secret-at-least-32-characters",
+  TRUST_PROXY_HOPS: "1",
+  REQUEST_BODY_LIMIT_BYTES: "1048576",
+  REQUEST_TIMEOUT_MS: "15000",
 };
 
 describe("runtime configuration", () => {
@@ -24,6 +27,9 @@ describe("runtime configuration", () => {
     });
     assert.equal(config.nodeEnv, "development");
     assert.equal(config.port, 3001);
+    assert.equal(config.trustProxyHops, 0);
+    assert.equal(config.requestBodyLimitBytes, 1_048_576);
+    assert.equal(config.requestTimeoutMs, 15_000);
     assert.equal(config.sessionTtlHours, 12);
     assert.equal(config.webOrigin, "http://localhost:5173");
     assert.equal(config.cookieSecure, false);
@@ -39,6 +45,18 @@ describe("runtime configuration", () => {
     assert.throws(
       () => loadConfig({ ...base, COOKIE_SECURE: "yes" }),
       /COOKIE_SECURE must be true or false/u,
+    );
+    assert.throws(
+      () => loadConfig({ ...base, TRUST_PROXY_HOPS: "3" }),
+      /TRUST_PROXY_HOPS must be between/u,
+    );
+    assert.throws(
+      () => loadConfig({ ...base, REQUEST_BODY_LIMIT_BYTES: "16383" }),
+      /REQUEST_BODY_LIMIT_BYTES must be between/u,
+    );
+    assert.throws(
+      () => loadConfig({ ...base, REQUEST_TIMEOUT_MS: "0" }),
+      /REQUEST_TIMEOUT_MS must be between/u,
     );
   });
 
@@ -93,6 +111,7 @@ describe("runtime configuration", () => {
     assert.equal(config.nodeEnv, "production");
     assert.equal(config.webOrigin, "https://fleet.example.test");
     assert.equal(config.cookieSecure, true);
+    assert.equal(config.trustProxyHops, 1);
     assert.equal("databaseUrl" in config, false);
   });
 });

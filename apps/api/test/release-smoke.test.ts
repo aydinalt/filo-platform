@@ -9,10 +9,14 @@ process.env.WEB_ORIGIN = "https://fleet.example.test";
 
 describe("release smoke boundaries", () => {
   let app: FastifyInstance;
+  let observedClientIp = "";
 
   before(async () => {
     const module = await import("../src/app.js");
     app = await module.buildApp({ readinessCheck: async () => undefined });
+    app.addHook("onRequest", async (request) => {
+      observedClientIp = request.ip;
+    });
   });
 
   after(async () => {
@@ -26,6 +30,30 @@ describe("release smoke boundaries", () => {
     assert.deepEqual(response.json(), { status: "ok" });
     assert.equal(response.headers["x-content-type-options"], "nosniff");
     assert.equal(response.headers["x-frame-options"], "SAMEORIGIN");
+  });
+
+  it("does not trust forwarded client IPs without configured proxy hops", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/health/live",
+      remoteAddress: "127.0.0.1",
+      headers: { "x-forwarded-for": "198.51.100.23" },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(observedClientIp, "127.0.0.1");
+  });
+
+  it("rejects request bodies above the configured ingress limit", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/internal/notification-retention/reconcile-interrupted-reminder-runs",
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ value: "x".repeat(1_048_576) }),
+    });
+
+    assert.equal(response.statusCode, 413);
+    assert.deepEqual(response.json(), { error: "PAYLOAD_TOO_LARGE" });
   });
 
   it("separates liveness from database-backed readiness", async () => {

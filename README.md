@@ -102,5 +102,10 @@ birbirinden farklı, en az 32 rastgele karakter olmalıdır. Üretimde `WEB_ORIG
 HTTPS olmalı ve `COOKIE_SECURE=true` kalmalıdır. API; eksik, yer tutucu veya
 güvensiz üretim ayarlarında başlamayı reddeder.
 
+Render için `TRUST_PROXY_HOPS=1` bırakılmalıdır; böylece yalnız platformun son
+proxy katmanı güvenilir kabul edilir. `REQUEST_BODY_LIMIT_BYTES=1048576` ve
+`REQUEST_TIMEOUT_MS=15000` API giriş kaynaklarını sınırlar. Altyapı zinciri
+değişmeden proxy hop sayısı artırılmamalıdır.
+
 > Gerçek kullanıcı verisi açılmadan önce seçilen PostgreSQL planında PITR ve
 > restore provası ayrıca tamamlanmalıdır.

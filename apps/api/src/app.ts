@@ -39,7 +39,12 @@ type BuildAppOptions = {
 };
 
 export async function buildApp({ readinessCheck = checkDatabaseConnection }: BuildAppOptions = {}) {
-  const app = Fastify({ logger: true, trustProxy: true });
+  const app = Fastify({
+    logger: true,
+    trustProxy: config.trustProxyHops === 0 ? false : config.trustProxyHops,
+    bodyLimit: config.requestBodyLimitBytes,
+    requestTimeout: config.requestTimeoutMs,
+  });
   await app.register(helmet);
   await app.register(cookie);
   await app.register(cors, { origin: config.webOrigin, credentials: true });

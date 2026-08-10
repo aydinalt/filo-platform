@@ -88,6 +88,13 @@ export function loadConfig(environment: RuntimeEnvironment = process.env) {
     invalid("NODE_ENV must be development, test or production");
   }
   const production = nodeEnv === "production";
+  const trustProxyHops = boundedInteger(
+    "TRUST_PROXY_HOPS",
+    environment.TRUST_PROXY_HOPS,
+    0,
+    0,
+    2,
+  );
   const cookieSecure = booleanValue("COOKIE_SECURE", environment.COOKIE_SECURE, false);
   if (production && !cookieSecure) invalid("COOKIE_SECURE must be true in production");
   if (production) assertProductionDatabaseUrl(environment.DATABASE_URL);
@@ -115,6 +122,21 @@ export function loadConfig(environment: RuntimeEnvironment = process.env) {
   return Object.freeze({
     nodeEnv,
     port: boundedInteger("PORT", environment.PORT, 3001, 1, 65_535),
+    trustProxyHops,
+    requestBodyLimitBytes: boundedInteger(
+      "REQUEST_BODY_LIMIT_BYTES",
+      environment.REQUEST_BODY_LIMIT_BYTES,
+      1_048_576,
+      16_384,
+      5_242_880,
+    ),
+    requestTimeoutMs: boundedInteger(
+      "REQUEST_TIMEOUT_MS",
+      environment.REQUEST_TIMEOUT_MS,
+      15_000,
+      1_000,
+      120_000,
+    ),
     webOrigin: webOrigin(environment.WEB_ORIGIN, production),
     sessionSecret,
     sessionTtlHours: boundedInteger(
