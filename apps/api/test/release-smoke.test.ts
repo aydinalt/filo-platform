@@ -30,6 +30,21 @@ describe("release smoke boundaries", () => {
     assert.deepEqual(response.json(), { status: "ok" });
     assert.equal(response.headers["x-content-type-options"], "nosniff");
     assert.equal(response.headers["x-frame-options"], "SAMEORIGIN");
+    assert.match(
+      String(response.headers["x-request-id"]),
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
+  });
+
+  it("does not trust a client-supplied request identifier", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/health/live",
+      headers: { "x-request-id": "client-controlled-id" },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.notEqual(response.headers["x-request-id"], "client-controlled-id");
   });
 
   it("does not trust forwarded client IPs without configured proxy hops", async () => {

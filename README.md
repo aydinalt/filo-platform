@@ -107,5 +107,10 @@ proxy katmanı güvenilir kabul edilir. `REQUEST_BODY_LIMIT_BYTES=1048576` ve
 `REQUEST_TIMEOUT_MS=15000` API giriş kaynaklarını sınırlar. Altyapı zinciri
 değişmeden proxy hop sayısı artırılmamalıdır.
 
+API her yanıtla sunucu üretimli bir `x-request-id` döndürür. Destek ve olay
+incelemesinde bu kimlik kullanılmalı; istemciden gelen istek kimliklerine
+güvenilmemelidir. Üretim log seviyesi varsayılan olarak `LOG_LEVEL=info` kalır;
+oturum, yetkilendirme ve webhook imza başlıkları merkezi olarak maskelenir.
+
 > Gerçek kullanıcı verisi açılmadan önce seçilen PostgreSQL planında PITR ve
 > restore provası ayrıca tamamlanmalıdır.

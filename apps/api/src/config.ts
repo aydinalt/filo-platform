@@ -1,6 +1,7 @@
 type RuntimeEnvironment = Record<string, string | undefined>;
 
 const NODE_ENVIRONMENTS = new Set(["development", "test", "production"]);
+const LOG_LEVELS = new Set(["debug", "info", "warn", "error"]);
 
 function invalid(label: string): never {
   throw new Error(`Invalid runtime configuration: ${label}`);
@@ -26,6 +27,14 @@ function booleanValue(name: string, rawValue: string | undefined, fallback: bool
   const value = rawValue ?? String(fallback);
   if (value !== "true" && value !== "false") invalid(`${name} must be true or false`);
   return value === "true";
+}
+
+function logLevel(rawValue: string | undefined) {
+  const value = rawValue ?? "info";
+  if (!LOG_LEVELS.has(value)) {
+    invalid("LOG_LEVEL must be debug, info, warn or error");
+  }
+  return value;
 }
 
 function webOrigin(rawValue: string | undefined, production: boolean) {
@@ -137,6 +146,7 @@ export function loadConfig(environment: RuntimeEnvironment = process.env) {
       1_000,
       120_000,
     ),
+    logLevel: logLevel(environment.LOG_LEVEL),
     webOrigin: webOrigin(environment.WEB_ORIGIN, production),
     sessionSecret,
     sessionTtlHours: boundedInteger(

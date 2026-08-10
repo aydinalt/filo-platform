@@ -1,10 +1,15 @@
-import Fastify from "fastify";
+import Fastify, { LogController } from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import { checkDatabaseConnection } from "@filo/database";
 import { config } from "./config.js";
+import {
+  createLoggerOptions,
+  createRequestId,
+  safeErrorLogDetails,
+} from "./observability.js";
 import { authRoutes } from "./routes/auth.js";
 import { vehicleRoutes } from "./routes/vehicles.js";
 import { auditRoutes } from "./routes/audit.js";
@@ -40,7 +45,10 @@ type BuildAppOptions = {
 
 export async function buildApp({ readinessCheck = checkDatabaseConnection }: BuildAppOptions = {}) {
   const app = Fastify({
-    logger: true,
+    logger: createLoggerOptions(config.logLevel),
+    genReqId: createRequestId,
+    requestIdHeader: false,
+    logController: new LogController({ requestIdLogLabel: "requestId" }),
     trustProxy: config.trustProxyHops === 0 ? false : config.trustProxyHops,
     bodyLimit: config.requestBodyLimitBytes,
     requestTimeout: config.requestTimeoutMs,
@@ -49,6 +57,10 @@ export async function buildApp({ readinessCheck = checkDatabaseConnection }: Bui
   await app.register(cookie);
   await app.register(cors, { origin: config.webOrigin, credentials: true });
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
+
+  app.addHook("onRequest", async (request, reply) => {
+    reply.header("x-request-id", request.id);
+  });
 
   app.setErrorHandler((error, request, reply) => {
     const statusCode = Number((error as { statusCode?: number }).statusCode);
@@ -67,10 +79,10 @@ export async function buildApp({ readinessCheck = checkDatabaseConnection }: Bui
                   : statusCode === 429
                     ? "RATE_LIMITED"
                     : "REQUEST_REJECTED";
-      request.log.warn({ err: error, statusCode }, "request rejected");
+      request.log.warn({ ...safeErrorLogDetails(error), statusCode }, "request rejected");
       return reply.code(statusCode).send({ error: errorCode });
     }
-    request.log.error({ err: error }, "request failed");
+    request.log.error(safeErrorLogDetails(error), "request failed");
     return reply.code(500).send({ error: "INTERNAL_ERROR" });
   });
 

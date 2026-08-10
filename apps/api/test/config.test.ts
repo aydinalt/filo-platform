@@ -18,6 +18,7 @@ const productionEnvironment = {
   TRUST_PROXY_HOPS: "1",
   REQUEST_BODY_LIMIT_BYTES: "1048576",
   REQUEST_TIMEOUT_MS: "15000",
+  LOG_LEVEL: "info",
 };
 
 describe("runtime configuration", () => {
@@ -30,6 +31,7 @@ describe("runtime configuration", () => {
     assert.equal(config.trustProxyHops, 0);
     assert.equal(config.requestBodyLimitBytes, 1_048_576);
     assert.equal(config.requestTimeoutMs, 15_000);
+    assert.equal(config.logLevel, "info");
     assert.equal(config.sessionTtlHours, 12);
     assert.equal(config.webOrigin, "http://localhost:5173");
     assert.equal(config.cookieSecure, false);
@@ -57,6 +59,10 @@ describe("runtime configuration", () => {
     assert.throws(
       () => loadConfig({ ...base, REQUEST_TIMEOUT_MS: "0" }),
       /REQUEST_TIMEOUT_MS must be between/u,
+    );
+    assert.throws(
+      () => loadConfig({ ...base, LOG_LEVEL: "trace" }),
+      /LOG_LEVEL must be debug, info, warn or error/u,
     );
   });
 
