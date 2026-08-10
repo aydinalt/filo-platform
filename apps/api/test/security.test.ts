@@ -27,6 +27,7 @@ describe("security primitives", () => {
 
   it("round-trips a signed tenant session", async () => {
     const { createSessionToken, readSessionToken } = await import("../src/lib/session.js");
+    const sessionId = "30000000-0000-4000-8000-000000000001";
     const user = {
       id: "20000000-0000-4000-8000-000000000001",
       tenantId: "10000000-0000-4000-8000-000000000001",
@@ -35,10 +36,11 @@ describe("security primitives", () => {
       fullName: "Demo Yönetici",
       role: "owner" as const
     };
-    const token = await createSessionToken(user);
+    const token = await createSessionToken(user, sessionId);
     const decoded = await readSessionToken(token);
-    assert.equal(decoded.id, user.id);
-    assert.equal(decoded.tenantId, user.tenantId);
+    assert.equal(decoded.user.id, user.id);
+    assert.equal(decoded.user.tenantId, user.tenantId);
+    assert.equal(decoded.sessionId, sessionId);
   });
 
   it("reloads the current tenant membership instead of trusting stale token claims", async () => {
@@ -56,15 +58,22 @@ describe("security primitives", () => {
     const resolved = await loadActiveSessionUser(
       currentUser.id,
       currentUser.tenantId,
+      "30000000-0000-4000-8000-000000000001",
       async (sql, values) => {
         assert.match(sql, /u\.disabled_at IS NULL/u);
         assert.match(sql, /m\.tenant_id = \$2/u);
+        assert.match(sql, /s\.revoked_at IS NULL/u);
+        assert.match(sql, /s\.expires_at > now\(\)/u);
         receivedValues = values;
         return { rows: [currentUser] };
       },
     );
 
-    assert.deepEqual(receivedValues, [currentUser.id, currentUser.tenantId]);
+    assert.deepEqual(receivedValues, [
+      currentUser.id,
+      currentUser.tenantId,
+      "30000000-0000-4000-8000-000000000001",
+    ]);
     assert.deepEqual(resolved, currentUser);
     assert.equal(resolved?.role, "viewer");
   });
@@ -74,10 +83,33 @@ describe("security primitives", () => {
     const resolved = await loadActiveSessionUser(
       "20000000-0000-4000-8000-000000000001",
       "10000000-0000-4000-8000-000000000001",
+      "30000000-0000-4000-8000-000000000001",
       async () => ({ rows: [] }),
     );
 
     assert.equal(resolved, null);
+  });
+
+  it("revokes only the current tenant session", async () => {
+    const { revokeActiveSession } = await import("../src/lib/auth.js");
+    let receivedValues: unknown[] = [];
+    await revokeActiveSession(
+      "20000000-0000-4000-8000-000000000001",
+      "10000000-0000-4000-8000-000000000001",
+      "30000000-0000-4000-8000-000000000001",
+      async (sql, values) => {
+        assert.match(sql, /SET revoked_at = COALESCE\(revoked_at, now\(\)\)/u);
+        assert.match(sql, /tenant_id = \$2 AND user_id = \$3/u);
+        receivedValues = values;
+        return { rows: [] };
+      },
+    );
+
+    assert.deepEqual(receivedValues, [
+      "30000000-0000-4000-8000-000000000001",
+      "10000000-0000-4000-8000-000000000001",
+      "20000000-0000-4000-8000-000000000001",
+    ]);
   });
 
   it("keeps reminder maintenance queries explicitly tenant scoped", () => {

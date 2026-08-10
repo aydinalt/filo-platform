@@ -127,5 +127,10 @@ Tarayıcıdan gelen tüm durum değiştiren API istekleri özel CSRF başlığı
 tam `WEB_ORIGIN` eşleşmesiyle doğrulanır. Provider webhook'ları ve anahtarla korunan
 iç işçi endpoint'leri bu tarayıcı sınırından ayrı tutulur.
 
+Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
+istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
+Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden
+kullanılamaz ve kullanıcının diğer cihazlardaki aktif oturumları etkilenmez.
+
 > Gerçek kullanıcı verisi açılmadan önce seçilen PostgreSQL planında PITR ve
 > restore provası ayrıca tamamlanmalıdır.

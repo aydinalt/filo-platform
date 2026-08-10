@@ -1,10 +1,11 @@
 import type { FastifyInstance } from "fastify";
+import { randomUUID } from "node:crypto";
 import { loginSchema, type SessionUser } from "@filo/contracts";
-import { pool } from "@filo/database";
+import { pool, withTenantTransaction } from "@filo/database";
 import { config } from "../config.js";
-import { requireSession } from "../lib/auth.js";
+import { requireSession, revokeActiveSession } from "../lib/auth.js";
 import { verifyLoginPassword } from "../lib/login-security.js";
-import { createSessionToken } from "../lib/session.js";
+import { createSessionToken, readSessionToken } from "../lib/session.js";
 
 type LoginRow = SessionUser & { passwordHash: string; disabledAt: Date | null };
 
@@ -46,7 +47,16 @@ export async function authRoutes(app: FastifyInstance) {
       fullName: row.fullName,
       role: row.role
     };
-    const token = await createSessionToken(user);
+    const sessionId = randomUUID();
+    const expiresAt = new Date(Date.now() + config.sessionTtlHours * 60 * 60 * 1000);
+    await withTenantTransaction(user.tenantId, user.id, async (client) => {
+      await client.query(
+        `INSERT INTO user_sessions (id, tenant_id, user_id, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+        [sessionId, user.tenantId, user.id, expiresAt],
+      );
+    });
+    const token = await createSessionToken(user, sessionId);
     reply.setCookie("filo_session", token, {
       httpOnly: true,
       secure: config.cookieSecure,
@@ -59,7 +69,19 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.get("/me", { preHandler: requireSession }, async (request) => ({ user: request.sessionUser }));
 
-  app.post("/logout", async (_request, reply) => {
+  app.post("/logout", async (request, reply) => {
+    const token = request.cookies.filo_session;
+    if (token) {
+      let claims: Awaited<ReturnType<typeof readSessionToken>> | undefined;
+      try {
+        claims = await readSessionToken(token);
+      } catch {
+        claims = undefined;
+      }
+      if (claims) {
+        await revokeActiveSession(claims.user.id, claims.user.tenantId, claims.sessionId);
+      }
+    }
     reply.clearCookie("filo_session", { path: "/" });
     return reply.code(204).send();
   });
