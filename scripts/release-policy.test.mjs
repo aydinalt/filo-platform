@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   findForbiddenPaths,
   isForbiddenArtifactPath,
@@ -56,4 +57,17 @@ test("rejects forbidden artifacts in update manifests", () => {
   const errors = validateManifestEntries(["apps/web/tsconfig.tsbuildinfo", "archive.zip"]);
   assert.equal(errors.length, 2);
   assert.ok(errors.every((error) => error.startsWith("forbidden artifact:")));
+});
+
+test("keeps patched production dependency versions locked", () => {
+  const lockfile = JSON.parse(
+    readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"),
+  );
+
+  assert.equal(lockfile.packages?.["node_modules/fast-uri"]?.version, "3.1.5");
+  assert.equal(
+    lockfile.packages?.["node_modules/fast-json-stringify/node_modules/fast-uri"]?.version,
+    "4.1.2",
+  );
+  assert.equal(lockfile.packages?.["node_modules/nanoid"]?.version, "3.3.18");
 });

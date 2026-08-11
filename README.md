@@ -74,6 +74,10 @@ npm run build
 psql "$DATABASE_URL" -f packages/database/tenant-isolation-test.sql
 ```
 
+Release kapısı, kilit dosyasındaki üretim bağımlılıklarını da doğrular. Bilinen
+yüksek riskli `fast-uri` ve `nanoid` sürümlerine geri dönüş çevrimdışı regresyon
+testiyle engellenir; üretim bağımlılık denetimi yayın öncesinde temiz olmalıdır.
+
 Windows'ta tenant izolasyonu doğrulaması:
 
 ```powershell
