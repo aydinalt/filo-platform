@@ -154,6 +154,36 @@ export async function cancelSuppressedQueuedDeliveries(
   return result.rowCount ?? 0;
 }
 
+export async function cancelPreferenceDisabledQueuedDeliveries(
+  query: DeliveryWorkerQuery,
+  tenantId: string,
+) {
+  const result = await query(
+    `UPDATE notification_delivery_outbox delivery
+     SET status = 'cancelled',
+         last_error = 'RECIPIENT_CHANNEL_DISABLED',
+         lease_token = NULL,
+         lease_expires_at = NULL,
+         locked_at = NULL,
+         locked_by = NULL,
+         updated_at = now()
+     WHERE delivery.tenant_id = $1
+       AND delivery.status IN ('pending', 'failed')
+       AND EXISTS (
+         SELECT 1
+         FROM notification_preferences preference
+         WHERE preference.tenant_id = delivery.tenant_id
+           AND preference.user_id = delivery.recipient_user_id
+           AND (
+             (delivery.channel = 'email' AND NOT preference.email_enabled)
+             OR (delivery.channel = 'push' AND NOT preference.push_enabled)
+           )
+       )`,
+    [tenantId],
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function cancelInactiveRecipientDeliveries(
   query: DeliveryWorkerQuery,
   tenantId: string,
@@ -218,6 +248,16 @@ export async function claimDeliveryBatch(
              AND suppression.recipient_user_id = delivery.recipient_user_id
              AND suppression.channel = delivery.channel
              AND suppression.active
+         )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM notification_preferences preference
+           WHERE preference.tenant_id = delivery.tenant_id
+             AND preference.user_id = delivery.recipient_user_id
+             AND (
+               (delivery.channel = 'email' AND NOT preference.email_enabled)
+               OR (delivery.channel = 'push' AND NOT preference.push_enabled)
+             )
          )
        ORDER BY delivery.available_at, delivery.id
        FOR UPDATE OF delivery SKIP LOCKED
@@ -459,6 +499,7 @@ export async function deliveryWorkerRoutes(app: FastifyInstance) {
       await reconcileExpiredDeliveryLeases(query, input.tenantId);
       await cancelInactiveRecipientDeliveries(query, input.tenantId);
       await cancelSuppressedQueuedDeliveries(query, input.tenantId);
+      await cancelPreferenceDisabledQueuedDeliveries(query, input.tenantId);
       const rows = await claimDeliveryBatch(query, input);
       return {
         deliveries: rows.map((row) => ({

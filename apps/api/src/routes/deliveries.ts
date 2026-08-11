@@ -5,15 +5,75 @@ import {requireSession} from "../lib/auth.js";
 import {allow} from "../lib/permissions.js";
 import {renderTemplate} from "../lib/template-renderer.js";
 
-const preferencesSelect=`SELECT email_enabled AS "emailEnabled",push_enabled AS "pushEnabled",quiet_hours_enabled AS "quietHoursEnabled",to_char(quiet_start,'HH24:MI') AS "quietStart",to_char(quiet_end,'HH24:MI') AS "quietEnd",timezone,updated_at AS "updatedAt" FROM notification_preferences WHERE user_id=$1`;
+const preferencesSelect=`SELECT email_enabled AS "emailEnabled",push_enabled AS "pushEnabled",quiet_hours_enabled AS "quietHoursEnabled",to_char(quiet_start,'HH24:MI') AS "quietStart",to_char(quiet_end,'HH24:MI') AS "quietEnd",timezone,updated_at AS "updatedAt" FROM notification_preferences WHERE tenant_id=$1 AND user_id=$2`;
 const deliverySelect=`SELECT o.id,o.notification_id AS "notificationId",n.title,o.recipient_user_id AS "recipientUserId",u.full_name AS "recipientName",o.channel,o.status,o.attempt_count AS "attemptCount",o.available_at AS "availableAt",o.delivered_at AS "deliveredAt",o.last_error AS "lastError",o.created_at AS "createdAt" FROM notification_delivery_outbox o JOIN in_app_notifications n ON n.id=o.notification_id JOIN users u ON u.id=o.recipient_user_id`;
 const shape=(row:any)=>({...row,updatedAt:row.updatedAt?.toISOString()??null,availableAt:row.availableAt?.toISOString(),deliveredAt:row.deliveredAt?.toISOString()??null,createdAt:row.createdAt?.toISOString()});
 
 type DeliveryOperationQuery=(sql:string,values?:unknown[])=>Promise<{rows:unknown[];rowCount?:number|null}>;
 type DeliveryCandidate={id:string;tenantId:string;recipientUserId:string;sourceType:string;title:string;message:string;recipientName:string;timezone:string;quietEnabled:boolean;quietStart:string|null;quietEnd:string|null;channel:"email"|"push"};
+type DeliveryPreferenceInput={emailEnabled:boolean;pushEnabled:boolean;quietHoursEnabled:boolean;quietStart:string|null;quietEnd:string|null;timezone:string};
+type StoredDeliveryPreferences={emailEnabled:boolean;pushEnabled:boolean;quietHoursEnabled:boolean;quietStart:string|null;quietEnd:string|null;timezone:string};
 
 export function isSupportedTimeZone(timezone:string){
  try{new Intl.DateTimeFormat("en-US",{timeZone:timezone}).format();return true;}catch{return false;}
+}
+
+export async function updateNotificationPreferencesAndReconcile(query:DeliveryOperationQuery,input:{tenantId:string;userId:string;preferences:DeliveryPreferenceInput}){
+ await query(`SELECT pg_advisory_xact_lock(hashtextextended($1::text||':'||$2::text,0))`,[input.tenantId,input.userId]);
+ const current=(await query(`SELECT email_enabled AS "emailEnabled",push_enabled AS "pushEnabled",quiet_hours_enabled AS "quietHoursEnabled",to_char(quiet_start,'HH24:MI') AS "quietStart",to_char(quiet_end,'HH24:MI') AS "quietEnd",timezone FROM notification_preferences WHERE tenant_id=$1 AND user_id=$2 FOR UPDATE`,[input.tenantId,input.userId])).rows[0] as StoredDeliveryPreferences|undefined;
+ const previous=current??{emailEnabled:true,pushEnabled:true,quietHoursEnabled:false,quietStart:null,quietEnd:null,timezone:"Europe/Istanbul"};
+ const p=input.preferences;
+ await query(`INSERT INTO notification_preferences(tenant_id,user_id,email_enabled,push_enabled,quiet_hours_enabled,quiet_start,quiet_end,timezone)
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+   ON CONFLICT(tenant_id,user_id) DO UPDATE
+   SET email_enabled=EXCLUDED.email_enabled,
+       push_enabled=EXCLUDED.push_enabled,
+       quiet_hours_enabled=EXCLUDED.quiet_hours_enabled,
+       quiet_start=EXCLUDED.quiet_start,
+       quiet_end=EXCLUDED.quiet_end,
+       timezone=EXCLUDED.timezone,
+       updated_at=now()`,[input.tenantId,input.userId,p.emailEnabled,p.pushEnabled,p.quietHoursEnabled,p.quietStart,p.quietEnd,p.timezone]);
+ const cancelled=await query(`UPDATE notification_delivery_outbox delivery
+   SET status='cancelled',
+       last_error='RECIPIENT_CHANNEL_DISABLED',
+       lease_token=NULL,
+       lease_expires_at=NULL,
+       locked_at=NULL,
+       locked_by=NULL,
+       updated_at=now()
+   WHERE delivery.tenant_id=$1
+     AND delivery.recipient_user_id=$2
+     AND delivery.status IN ('pending','failed')
+     AND ((delivery.channel='email' AND NOT $3::boolean) OR (delivery.channel='push' AND NOT $4::boolean))`,[input.tenantId,input.userId,p.emailEnabled,p.pushEnabled]);
+ const deferred=await query(`UPDATE notification_delivery_outbox delivery
+   SET available_at=GREATEST(delivery.available_at,(
+       CASE WHEN $6::time>$7::time AND (now() AT TIME ZONE $8::text)::time>=$6::time
+         THEN (now() AT TIME ZONE $8::text)::date+1+$7::time
+         ELSE (now() AT TIME ZONE $8::text)::date+$7::time
+       END
+     ) AT TIME ZONE $8::text),
+       updated_at=now()
+   WHERE delivery.tenant_id=$1
+     AND delivery.recipient_user_id=$2
+     AND delivery.status IN ('pending','failed')
+     AND ((delivery.channel='email' AND $3::boolean) OR (delivery.channel='push' AND $4::boolean))
+     AND $5::boolean
+     AND $6::time IS NOT NULL
+     AND $7::time IS NOT NULL
+     AND (
+       ($6::time<$7::time AND (now() AT TIME ZONE $8::text)::time>=$6::time AND (now() AT TIME ZONE $8::text)::time<$7::time)
+       OR
+       ($6::time>$7::time AND ((now() AT TIME ZONE $8::text)::time>=$6::time OR (now() AT TIME ZONE $8::text)::time<$7::time))
+     )`,[input.tenantId,input.userId,p.emailEnabled,p.pushEnabled,p.quietHoursEnabled,p.quietStart,p.quietEnd,p.timezone]);
+ await query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+   VALUES($1,$2,'notification_preferences.updated','user',$2,
+     jsonb_build_object(
+       'previous',jsonb_build_object('emailEnabled',$3::boolean,'pushEnabled',$4::boolean,'quietHoursEnabled',$5::boolean,'quietStart',$6::text,'quietEnd',$7::text,'timezone',$8::text),
+       'next',jsonb_build_object('emailEnabled',$9::boolean,'pushEnabled',$10::boolean,'quietHoursEnabled',$11::boolean,'quietStart',$12::text,'quietEnd',$13::text,'timezone',$14::text),
+       'cancelledQueuedDeliveries',$15::integer,
+       'deferredQueuedDeliveries',$16::integer
+     ))`,[input.tenantId,input.userId,previous.emailEnabled,previous.pushEnabled,previous.quietHoursEnabled,previous.quietStart,previous.quietEnd,previous.timezone,p.emailEnabled,p.pushEnabled,p.quietHoursEnabled,p.quietStart,p.quietEnd,p.timezone,cancelled.rowCount??0,deferred.rowCount??0]);
+ return{cancelled:cancelled.rowCount??0,deferred:deferred.rowCount??0};
 }
 
 export async function enqueueNotificationDeliveries(query:DeliveryOperationQuery,tenantId:string){
@@ -83,6 +143,12 @@ export async function applyDeliveryOperatorAction(query:DeliveryOperationQuery,i
        ($3='retry' AND status='failed' AND attempt_count<10)
        OR ($3='cancel' AND status IN ('pending','failed'))
      )
+     AND ($3<>'retry' OR NOT EXISTS(
+       SELECT 1 FROM notification_preferences preference
+       WHERE preference.tenant_id=notification_delivery_outbox.tenant_id
+         AND preference.user_id=notification_delivery_outbox.recipient_user_id
+         AND ((notification_delivery_outbox.channel='email' AND NOT preference.email_enabled) OR (notification_delivery_outbox.channel='push' AND NOT preference.push_enabled))
+     ))
    FOR UPDATE
   ), changed AS (
    UPDATE notification_delivery_outbox delivery
@@ -108,8 +174,8 @@ export async function applyDeliveryOperatorAction(query:DeliveryOperationQuery,i
 }
 
 export async function deliveryRoutes(app:FastifyInstance){
- app.get("/preferences",{preHandler:requireSession},async request=>withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async c=>{const row=(await c.query(preferencesSelect,[request.sessionUser.id])).rows[0];return{preferences:row?shape(row):{emailEnabled:true,pushEnabled:true,quietHoursEnabled:false,quietStart:null,quietEnd:null,timezone:"Europe/Istanbul",updatedAt:null}};}));
- app.put("/preferences",{preHandler:requireSession},async(request,reply)=>{const parsed=updateNotificationPreferencesSchema.safeParse(request.body);if(!parsed.success||!isSupportedTimeZone(parsed.data.timezone))return reply.code(400).send({error:"INVALID_NOTIFICATION_PREFERENCES"});const user=request.sessionUser;return withTenantTransaction(user.tenantId,user.id,async c=>{const p=parsed.data;await c.query(`INSERT INTO notification_preferences(tenant_id,user_id,email_enabled,push_enabled,quiet_hours_enabled,quiet_start,quiet_end,timezone) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant_id,user_id) DO UPDATE SET email_enabled=$3,push_enabled=$4,quiet_hours_enabled=$5,quiet_start=$6,quiet_end=$7,timezone=$8,updated_at=now()`,[user.tenantId,user.id,p.emailEnabled,p.pushEnabled,p.quietHoursEnabled,p.quietStart,p.quietEnd,p.timezone]);await c.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_preferences.updated','user',$2,'{}')`,[user.tenantId,user.id]);return reply.code(204).send();});});
+ app.get("/preferences",{preHandler:requireSession},async request=>withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async c=>{const row=(await c.query(preferencesSelect,[request.sessionUser.tenantId,request.sessionUser.id])).rows[0];return{preferences:row?shape(row):{emailEnabled:true,pushEnabled:true,quietHoursEnabled:false,quietStart:null,quietEnd:null,timezone:"Europe/Istanbul",updatedAt:null}};}));
+ app.put("/preferences",{preHandler:requireSession},async(request,reply)=>{const parsed=updateNotificationPreferencesSchema.safeParse(request.body);if(!parsed.success||!isSupportedTimeZone(parsed.data.timezone))return reply.code(400).send({error:"INVALID_NOTIFICATION_PREFERENCES"});const user=request.sessionUser;return withTenantTransaction(user.tenantId,user.id,async c=>{await updateNotificationPreferencesAndReconcile(((sql:string,values?:unknown[])=>c.query(sql,values)) as DeliveryOperationQuery,{tenantId:user.tenantId,userId:user.id,preferences:parsed.data});return reply.code(204).send();});});
  app.post("/enqueue",{preHandler:[requireSession,allow("owner","admin","operator")]},async request=>withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async c=>{
   const created=await enqueueNotificationDeliveries(((sql:string,values?:unknown[])=>c.query(sql,values)) as DeliveryOperationQuery,request.sessionUser.tenantId);
   await c.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_deliveries.enqueued','notification_delivery',$2,jsonb_build_object('created',$3))`,[request.sessionUser.tenantId,request.sessionUser.id,created]);return{created};

@@ -7,6 +7,7 @@ process.env.NOTIFICATION_WORKER_KEY =
   "delivery-worker-test-worker-secret-at-least-32-characters";
 
 const {
+  cancelPreferenceDisabledQueuedDeliveries,
   cancelSuppressedQueuedDeliveries,
   cancelInactiveRecipientDeliveries,
   claimDeliveryBatch,
@@ -121,6 +122,22 @@ describe("notification delivery worker lifecycle", () => {
     }, tenantId);
   });
 
+  it("cancels queued delivery when its current channel preference is disabled", async () => {
+    const tenantId = "10000000-0000-4000-8000-000000000001";
+    await cancelPreferenceDisabledQueuedDeliveries(async (sql, values) => {
+      assert.match(sql, /delivery\.tenant_id = \$1/u);
+      assert.match(sql, /delivery\.status IN \('pending', 'failed'\)/u);
+      assert.match(sql, /preference\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /preference\.user_id = delivery\.recipient_user_id/u);
+      assert.match(sql, /NOT preference\.email_enabled/u);
+      assert.match(sql, /NOT preference\.push_enabled/u);
+      assert.match(sql, /RECIPIENT_CHANNEL_DISABLED/u);
+      assert.doesNotMatch(sql, /status = 'processing'/u);
+      assert.deepEqual(values, [tenantId]);
+      return { rows: [], rowCount: 2 };
+    }, tenantId);
+  });
+
   it("keeps suppression cleanup and claims explicitly tenant scoped", async () => {
     const tenantId = "10000000-0000-4000-8000-000000000001";
     await cancelSuppressedQueuedDeliveries(async (sql, values) => {
@@ -140,6 +157,8 @@ describe("notification delivery worker lifecycle", () => {
       assert.match(sql, /provider\.credential_env_ref/u);
       assert.match(sql, /COALESCE\(delivery\.provider_profile_id, candidates\.provider_id\)/u);
       assert.match(sql, /suppression\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /preference\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /NOT preference\.email_enabled/u);
       assert.match(sql, /membership\.tenant_id = delivery\.tenant_id/u);
       assert.match(sql, /recipient\.disabled_at IS NULL/u);
       assert.match(sql, /FOR UPDATE OF delivery SKIP LOCKED/u);

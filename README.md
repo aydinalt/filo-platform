@@ -235,6 +235,14 @@ zaman dilimi kurallarıyla UTC teslimat anına çevrilir. Geçersiz yeni zaman d
 veritabanı işleminden önce reddedilir; eski geçersiz kayıtlar güvenli İstanbul varsayılanına
 düşürülür.
 
+Tercih değişiklikleri artık teslimat kuyruğuyla aynı veritabanı işlemi içinde uzlaştırılır.
+Kapatılan kanala ait bekleyen veya başarısız teslimatlar provider'a ulaşmadan iptal edilir;
+aktifleşen sessiz saat içindeki teslimatlar alıcının yerel bitiş anına ileri alınır ve mevcut
+teslimat zamanı hiçbir zaman geriye çekilmez. Worker claim sırasında güncel kanal tercihini
+yeniden denetler; operatör retry işlemi de kapatılmış bir kanalı yeniden kuyruğa alamaz.
+Aktif `processing` lease'leri korunur. Önceki ve sonraki tercihler ile iptal/erteleme sayıları
+tenant kapsamlı denetim kaydında saklanır.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

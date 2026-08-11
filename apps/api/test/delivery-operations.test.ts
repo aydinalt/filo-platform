@@ -12,6 +12,9 @@ describe("notification delivery operator actions",()=>{
    assert.match(sql,/WHERE tenant_id=\$1/u);
    assert.match(sql,/\$3='retry' AND status='failed' AND attempt_count<10/u);
    assert.match(sql,/\$3='cancel' AND status IN \('pending','failed'\)/u);
+   assert.match(sql,/\$3<>'retry' OR NOT EXISTS/u);
+   assert.match(sql,/preference\.tenant_id=notification_delivery_outbox\.tenant_id/u);
+   assert.match(sql,/NOT preference\.email_enabled/u);
    assert.match(sql,/status=CASE WHEN \$3='retry' THEN 'pending' ELSE 'cancelled' END/u);
    assert.match(sql,/available_at=CASE WHEN \$3='retry' THEN now\(\)/u);
    assert.match(sql,/last_error=CASE WHEN \$3='retry' THEN NULL ELSE \$4 END/u);
