@@ -26,10 +26,9 @@ toplanmaz; bu dilim yalnız izin ve takip yaşam döngüsünü güvenli biçimde
 İzin reddedildiğinde veya geri çekildiğinde veritabanı ve API takibin aktif
 kalmasına izin vermez.
 
-## Henüz kapsamda olmayanlar
+## V1 dışındaki ürünler
 
-Gerçek konum noktası toplama, sürücü mobil uygulaması, public firma sayfası,
-CRM, teklif, özel alan adı ve ödeme yoktur. Bunlar ayrı dikey dilimlerdir.
+Public firma sayfası, CRM, teklif, özel alan adı ve ödeme bu uygulama diliminde yoktur.
 ## Notification provider rotation
 
 Provider activation is serialized per tenant and channel with a transaction-scoped
@@ -121,3 +120,23 @@ session atomically. Authenticated password change verifies the current password,
 the current session and revokes all other sessions. Users can list only their own live
 tenant sessions and revoke non-current sessions. Each security transition creates tenant
 audit evidence.
+
+## Native mobile background tracking
+
+The driver application is a separate Expo runtime for iOS and Android. A browser session
+never becomes a mobile credential. An authenticated operational user creates a random,
+15-minute, single-use enrollment capability for one active assignment. The database stores
+only its SHA-256 digest. Claiming the capability locks it, rotates any earlier credential
+for the assignment, and returns a separate 256-bit credential once.
+
+Mobile authentication crosses RLS only through narrowly granted security-definer functions.
+Every accepted credential is assignment-bound, expires after 90 days, can be revoked from
+the web panel, and resolves back to a tenant plus the issuing operational actor before a
+tenant transaction starts. Raw enrollment and access secrets are never persisted.
+
+The app requires always-location permission before background tracking can start. Location
+collection is allowed only while the bound assignment has an active shift and server tracking
+state is `tracking`. Offline points remain in a bounded device queue, are sent chronologically
+in batches of at most 100, and retain stable UUID event identities so API retries are
+idempotent. Geofence and speeding evaluation reuse the same tenant-scoped ingestion path as
+foreground web points.

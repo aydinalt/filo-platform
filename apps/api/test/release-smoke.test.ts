@@ -153,6 +153,20 @@ describe("release smoke boundaries", () => {
     assert.deepEqual(completionResponse.json(), { error: "INVALID_INPUT" });
   });
 
+  it("rejects malformed or missing mobile capabilities before tenant work", async () => {
+    const claimResponse = await app.inject({
+      method: "POST",
+      url: "/api/mobile/claim",
+      headers: { "x-filo-csrf": "1" },
+      payload: { token: "not-a-token", platform: "android", deviceName: "Test phone" },
+    });
+    const principalResponse = await app.inject({ method: "GET", url: "/api/mobile/me" });
+    assert.equal(claimResponse.statusCode, 400);
+    assert.deepEqual(claimResponse.json(), { error: "INVALID_INPUT" });
+    assert.equal(principalResponse.statusCode, 401);
+    assert.deepEqual(principalResponse.json(), { error: "MOBILE_AUTH_REQUIRED" });
+  });
+
   it("blocks provider rotation without an authenticated browser context", async () => {
     const response = await app.inject({
       method: "PATCH",

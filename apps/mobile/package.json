@@ -1,0 +1,29 @@
+{
+  "name": "@filo/mobile",
+  "version": "0.92.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "typecheck": "tsc --noEmit --pretty false",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@filo/contracts": "*",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "expo": "^57.0.12",
+    "expo-crypto": "~57.0.1",
+    "expo-location": "~57.0.9",
+    "expo-secure-store": "~57.0.1",
+    "expo-task-manager": "~57.0.9",
+    "react": "19.2.3",
+    "react-native": "0.86.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

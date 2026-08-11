@@ -1,4 +1,4 @@
-# Filo Platform V1 — hesap kurtarma ve oturum güvenliği v0.91
+# Filo Platform V1 — yerel mobil arka plan takibi v0.92
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -20,6 +20,13 @@ ve kullanıcı tarafından aktif oturumların görüntülenip sonlandırılması
 e-postaları production worker üzerinden gönderilir; hassas bağlantı gönderimden, kullanım
 veya süre bitiminden sonra teslimat kaydında otomatik olarak temizlenir.
 
+v0.92, Expo tabanlı yerel iOS/Android sürücü uygulamasını, 15 dakikalık tek
+kullanımlık telefon kayıt kodlarını, hash'li ve iptal edilebilir mobil kimlikleri,
+aktif vardiya kontrollü arka plan konumunu ve çevrimdışı konum kuyruğunu ekler.
+Mobil noktalar en fazla 100 kayıtlık kronolojik paketlerle gönderilir; `eventId`
+tekrarları sunucuda idempotent kabul edilir ve aynı atama için yeni telefon kaydı
+önceki mobil erişimi otomatik kapatır.
+
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.
 
@@ -37,6 +44,8 @@ olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümün
 ```text
 apps/web                 React + Vite panel
 apps/api                 Fastify REST API
+apps/mobile              Expo iOS/Android sürücü uygulaması
+apps/worker              Sürekli bildirim ve bakım worker'ı
 packages/contracts       Ortak Zod şemaları ve tipler
 packages/database        PostgreSQL bağlantısı, migration ve seed
 infra                    Yerel PostgreSQL rol kurulumu
@@ -159,6 +168,13 @@ Giriş sonrasındaki `Hesap Güvenliği` ekranı parola değişimini, aktif otur
 diğer oturumların tek tek kapatılmasını sağlar. Hesap kurtarma e-postası kullanıcı bildirim
 tercihlerinden bağımsız zorunlu bir hesap işlemi olarak gönderilir; aktif bounce/complaint
 baskılama kaydı varsa teslimat yine engellenir.
+
+Yerel sürücü uygulaması için web panelindeki `Telefon Takibi` ekranından aktif bir
+atamaya kayıt kodu üretin. Kod yalnız 15 dakika ve bir kez geçerlidir. Sürücü uygulaması
+`EXPO_PUBLIC_API_URL` ile production API'ye bağlanır; erişim anahtarı işletim sisteminin
+güvenli saklama alanında, çevrimdışı konum kuyruğu uygulama deposunda tutulur. iOS ve
+Android arka plan davranışı fiziksel cihazlarda doğrulanmadan kesintisiz takip vaadi
+verilmemelidir.
 
 Giriş endpoint'i istemci IP'si başına varsayılan olarak dakikada 5 denemeyle
 sınırlıdır. `AUTH_LOGIN_RATE_LIMIT_MAX` ve `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`

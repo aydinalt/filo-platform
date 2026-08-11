@@ -3,6 +3,7 @@ import { createAlertRuleSchema, createAssignmentSchema, createGeofenceSchema, cr
 import { withTenantTransaction } from "@filo/database";
 import { requireSession } from "../lib/auth.js";
 import { allow } from "../lib/permissions.js";
+import { ingestLocationEvent } from "../lib/location-ingestion.js";
 
 const assignmentSelect = `SELECT a.id,a.tenant_id AS "tenantId",a.vehicle_id AS "vehicleId",
  v.plate AS "vehiclePlate",a.driver_id AS "driverId",r.full_name AS "driverName",
@@ -208,53 +209,8 @@ export async function operationRoutes(app: FastifyInstance) {
     const recordedAt=new Date(parsed.data.recordedAt);
     if(Math.abs(Date.now()-recordedAt.getTime())>5*60*1000)return reply.code(400).send({error:"LOCATION_TIME_OUT_OF_RANGE"});
     const user=request.sessionUser;
-    const result=await withTenantTransaction(user.tenantId,user.id,async client=>{
-      const eligible=await client.query(`SELECT 1 FROM vehicle_driver_assignments a
-        JOIN work_shifts s ON s.assignment_id=a.id AND s.status='active'
-        JOIN tracking_statuses t ON t.assignment_id=a.id AND t.state='tracking'
-        WHERE a.id=$1 AND a.ended_at IS NULL`,[parsed.data.assignmentId]);
-      if(!eligible.rowCount)return "inactive" as const;
-      const inserted=await client.query<{id:string}>(`INSERT INTO location_events
-        (tenant_id,assignment_id,event_id,recorded_at,latitude,longitude,accuracy_meters,speed_mps,heading_degrees)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        ON CONFLICT (tenant_id,event_id) DO NOTHING RETURNING id::text`,[
-        user.tenantId,parsed.data.assignmentId,parsed.data.eventId,recordedAt,
-        parsed.data.latitude,parsed.data.longitude,parsed.data.accuracyMeters,
-        parsed.data.speedMps??null,parsed.data.headingDegrees??null]);
-      if(!inserted.rowCount)return "duplicate" as const;
-      const locationEventId=inserted.rows[0]!.id;
-      const fences=(await client.query(`SELECT id,latitude,longitude,radius_meters AS "radiusMeters" FROM geofences WHERE status='active'`)).rows;
-      for(const fence of fences){
-        const inside=distanceMeters(parsed.data,{latitude:fence.latitude,longitude:fence.longitude})<=fence.radiusMeters;
-        const previous=await client.query<{isInside:boolean}>(`SELECT is_inside AS "isInside" FROM geofence_assignment_states
-          WHERE geofence_id=$1 AND assignment_id=$2 FOR UPDATE`,[fence.id,parsed.data.assignmentId]);
-        if(!previous.rowCount){
-          await client.query(`INSERT INTO geofence_assignment_states(tenant_id,geofence_id,assignment_id,is_inside,last_location_event_id,observed_at)
-            VALUES($1,$2,$3,$4,$5,$6)`,[user.tenantId,fence.id,parsed.data.assignmentId,inside,locationEventId,recordedAt]);
-          if(!inside)continue;
-        }else{
-          if(previous.rows[0]!.isInside===inside){
-            await client.query(`UPDATE geofence_assignment_states SET last_location_event_id=$3,observed_at=$4
-              WHERE geofence_id=$1 AND assignment_id=$2`,[fence.id,parsed.data.assignmentId,locationEventId,recordedAt]);
-            continue;
-          }
-          await client.query(`UPDATE geofence_assignment_states SET is_inside=$3,last_location_event_id=$4,observed_at=$5
-            WHERE geofence_id=$1 AND assignment_id=$2`,[fence.id,parsed.data.assignmentId,inside,locationEventId,recordedAt]);
-        }
-        const transition=inside?"entered":"exited";
-        const event=(await client.query<{id:string}>(`INSERT INTO geofence_events(tenant_id,geofence_id,assignment_id,location_event_id,event_type,occurred_at)
-          VALUES($1,$2,$3,$4,$5,$6) RETURNING id::text`,[user.tenantId,fence.id,parsed.data.assignmentId,locationEventId,transition,recordedAt])).rows[0]!;
-        await client.query(`INSERT INTO operational_alerts(tenant_id,rule_id,assignment_id,location_event_id,geofence_event_id,type,occurred_at,metadata)
-          SELECT $1,r.id,$2,$3,$4,r.type,$5,jsonb_build_object('geofenceId',$6) FROM alert_rules r
-          WHERE r.status='active' AND r.type=$7 AND r.geofence_id=$6 ON CONFLICT DO NOTHING`,[user.tenantId,parsed.data.assignmentId,locationEventId,event.id,recordedAt,fence.id,`geofence_${transition}`]);
-      }
-      if(parsed.data.speedMps!==null&&parsed.data.speedMps!==undefined){
-        await client.query(`INSERT INTO operational_alerts(tenant_id,rule_id,assignment_id,location_event_id,type,occurred_at,metadata)
-          SELECT $1,r.id,$2,$3,'speeding',$4,jsonb_build_object('speedKph',round(($5::numeric*3.6),1),'thresholdKph',r.threshold_kph)
-          FROM alert_rules r WHERE r.status='active' AND r.type='speeding' AND ($5*3.6)>=r.threshold_kph ON CONFLICT DO NOTHING`,[user.tenantId,parsed.data.assignmentId,locationEventId,recordedAt,parsed.data.speedMps]);
-      }
-      return "created" as const;
-    });
+    const result=await withTenantTransaction(user.tenantId,user.id,client=>
+      ingestLocationEvent(client,user.tenantId,parsed.data));
     if(result==="inactive")return reply.code(409).send({error:"TRACKING_NOT_ACTIVE"});
     return reply.code(result==="created"?201:200).send({accepted:true,duplicate:result==="duplicate"});
   });

@@ -27,10 +27,11 @@ function run(command, args) {
   if (result.status !== 0) fail(`${command} ${args.join(" ")} exited with ${result.status}`);
 }
 
-const [rootPackage, apiPackage, workerPackage, lockfile] = await Promise.all([
+const [rootPackage, apiPackage, workerPackage, mobilePackage, lockfile] = await Promise.all([
   readJson("package.json"),
   readJson("apps/api/package.json"),
   readJson("apps/worker/package.json"),
+  readJson("apps/mobile/package.json"),
   readJson("package-lock.json"),
 ]);
 
@@ -38,10 +39,12 @@ const releaseVersion = rootPackage.version;
 const versionChecks = [
   ["apps/api/package.json", apiPackage.version],
   ["apps/worker/package.json", workerPackage.version],
+  ["apps/mobile/package.json", mobilePackage.version],
   ["package-lock.json", lockfile.version],
   ["package-lock.json root package", lockfile.packages?.[""]?.version],
   ["package-lock.json API workspace", lockfile.packages?.["apps/api"]?.version],
   ["package-lock.json worker workspace", lockfile.packages?.["apps/worker"]?.version],
+  ["package-lock.json mobile workspace", lockfile.packages?.["apps/mobile"]?.version],
 ];
 
 for (const [label, version] of versionChecks) {

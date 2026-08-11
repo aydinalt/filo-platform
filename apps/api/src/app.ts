@@ -41,6 +41,7 @@ import { notificationHealthScanRoutes } from "./routes/notification-health-scans
 import { notificationRetentionWorkerRoutes } from "./routes/notification-retention-worker.js";
 import { notificationWorkerScopeRoutes } from "./routes/notification-worker-scopes.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
+import { mobileRoutes } from "./routes/mobile.js";
 
 type BuildAppOptions = {
   readinessCheck?: () => Promise<void>;
@@ -113,6 +114,7 @@ export async function buildApp({ readinessCheck = checkDatabaseConnection }: Bui
   });
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(onboardingRoutes, { prefix: "/api/onboarding" });
+  await app.register(mobileRoutes, { prefix: "/api/mobile" });
   await app.register(vehicleRoutes, { prefix: "/api/vehicles" });
   await app.register(auditRoutes, { prefix: "/api/audit" });
   await app.register(driverRoutes, { prefix: "/api/drivers" });

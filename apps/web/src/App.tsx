@@ -17,6 +17,7 @@ import type {
   MaintenancePlan,
   Member,
   MemberInvitation,
+  MobileEnrollment,
   NotificationItem,
   NotificationRule,
   OperationalAlert,
@@ -706,6 +707,8 @@ function Dashboard({
   const [error, setError] = useState("");
   const [mobileAssignment, setMobileAssignment] = useState("");
   const [mobileMessage, setMobileMessage] = useState("Takip kapalı");
+  const [mobileEnrollments, setMobileEnrollments] = useState<MobileEnrollment[]>([]);
+  const [mobileEnrollmentToken, setMobileEnrollmentToken] = useState("");
   const watchId = useRef<number | null>(null);
 
   const filteredReconciliations =
@@ -817,6 +820,7 @@ function Dashboard({
       setNotificationDeliveries(deliveryResult.deliveries);
       setNotificationTemplates(templateResult.templates);
       if (user.role !== "viewer") {
+        setMobileEnrollments((await api.mobileEnrollments()).enrollments);
         setNotificationAnalytics((await api.notificationAnalytics()).analytics);
         setNotificationProviderHealth(await api.notificationProviderHealth());
         const providerIncidentResult =
@@ -910,6 +914,33 @@ function Dashboard({
       );
     setMobileMessage("Takip kullanıcı tarafından durduruldu.");
     await refresh();
+  }
+
+  async function createNativeMobileEnrollment() {
+    if (!mobileAssignment) {
+      setMobileMessage("Önce aktif bir atama seçin.");
+      return;
+    }
+    const assignment = assignments.find((item) => item.id === mobileAssignment);
+    if (!assignment) return;
+    try {
+      const result = await api.createMobileEnrollment({
+        assignmentId: mobileAssignment,
+        label: `${assignment.vehiclePlate} sürücü telefonu`,
+      });
+      setMobileEnrollmentToken(result.token);
+      setMobileMessage("15 dakikalık tek kullanımlık kayıt kodu oluşturuldu.");
+      setMobileEnrollments((await api.mobileEnrollments()).enrollments);
+    } catch {
+      setMobileMessage("Mobil kayıt kodu oluşturulamadı.");
+    }
+  }
+
+  async function revokeNativeMobileEnrollment(id: string) {
+    await api.revokeMobileEnrollment(id);
+    setMobileEnrollments((await api.mobileEnrollments()).enrollments);
+    setMobileEnrollmentToken("");
+    setMobileMessage("Mobil kayıt ve bağlı erişim iptal edildi.");
   }
 
   async function changeStatus(vehicle: Vehicle, status: Vehicle["status"]) {
@@ -2052,46 +2083,65 @@ function Dashboard({
           </>
         )}
         {view === "mobile" && (
-          <section className="table-card mobile-tracking">
-            <div className="section-head">
-              <div>
-                <p className="eyebrow">SÜRÜCÜ MOBİL WEB</p>
-                <h2>Telefon konum paylaşımı</h2>
+          <>
+            <section className="table-card mobile-tracking">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">YEREL SÜRÜCÜ UYGULAMASI</p>
+                  <h2>Güvenli telefon kaydı</h2>
+                </div>
               </div>
-            </div>
-            <p>
-              Konum yalnız aktif vardiya sırasında ve bu ekrandaki açık
-              kontrolle gönderilir.
-            </p>
-            <label>
-              Aktif atama
-              <select
-                value={mobileAssignment}
-                onChange={(e) => setMobileAssignment(e.target.value)}
-              >
-                <option value="">Atama seçin</option>
-                {assignments
-                  .filter((a) => !a.endedAt)
-                  .map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.vehiclePlate} · {a.driverName}
+              <p>
+                Atama için 15 dakika geçerli, tek kullanımlık kayıt kodu üretin.
+                Kod kullanıldığında önceki telefon erişimi otomatik iptal edilir.
+              </p>
+              <label>
+                Aktif atama
+                <select value={mobileAssignment} onChange={(event) => setMobileAssignment(event.target.value)}>
+                  <option value="">Atama seçin</option>
+                  {assignments.filter((assignment) => !assignment.endedAt).map((assignment) => (
+                    <option key={assignment.id} value={assignment.id}>
+                      {assignment.vehiclePlate} · {assignment.driverName}
                     </option>
                   ))}
-              </select>
-            </label>
-            <div className="modal-actions">
-              <button onClick={() => void startMobileTracking()}>
-                Takibi başlat
-              </button>
-              <button
-                className="secondary"
-                onClick={() => void stopMobileTracking()}
-              >
-                Takibi durdur
-              </button>
-            </div>
-            <div className="security-note">{mobileMessage}</div>
-          </section>
+                </select>
+              </label>
+              <div className="modal-actions">
+                <button onClick={() => void createNativeMobileEnrollment()}>Kayıt kodu oluştur</button>
+              </div>
+              {mobileEnrollmentToken && <div className="invite-link-banner">
+                <div><strong>Tek kullanımlık kod</strong><small>15 dakika içinde sürücü uygulamasına girilmelidir.</small></div>
+                <input readOnly value={mobileEnrollmentToken} />
+                <button className="secondary" onClick={() => void navigator.clipboard.writeText(mobileEnrollmentToken)}>Kopyala</button>
+              </div>}
+              <div className="security-note">{mobileMessage}</div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Atama</th><th>Etiket</th><th>Durum</th><th>Geçerlilik</th><th></th></tr></thead>
+                  <tbody>
+                    {mobileEnrollments.map((enrollment) => {
+                      const status = enrollment.revokedAt ? "İptal" : enrollment.claimedAt ? "Kullanıldı" : new Date(enrollment.expiresAt) <= new Date() ? "Süresi doldu" : "Bekliyor";
+                      return <tr key={enrollment.id}>
+                        <td>{enrollment.vehiclePlate}<small>{enrollment.driverName}</small></td>
+                        <td>{enrollment.label}</td><td><span className="status">{status}</span></td>
+                        <td>{new Date(enrollment.expiresAt).toLocaleString("tr-TR")}</td>
+                        <td>{!enrollment.revokedAt && <button className="secondary" onClick={() => void revokeNativeMobileEnrollment(enrollment.id)}>İptal et</button>}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="table-card mobile-tracking spaced">
+              <div className="section-head"><div><p className="eyebrow">GEÇİCİ TARAYICI TESTİ</p><h2>Mobil web konum testi</h2></div></div>
+              <p>Bu kontrol yalnız ekran açıkken test içindir; gerçek pilotta yerel sürücü uygulamasını kullanın.</p>
+              <div className="modal-actions">
+                <button onClick={() => void startMobileTracking()}>Tarayıcı testini başlat</button>
+                <button className="secondary" onClick={() => void stopMobileTracking()}>Tarayıcı testini durdur</button>
+              </div>
+            </section>
+          </>
         )}
         {view === "geofences" && (
           <>

@@ -1,5 +1,7 @@
 import pg, { type PoolClient, type QueryResultRow } from "pg";
 
+export type { PoolClient } from "pg";
+
 const { Pool } = pg;
 
 export const pool = new Pool({

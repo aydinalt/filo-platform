@@ -1,6 +1,6 @@
 # Filo Platform V1 — Production Runbook
 
-Bu runbook, v0.91 ile API, web paneli ve sürekli bildirim worker'ını kontrollü pilot
+Bu runbook, v0.92 ile API, web paneli, yerel sürücü uygulaması ve sürekli bildirim worker'ını kontrollü pilot
 ortamında açmak için uygulanacak sırayı tanımlar.
 
 ## 1. Zorunlu altyapı
@@ -80,7 +80,7 @@ bulunur. Pilot sırasında desteklenmeyen push kanalını kullanıcı tercihleri
 
 Arayüzdeki `terms-v1` ve `privacy-v1` kabul sürümleri, hukuk/KVKK sahibi tarafından
 onaylanmış ve kullanıcıya erişilebilir gerçek metinlerle eşleştirilmeden dış kullanıcı
-kaydı açılmamalıdır. v0.91 kabul kanıtını saklar; hukuki metnin kendisini üretmez.
+kaydı açılmamalıdır. v0.92 kabul kanıtını saklar; hukuki metnin kendisini üretmez.
 
 ## 6. Hesap kurtarma ve oturum güvenliği
 
@@ -99,7 +99,19 @@ kaydı açılmamalıdır. v0.91 kabul kanıtını saklar; hukuki metnin kendisin
 7. `account.password_reset_requested`, `account.password_reset_completed`,
    `account.password_changed` ve `account.session_revoked` audit kayıtlarını kontrol edin.
 
-## 7. Pilot açılış kapıları
+## 7. Yerel sürücü uygulaması ve arka plan konumu
+
+1. Mobil build ortamında `EXPO_PUBLIC_API_URL` değerini production API HTTPS origin'ine ayarlayın.
+2. Web panelinde aktif atama için kayıt kodu üretin; kodu 15 dakika içinde fiziksel telefonda bir kez kullanın.
+3. Aynı kodun ikinci kullanımının ve iptal edilmiş kodun `410` verdiğini doğrulayın.
+4. Aynı atamaya ikinci telefon kaydedin; ilk telefon erişiminin sonraki istekte `401` aldığını doğrulayın.
+5. iOS'ta `Always`, Android'de arka plan konum iznini verin; aktif vardiya olmadan takibin başlayamadığını doğrulayın.
+6. Telefon ekranını kapatıp uygulamayı arka plana alın; en az 60 dakikalık rota boyunca konumların devam ettiğini doğrulayın.
+7. Uçak modunda en az 20 nokta biriktirin; bağlantı geldiğinde noktaların kronolojik ve tekrarsız aktarıldığını doğrulayın.
+8. Web panelinden kaydı iptal edin; telefonun yeni konum gönderemediğini doğrulayın.
+9. Android OEM pil optimizasyonu ve iOS uygulama sonlandırma davranışını pilot cihaz modelinde ayrıca kaydedin.
+
+## 8. Pilot açılış kapıları
 
 - PostgreSQL PITR özelliği açık ve sağlayıcı ekran görüntüsü/kanıtı kayıtlı.
 - Boş bir veritabanına restore provası tamamlanmış ve süre kaydedilmiş.
@@ -109,7 +121,7 @@ kaydı açılmamalıdır. v0.91 kabul kanıtını saklar; hukuki metnin kendisin
 - Firma kaydı, davet kabulü, davet iptali ve oturum iptali saha provası tamamlanmış.
 - Parola kurtarma e-postası, tek kullanımlılık ve tüm oturumları kapatma provası tamamlanmış.
 - KVKK metinleri, telefon sahipliği ve çalışan bilgilendirme akışı onaylanmış.
-- Mobil arka plan konum takibi gerçek cihaz pilotu tamamlanmadan kesintisiz takip
-  vaadi verilmemiş.
+- iOS ve en az iki Android/OEM cihazda 60 dakikalık arka plan rota pilotu tamamlanmış.
+- Uçak modu kuyruğu, yeniden bağlantı eşitlemesi, credential rotasyonu ve uzaktan iptal kanıtlanmış.
 
 Bu kapılar tamamlanmadan gerçek kullanıcı veya sürekli saha verisi açılmaz.

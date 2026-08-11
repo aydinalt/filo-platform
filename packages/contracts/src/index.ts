@@ -209,6 +209,60 @@ export const createLocationEventSchema = z.object({
 
 export type CreateLocationEventInput = z.infer<typeof createLocationEventSchema>;
 
+export const createMobileEnrollmentSchema = z.object({
+  assignmentId: z.string().uuid(),
+  label: z.string().trim().min(2).max(80),
+});
+
+export const claimMobileEnrollmentSchema = z.object({
+  token: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[A-Za-z0-9_-]{43}$/iu),
+  platform: z.enum(["android", "ios"]),
+  deviceName: z.string().trim().min(2).max(100),
+});
+
+export const mobileLocationBatchSchema = z.object({
+  events: z.array(createLocationEventSchema.omit({ assignmentId: true })).min(1).max(100),
+});
+
+export const mobileTrackingStateSchema = z.object({
+  permission: z.enum(["granted_always", "denied", "restricted"]),
+  state: z.enum(["tracking", "paused", "permission_revoked", "error"]),
+  errorCode: z.string().trim().max(80).nullable().optional(),
+}).superRefine((value, context) => {
+  if (value.state === "tracking" && value.permission !== "granted_always") {
+    context.addIssue({ code: "custom", message: "Background tracking requires always permission", path: ["state"] });
+  }
+});
+
+export type CreateMobileEnrollmentInput = z.infer<typeof createMobileEnrollmentSchema>;
+export type ClaimMobileEnrollmentInput = z.infer<typeof claimMobileEnrollmentSchema>;
+export type MobileLocationBatchInput = z.infer<typeof mobileLocationBatchSchema>;
+export type MobileTrackingStateInput = z.infer<typeof mobileTrackingStateSchema>;
+
+export type MobileEnrollment = {
+  id: string;
+  assignmentId: string;
+  vehiclePlate: string;
+  driverName: string;
+  label: string;
+  expiresAt: string;
+  claimedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+};
+
+export type MobilePrincipal = {
+  credentialId: string;
+  tenantId: string;
+  actorUserId: string;
+  assignmentId: string;
+  vehiclePlate: string;
+  driverName: string;
+  deviceName: string;
+  platform: "android" | "ios";
+  expiresAt: string;
+};
+
 export type LatestLocation = {
   assignmentId: string; vehiclePlate: string; driverName: string;
   latitude: number; longitude: number; accuracyMeters: number;
