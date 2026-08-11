@@ -38,3 +38,7 @@ the same tenant/channel, deactivates the displaced active profile, activates the
 target, and writes one audit event in the same transaction. Delivery rows retain
 their selected `provider_profile_id`; retries therefore use the originally selected
 credential reference while unassigned deliveries resolve the currently active profile.
+
+All provider status transitions reread and row-lock the target after acquiring the
+tenant/channel advisory lock. Replayed requests for the current status are no-ops, and
+audit events are emitted only for transitions based on the locked current state.

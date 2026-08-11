@@ -83,6 +83,81 @@ export async function rotateActiveProvider(
   return true;
 }
 
+export async function changeProviderStatus(
+  query: ProviderQuery,
+  input: {
+    tenantId: string;
+    actorUserId: string;
+    providerProfileId: string;
+    channel: "email" | "push";
+    nextStatus: "active" | "inactive";
+  },
+) {
+  await lockProviderChannel(query, input.tenantId, input.channel);
+  const current = await query(
+    `SELECT status
+     FROM notification_provider_profiles
+     WHERE tenant_id = $1 AND channel = $2 AND id = $3
+     FOR UPDATE`,
+    [input.tenantId, input.channel, input.providerProfileId],
+  );
+  const previousStatus = current.rows[0]?.status as "active" | "inactive" | undefined;
+  if (!previousStatus) return "not_found" as const;
+  if (previousStatus === input.nextStatus) return "unchanged" as const;
+
+  if (input.nextStatus === "active") {
+    const deactivated = await query(
+      `UPDATE notification_provider_profiles
+       SET status = 'inactive', updated_at = now()
+       WHERE tenant_id = $1
+         AND channel = $2
+         AND status = 'active'
+         AND id <> $3
+       RETURNING id`,
+      [input.tenantId, input.channel, input.providerProfileId],
+    );
+    await query(
+      `UPDATE notification_provider_profiles
+       SET status = 'active', updated_at = now()
+       WHERE tenant_id = $1 AND channel = $2 AND id = $3`,
+      [input.tenantId, input.channel, input.providerProfileId],
+    );
+    await query(
+      `INSERT INTO audit_events(
+         tenant_id, actor_user_id, action, entity_type, entity_id, metadata
+       ) VALUES(
+         $1, $2, 'notification_provider.rotated', 'notification_provider', $3,
+         jsonb_build_object('channel', $4, 'deactivatedProviderIds', $5::jsonb)
+       )`,
+      [
+        input.tenantId,
+        input.actorUserId,
+        input.providerProfileId,
+        input.channel,
+        JSON.stringify(deactivated.rows.map((row) => row.id)),
+      ],
+    );
+  } else {
+    await query(
+      `UPDATE notification_provider_profiles
+       SET status = 'inactive', updated_at = now()
+       WHERE tenant_id = $1 AND channel = $2 AND id = $3`,
+      [input.tenantId, input.channel, input.providerProfileId],
+    );
+    await query(
+      `INSERT INTO audit_events(
+         tenant_id, actor_user_id, action, entity_type, entity_id, metadata
+       ) VALUES(
+         $1,$2,'notification_provider.status_changed','notification_provider',$3,
+         jsonb_build_object('channel',$4,'previousStatus',$5,'nextStatus',$6)
+       )`,
+      [input.tenantId, input.actorUserId, input.providerProfileId, input.channel,
+       previousStatus, input.nextStatus],
+    );
+  }
+  return "changed" as const;
+}
+
 export async function notificationProviderRoutes(app: FastifyInstance) {
   app.get("/", guard, async (request) =>
     withTenantTransaction(
@@ -151,39 +226,23 @@ export async function notificationProviderRoutes(app: FastifyInstance) {
     return withTenantTransaction(user.tenantId, user.id, async (client) => {
       const current = (
         await client.query(
-          `SELECT channel,status
+          `SELECT channel
            FROM notification_provider_profiles
            WHERE tenant_id = $1 AND id = $2`,
           [user.tenantId, id],
         )
-      ).rows[0] as { channel: "email" | "push"; status: string } | undefined;
+      ).rows[0] as { channel: "email" | "push" } | undefined;
       if (!current) return reply.code(404).send({ error: "PROVIDER_NOT_FOUND" });
 
-      if (parsed.data.status === "active") {
-        const rotated = await rotateActiveProvider(client.query.bind(client), {
-          tenantId: user.tenantId,
-          actorUserId: user.id,
-          providerProfileId: id,
-          channel: current.channel,
-        });
-        if (!rotated) return reply.code(404).send({ error: "PROVIDER_NOT_FOUND" });
-      } else {
-        await lockProviderChannel(client.query.bind(client), user.tenantId, current.channel);
-        await client.query(
-          `UPDATE notification_provider_profiles
-           SET status = $3, updated_at = now()
-           WHERE tenant_id = $1 AND id = $2`,
-          [user.tenantId, id, parsed.data.status],
-        );
-        await client.query(
-          `INSERT INTO audit_events(
-             tenant_id,actor_user_id,action,entity_type,entity_id,metadata
-           ) VALUES(
-             $1,$2,'notification_provider.status_changed','notification_provider',$3,
-             jsonb_build_object('channel',$4,'previousStatus',$5,'nextStatus',$6)
-           )`,
-          [user.tenantId, user.id, id, current.channel, current.status, parsed.data.status],
-        );
+      const result = await changeProviderStatus(client.query.bind(client), {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        providerProfileId: id,
+        channel: current.channel,
+        nextStatus: parsed.data.status,
+      });
+      if (result === "not_found") {
+        return reply.code(404).send({ error: "PROVIDER_NOT_FOUND" });
       }
       return reply.code(204).send();
     });

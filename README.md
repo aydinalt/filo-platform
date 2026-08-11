@@ -250,6 +250,11 @@ teslimata sabitlenmiş profil pasif hale gelse bile worker retry işlemi aynı p
 credential referansını kullanmaya devam eder; yeni teslimatlar yalnız yeni aktif profile
 bağlanır.
 
+Provider durum değişiklikleri de kanal kilidi alındıktan sonra güncel kayıt yeniden
+okunarak uygulanır. Böylece eşzamanlı yönetici istekleri denetim geçmişine eski bir
+durumu yazamaz; zaten geçerli olan durumu yeniden isteyen çağrılar değişiklik veya
+yinelenen denetim olayı üretmeden başarılı olur.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 process.env.SESSION_SECRET = "provider-rotation-test-session-secret-at-least-32-characters";
 
-const { lockProviderChannel, rotateActiveProvider } = await import(
+const { changeProviderStatus, lockProviderChannel, rotateActiveProvider } = await import(
   "../src/routes/notification-providers.js"
 );
 
@@ -82,5 +82,57 @@ describe("notification provider rotation", () => {
     });
     assert.equal(rotated, false);
     assert.equal(call, 2);
+  });
+});
+
+describe("notification provider status transitions", () => {
+  it("rechecks status under the channel lock and ignores an idempotent replay", async () => {
+    let call = 0;
+    const result = await changeProviderStatus(async (sql, values) => {
+      call += 1;
+      if (call === 1) {
+        assert.match(sql, /pg_advisory_xact_lock/u);
+        return { rows: [] };
+      }
+      assert.match(sql, /SELECT status/u);
+      assert.match(sql, /FOR UPDATE/u);
+      assert.deepEqual(values, ["tenant-1", "email", "provider-1"]);
+      return { rows: [{ status: "inactive" }] };
+    }, {
+      tenantId: "tenant-1",
+      actorUserId: "actor-1",
+      providerProfileId: "provider-1",
+      channel: "email",
+      nextStatus: "inactive",
+    });
+    assert.equal(result, "unchanged");
+    assert.equal(call, 2);
+  });
+
+  it("audits a deactivation from the locked current status", async () => {
+    let call = 0;
+    const result = await changeProviderStatus(async (sql, values) => {
+      call += 1;
+      if (call === 1) return { rows: [] };
+      if (call === 2) return { rows: [{ status: "active" }] };
+      if (call === 3) {
+        assert.match(sql, /SET status = 'inactive'/u);
+        assert.deepEqual(values, ["tenant-1", "push", "provider-1"]);
+        return { rows: [] };
+      }
+      assert.match(sql, /notification_provider\.status_changed/u);
+      assert.deepEqual(values, [
+        "tenant-1", "actor-1", "provider-1", "push", "active", "inactive",
+      ]);
+      return { rows: [] };
+    }, {
+      tenantId: "tenant-1",
+      actorUserId: "actor-1",
+      providerProfileId: "provider-1",
+      channel: "push",
+      nextStatus: "inactive",
+    });
+    assert.equal(result, "changed");
+    assert.equal(call, 4);
   });
 });
