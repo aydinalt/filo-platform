@@ -179,6 +179,13 @@ Webhook zaman damgası ve imza biçimi de tenant veritabanı işlemi açılmadan
 denetlenir. Eksik, biçimsiz veya beş dakikalık kabul penceresinin dışındaki imza
 zarfları provider profili sorgulanmadan reddedilir; gerçek HMAC doğrulaması kayıtlı
 provider secret'ıyla işlem içinde tamamlanır.
+Webhook üretim sınırı ayrıca zaman damgasını kanonik Unix-saniye biçimiyle sınırlar
+ve istek kabul anını imza ile olay zamanı kontrollerinde tek referans olarak kullanır.
+Provider profili ve teslimat sorguları RLS'ye ek olarak açık tenant koşulları taşır.
+Bir teslimata kaydedilmiş provider mesaj kimliği sonraki callback'lerle değiştirilemez.
+Provider'a özel secret ortamda eksik veya zayıfsa callback imza hatası gibi kalıcı
+biçimde reddedilmez; hiçbir olay yazılmadan `503` ve sınırlı `Retry-After` yanıtıyla
+güvenli yeniden denemeye bırakılır.
 
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.

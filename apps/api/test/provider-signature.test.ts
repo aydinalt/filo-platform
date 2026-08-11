@@ -52,6 +52,19 @@ describe("provider webhook signatures", () => {
     assert.equal(isProviderSignatureEnvelopePlausible(timestamp, "a".repeat(64), now), true);
     assert.equal(isProviderSignatureEnvelopePlausible(timestamp, "sha256=" + "A".repeat(64), now), true);
     assert.equal(isProviderSignatureEnvelopePlausible(timestamp, "not-hex", now), false);
+    assert.equal(isProviderSignatureEnvelopePlausible(` ${timestamp}`, "a".repeat(64), now), false);
+    assert.equal(
+      isProviderSignatureEnvelopePlausible(`${Number(timestamp)}.0`, "a".repeat(64), now),
+      false,
+    );
+    assert.equal(
+      isProviderSignatureEnvelopePlausible(
+        Number(timestamp).toExponential(),
+        "a".repeat(64),
+        now,
+      ),
+      false,
+    );
     assert.equal(
       isProviderSignatureEnvelopePlausible(String(Number(timestamp) - 301), "a".repeat(64), now),
       false,
@@ -139,6 +152,7 @@ describe("provider webhook signatures", () => {
 
   it("binds a callback to the provider profile recorded on its delivery", async () => {
     const deliveryId = "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac";
+    const tenantId = "22455242-9c0e-4481-892b-0ef95c304922";
     const { findProviderProfileForDelivery } = await import(
       "../src/routes/provider-webhooks.js"
     );
@@ -146,15 +160,18 @@ describe("provider webhook signatures", () => {
       async (sql, values) => {
         assert.match(
           sql,
-          /JOIN notification_delivery_outbox delivery\s+ON delivery\.provider_profile_id = profile\.id/u,
+          /delivery\.tenant_id = profile\.tenant_id/u,
         );
-        assert.match(sql, /delivery\.id = \$2/u);
+        assert.match(sql, /profile\.tenant_id = \$1/u);
+        assert.match(sql, /delivery\.tenant_id = \$1/u);
+        assert.match(sql, /delivery\.id = \$3/u);
         assert.doesNotMatch(sql, /profile\.status/u);
-        assert.deepEqual(values, ["mail-provider", deliveryId]);
+        assert.deepEqual(values, [tenantId, "mail-provider", deliveryId]);
         return {
           rows: [{ id: "provider-profile-1", secretRef: "ROTATED_PROVIDER_SECRET" }],
         };
       },
+      tenantId,
       "mail-provider",
       deliveryId,
     );
@@ -174,12 +191,16 @@ describe("provider webhook signatures", () => {
       "../src/routes/provider-webhooks.js"
     );
     const deliveryId = "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac";
+    const tenantId = "22455242-9c0e-4481-892b-0ef95c304922";
     const delivery = await lockProviderDelivery(
       async (sql, values) => {
-        assert.match(sql, /WHERE id = \$1 AND provider_profile_id = \$2/u);
+        assert.match(sql, /WHERE tenant_id = \$1/u);
+        assert.match(sql, /id = \$2/u);
+        assert.match(sql, /provider_profile_id = \$3/u);
         assert.match(sql, /FOR UPDATE/u);
         assert.match(sql, /created_at AS "createdAt"/u);
-        assert.deepEqual(values, [deliveryId, "provider-profile-1"]);
+        assert.match(sql, /provider_message_id AS "providerMessageId"/u);
+        assert.deepEqual(values, [tenantId, deliveryId, "provider-profile-1"]);
         return {
           rows: [
             {
@@ -187,10 +208,12 @@ describe("provider webhook signatures", () => {
               recipientUserId: "recipient-1",
               channel: "email",
               createdAt: new Date("2026-08-11T08:00:00.000Z"),
+              providerMessageId: "provider-message-1",
             },
           ],
         };
       },
+      tenantId,
       deliveryId,
       "provider-profile-1",
     );
@@ -208,6 +231,89 @@ describe("provider webhook signatures", () => {
         Date.parse("2026-08-11T09:00:00Z"),
       ),
       true,
+    );
+  });
+
+  it("keeps the recorded provider message identity immutable", async () => {
+    const { isProviderMessageIdConsistent, updateProviderDeliveryFromEvent } = await import(
+      "../src/routes/provider-webhooks.js"
+    );
+    const tenantId = "22455242-9c0e-4481-892b-0ef95c304922";
+    const deliveryId = "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac";
+    const event = {
+      deliveryId,
+      event: "delivered" as const,
+      providerMessageId: "provider-message-1",
+      occurredAt: "2026-08-11T08:00:00Z",
+    };
+
+    assert.equal(isProviderMessageIdConsistent(null, event.providerMessageId), true);
+    assert.equal(isProviderMessageIdConsistent(event.providerMessageId, null), true);
+    assert.equal(
+      isProviderMessageIdConsistent(event.providerMessageId, event.providerMessageId),
+      true,
+    );
+    assert.equal(
+      isProviderMessageIdConsistent(event.providerMessageId, "provider-message-2"),
+      false,
+    );
+
+    await updateProviderDeliveryFromEvent(
+      async (sql, values) => {
+        assert.match(sql, /provider_message_id = COALESCE\(provider_message_id, \$3\)/u);
+        assert.match(sql, /WHERE tenant_id = \$5/u);
+        assert.match(sql, /id = \$1/u);
+        assert.match(sql, /provider_profile_id = \$6/u);
+        assert.deepEqual(values, [
+          deliveryId,
+          "delivered",
+          "provider-message-1",
+          "2026-08-11T08:00:00Z",
+          tenantId,
+          "provider-profile-1",
+          "delivered",
+        ]);
+      },
+      tenantId,
+      "provider-profile-1",
+      event,
+      "delivered",
+    );
+  });
+
+  it("fails closed when a provider-specific webhook secret is unavailable", async () => {
+    const { resolveProviderWebhookSecret } = await import(
+      "../src/routes/provider-webhooks.js"
+    );
+    const fallback = "fallback-webhook-secret-at-least-16";
+
+    assert.equal(
+      resolveProviderWebhookSecret({ id: "profile-1", secretRef: null }, fallback, {}),
+      fallback,
+    );
+    assert.equal(
+      resolveProviderWebhookSecret(
+        { id: "profile-1", secretRef: "PROVIDER_WEBHOOK_SECRET" },
+        fallback,
+        { PROVIDER_WEBHOOK_SECRET: "profile-webhook-secret-at-least-16" },
+      ),
+      "profile-webhook-secret-at-least-16",
+    );
+    assert.equal(
+      resolveProviderWebhookSecret(
+        { id: "profile-1", secretRef: "MISSING_PROVIDER_WEBHOOK_SECRET" },
+        fallback,
+        {},
+      ),
+      null,
+    );
+    assert.equal(
+      resolveProviderWebhookSecret(
+        { id: "profile-1", secretRef: "PROVIDER_WEBHOOK_SECRET" },
+        fallback,
+        { PROVIDER_WEBHOOK_SECRET: "too-short" },
+      ),
+      null,
     );
   });
 

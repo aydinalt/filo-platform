@@ -23,6 +23,7 @@ type ProviderDelivery = {
   recipientUserId: string;
   channel: string;
   createdAt: Date | string;
+  providerMessageId: string | null;
 };
 
 type StoredProviderEvent = {
@@ -39,6 +40,7 @@ type ProviderProfileQuery = (
 
 export async function findProviderProfileForDelivery(
   query: ProviderProfileQuery,
+  tenantId: string,
   provider: string,
   deliveryId: string,
 ) {
@@ -47,10 +49,13 @@ export async function findProviderProfileForDelivery(
      FROM notification_provider_profiles profile
      JOIN notification_delivery_outbox delivery
        ON delivery.provider_profile_id = profile.id
-     WHERE profile.provider = $1
-       AND delivery.id = $2
+      AND delivery.tenant_id = profile.tenant_id
+     WHERE profile.tenant_id = $1
+       AND delivery.tenant_id = $1
+       AND profile.provider = $2
+       AND delivery.id = $3
      LIMIT 1`,
-    [provider, deliveryId],
+    [tenantId, provider, deliveryId],
   );
   return result.rows[0];
 }
@@ -62,6 +67,7 @@ type ProviderDeliveryQuery = (
 
 export async function lockProviderDelivery(
   query: ProviderDeliveryQuery,
+  tenantId: string,
   deliveryId: string,
   profileId: string,
 ) {
@@ -69,11 +75,14 @@ export async function lockProviderDelivery(
     `SELECT status,
             recipient_user_id AS "recipientUserId",
             channel,
-            created_at AS "createdAt"
+            created_at AS "createdAt",
+            provider_message_id AS "providerMessageId"
      FROM notification_delivery_outbox
-     WHERE id = $1 AND provider_profile_id = $2
+     WHERE tenant_id = $1
+       AND id = $2
+       AND provider_profile_id = $3
      FOR UPDATE`,
-    [deliveryId, profileId],
+    [tenantId, deliveryId, profileId],
   );
   return result.rows[0];
 }
@@ -110,6 +119,69 @@ export function nextProviderDeliveryStatus(
       ? providerEventStatusRank[currentStatus as ProviderEventType]
       : 0;
   return providerEventStatusRank[eventType] > currentRank ? eventType : currentStatus;
+}
+
+export function isProviderMessageIdConsistent(
+  recordedMessageId: string | null,
+  callbackMessageId: string | null,
+) {
+  return (
+    recordedMessageId === null ||
+    callbackMessageId === null ||
+    recordedMessageId === callbackMessageId
+  );
+}
+
+export function resolveProviderWebhookSecret(
+  profile: ProviderProfile,
+  fallbackSecret: string,
+  environment: Record<string, string | undefined> = process.env,
+) {
+  const secret = profile.secretRef ? environment[profile.secretRef] : fallbackSecret;
+  return secret && secret.length >= 16 ? secret : null;
+}
+
+type ProviderDeliveryUpdateQuery = (
+  sql: string,
+  values: unknown[],
+) => Promise<unknown>;
+
+export async function updateProviderDeliveryFromEvent(
+  query: ProviderDeliveryUpdateQuery,
+  tenantId: string,
+  profileId: string,
+  event: {
+    deliveryId: string;
+    event: ProviderEventType;
+    providerMessageId: string | null;
+    occurredAt: string;
+  },
+  status: string,
+) {
+  await query(
+    `UPDATE notification_delivery_outbox
+     SET status = $2,
+         provider_message_id = COALESCE(provider_message_id, $3),
+         delivered_at = CASE
+           WHEN $7 = 'delivered'
+             AND (delivered_at IS NULL OR delivered_at > $4::timestamptz)
+           THEN $4::timestamptz
+           ELSE delivered_at
+         END,
+         updated_at = now()
+     WHERE tenant_id = $5
+       AND id = $1
+       AND provider_profile_id = $6`,
+    [
+      event.deliveryId,
+      status,
+      event.providerMessageId,
+      event.occurredAt,
+      tenantId,
+      profileId,
+      event.event,
+    ],
+  );
 }
 
 type ProviderEventQuery = (
@@ -173,6 +245,7 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
   registerProviderWebhookJsonParser(app);
 
   app.post("/:tenantId/:provider", async (request, reply) => {
+    const receivedAt = Date.now();
     const route = providerWebhookParamsSchema.safeParse(request.params);
     const parsed = providerWebhookSchema.safeParse(request.body);
     const payload = (request as ProviderWebhookRequest).providerRawBody;
@@ -183,25 +256,41 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
 
     const timestamp = request.headers["x-filo-timestamp"] as string | undefined;
     const signature = request.headers["x-filo-signature"] as string | undefined;
-    if (!isProviderSignatureEnvelopePlausible(timestamp, signature)) {
+    if (!isProviderSignatureEnvelopePlausible(timestamp, signature, receivedAt)) {
       return reply.code(401).send({ error: "INVALID_WEBHOOK_SIGNATURE" });
     }
 
     return withTenantTransaction(tenantId, tenantId, async (client) => {
       const profile = await findProviderProfileForDelivery(
         (sql, values) => client.query<ProviderProfile>(sql, values),
+        tenantId,
         provider,
         parsed.data.deliveryId,
       );
-      const secret = profile?.secretRef
-        ? process.env[profile.secretRef] ?? ""
-        : config.notificationWebhookSecret;
-      if (!profile || !verifyProviderSignature(payload, timestamp, signature, secret)) {
+      if (!profile) {
+        return reply.code(401).send({ error: "INVALID_WEBHOOK_SIGNATURE" });
+      }
+      const secret = resolveProviderWebhookSecret(
+        profile,
+        config.notificationWebhookSecret,
+      );
+      if (!secret) {
+        request.log.error(
+          { providerProfileId: profile.id },
+          "provider webhook secret unavailable",
+        );
+        return reply
+          .header("retry-after", "60")
+          .code(503)
+          .send({ error: "PROVIDER_WEBHOOK_UNAVAILABLE" });
+      }
+      if (!verifyProviderSignature(payload, timestamp, signature, secret, receivedAt)) {
         return reply.code(401).send({ error: "INVALID_WEBHOOK_SIGNATURE" });
       }
 
       const lockedDelivery = await lockProviderDelivery(
         (sql, values) => client.query<ProviderDelivery>(sql, values),
+        tenantId,
         parsed.data.deliveryId,
         profile.id,
       );
@@ -210,8 +299,22 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
       }
 
       const event = parsed.data;
-      if (!isProviderEventTimePlausible(event.occurredAt, lockedDelivery.createdAt)) {
+      if (
+        !isProviderEventTimePlausible(
+          event.occurredAt,
+          lockedDelivery.createdAt,
+          receivedAt,
+        )
+      ) {
         return reply.code(400).send({ error: "INVALID_PROVIDER_EVENT_TIME" });
+      }
+      if (
+        !isProviderMessageIdConsistent(
+          lockedDelivery.providerMessageId,
+          event.providerMessageId,
+        )
+      ) {
+        return reply.code(409).send({ error: "PROVIDER_MESSAGE_ID_CONFLICT" });
       }
       const inserted = await client.query(
         `INSERT INTO notification_provider_events (
@@ -246,26 +349,12 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
 
       if (inserted.rowCount) {
         const status = nextProviderDeliveryStatus(lockedDelivery.status, event.event);
-        await client.query(
-          `UPDATE notification_delivery_outbox
-           SET status = $2,
-               provider_message_id = COALESCE($3, provider_message_id),
-               delivered_at = CASE
-                 WHEN $6 = 'delivered'
-                   AND (delivered_at IS NULL OR delivered_at > $4::timestamptz)
-                 THEN $4::timestamptz
-                 ELSE delivered_at
-               END,
-               updated_at = now()
-           WHERE id = $1 AND provider_profile_id = $5`,
-          [
-            event.deliveryId,
-            status,
-            event.providerMessageId,
-            event.occurredAt,
-            profile.id,
-            event.event,
-          ],
+        await updateProviderDeliveryFromEvent(
+          (sql, values) => client.query(sql, values),
+          tenantId,
+          profile.id,
+          event,
+          status,
         );
 
         if (event.event === "bounced" || event.event === "complained") {
