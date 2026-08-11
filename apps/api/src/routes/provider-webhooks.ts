@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { providerWebhookSchema } from "@filo/contracts";
+import { providerWebhookParamsSchema, providerWebhookSchema } from "@filo/contracts";
 import { withTenantTransaction } from "@filo/database";
 import { config } from "../config.js";
 import { verifyProviderSignature } from "../lib/provider-signature.js";
@@ -170,15 +170,13 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
   registerProviderWebhookJsonParser(app);
 
   app.post("/:tenantId/:provider", async (request, reply) => {
-    const { tenantId, provider } = request.params as {
-      tenantId?: string;
-      provider?: string;
-    };
+    const route = providerWebhookParamsSchema.safeParse(request.params);
     const parsed = providerWebhookSchema.safeParse(request.body);
     const payload = (request as ProviderWebhookRequest).providerRawBody;
-    if (!tenantId || !provider || !payload || !parsed.success) {
+    if (!route.success || !payload || !parsed.success) {
       return reply.code(400).send({ error: "INVALID_PROVIDER_CALLBACK" });
     }
+    const { tenantId, provider } = route.data;
 
     const timestamp = request.headers["x-filo-timestamp"] as string | undefined;
     const signature = request.headers["x-filo-signature"] as string | undefined;

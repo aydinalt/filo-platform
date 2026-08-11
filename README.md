@@ -171,6 +171,10 @@ Provider olay zamanı teslimatın yaşam döngüsüyle sınırlandırılır: tes
 oluşturulmasından önceki veya kabul anının geleceğindeki zamanlara yalnız beş
 dakikalık saat farkı toleransı verilir. Bu pencerenin dışındaki imzalı callback
 teslimat durumunu, teslim zamanını veya analitik kayıtlarını değiştiremez.
+Webhook route parametreleri veritabanı işlemi açılmadan önce doğrulanır. Tenant
+kimliği zorunlu UUID, provider adı kayıt sözleşmesiyle aynı sınırlı slug olmalıdır;
+geçersiz callback parametreleri tenant/RLS katmanına ulaşmadan güvenli biçimde
+reddedilir.
 
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.

@@ -295,6 +295,7 @@ export type ActionItem={id:string;sourceType:"maintenance"|"document"|"defect"|"
 
 export const createNotificationProviderSchema=z.object({name:z.string().trim().min(2).max(120),channel:z.enum(["email","push"]),provider:z.string().trim().regex(/^[a-z0-9][a-z0-9_-]{1,39}$/),credentialEnvRef:z.string().trim().regex(/^[A-Z][A-Z0-9_]{2,79}$/),webhookSecretEnvRef:z.string().trim().regex(/^[A-Z][A-Z0-9_]{2,79}$/).nullable().default(null),status:z.enum(["active","inactive"]).default("inactive")});
 export const updateNotificationProviderSchema=z.object({status:z.enum(["active","inactive"])});
+export const providerWebhookParamsSchema=z.object({tenantId:z.string().uuid(),provider:z.string().regex(/^[a-z0-9][a-z0-9_-]{1,39}$/)});
 export const providerWebhookSchema=z.object({eventId:z.string().trim().min(1).max(200),deliveryId:z.string().uuid(),event:z.enum(["delivered","bounced","complained"]),providerMessageId:z.string().trim().max(300).nullable().default(null),occurredAt:z.string().datetime(),metadata:z.record(z.string(),z.unknown()).default({})});
 export type CreateNotificationProviderInput=z.infer<typeof createNotificationProviderSchema>;
 export const createNotificationSuppressionSchema=z.object({recipientUserId:z.string().uuid(),channel:z.enum(["email","push"]),details:z.string().trim().max(500).nullable().default(null)});

@@ -60,6 +60,41 @@ describe("provider webhook signatures", () => {
     });
   });
 
+  it("rejects malformed webhook route identities before tenant database work", async () => {
+    const { providerWebhookRoutes } = await import(
+      "../src/routes/provider-webhooks.js"
+    );
+    const routeApp = Fastify();
+    await routeApp.register(providerWebhookRoutes, { prefix: "/provider-webhooks" });
+    const callback = {
+      eventId: "evt-1",
+      deliveryId: "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac",
+      event: "bounced",
+      occurredAt: "2026-08-11T08:00:00Z",
+      metadata: {},
+    };
+
+    try {
+      const invalidTenant = await routeApp.inject({
+        method: "POST",
+        url: "/provider-webhooks/not-a-tenant/resend",
+        payload: callback,
+      });
+      assert.equal(invalidTenant.statusCode, 400);
+      assert.deepEqual(invalidTenant.json(), { error: "INVALID_PROVIDER_CALLBACK" });
+
+      const invalidProvider = await routeApp.inject({
+        method: "POST",
+        url: "/provider-webhooks/10000000-0000-4000-8000-000000000001/Resend.com",
+        payload: callback,
+      });
+      assert.equal(invalidProvider.statusCode, 400);
+      assert.deepEqual(invalidProvider.json(), { error: "INVALID_PROVIDER_CALLBACK" });
+    } finally {
+      await routeApp.close();
+    }
+  });
+
   it("binds a callback to the provider profile recorded on its delivery", async () => {
     const deliveryId = "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac";
     const { findProviderProfileForDelivery } = await import(
