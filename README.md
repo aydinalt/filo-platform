@@ -262,6 +262,11 @@ Yinelenen profil adı ve beklenmeyen tek-aktif-provider çakışmaları genel su
 dönüşmeden sınırlı `409` yanıtlarıyla bildirilir. Oluşturulan profil yanıtı da açık tenant
 koşuluyla yeniden okunur.
 
+Provider yönetim yolları profil kimliğini veritabanına ulaşmadan UUID olarak doğrular;
+bozuk veya metin tabanlı rota kimlikleri sınırlı `400` yanıtıyla reddedilir. Provider
+listesi RLS korumasına ek olarak açık tenant koşuluyla sorgulanır; yönetim API'si hiçbir
+provider liste okumasını yalnız örtük bağlantı bağlamına bırakmaz.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

@@ -49,3 +49,8 @@ inside the transaction; creating an inactive profile records creation only. Know
 name and single-active uniqueness conflicts are returned as bounded conflicts, while
 unrelated database failures remain server errors. The created profile response is loaded
 with an explicit tenant predicate in addition to RLS.
+
+Provider administration validates profile route identifiers as UUIDs before opening a
+tenant database transaction. Malformed identifiers therefore remain bounded client errors
+instead of reaching PostgreSQL casts. Provider list reads include an explicit tenant
+predicate in addition to forced RLS, preserving defense in depth for administrative views.

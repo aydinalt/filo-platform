@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import {
   createNotificationProviderSchema,
+  notificationProviderParamsSchema,
   updateNotificationProviderSchema,
 } from "@filo/contracts";
 import { withTenantTransaction } from "@filo/database";
@@ -268,7 +269,11 @@ export async function notificationProviderRoutes(app: FastifyInstance) {
       request.sessionUser.tenantId,
       request.sessionUser.id,
       async (client) => ({
-        providers: (await client.query(`${select} ORDER BY channel,name`)).rows.map(shape),
+        providers: (
+          await client.query(`${select} WHERE tenant_id = $1 ORDER BY channel,name`, [
+            request.sessionUser.tenantId,
+          ])
+        ).rows.map(shape),
       }),
     ),
   );
@@ -304,11 +309,12 @@ export async function notificationProviderRoutes(app: FastifyInstance) {
   });
 
   app.patch("/:id", guard, async (request, reply) => {
-    const id = (request.params as { id?: string }).id;
+    const route = notificationProviderParamsSchema.safeParse(request.params);
     const parsed = updateNotificationProviderSchema.safeParse(request.body);
-    if (!id || !parsed.success) {
+    if (!route.success || !parsed.success) {
       return reply.code(400).send({ error: "INVALID_PROVIDER_UPDATE" });
     }
+    const id = route.data.id;
     const user = request.sessionUser;
     return withTenantTransaction(user.tenantId, user.id, async (client) => {
       const current = (
