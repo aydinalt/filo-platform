@@ -353,6 +353,7 @@ export type NotificationPreferences={emailEnabled:boolean;pushEnabled:boolean;qu
 export type NotificationDelivery={id:string;notificationId:string;title:string;recipientUserId:string;recipientName:string;channel:"email"|"push";status:"pending"|"processing"|"delivered"|"failed"|"cancelled";attemptCount:number;availableAt:string;deliveredAt:string|null;lastError:string|null;createdAt:string};
 
 export const claimDeliveriesSchema=z.object({tenantId:z.string().uuid(),actorUserId:z.string().uuid(),workerId:z.string().trim().min(3).max(120),limit:z.number().int().min(1).max(100).default(25)});
+export const deliveryCompletionParamsSchema=z.object({id:z.string().uuid()});
 export const completeDeliverySchema=z.object({tenantId:z.string().uuid(),actorUserId:z.string().uuid(),leaseToken:z.string().uuid(),outcome:z.enum(["delivered","failed"]),providerMessageId:z.string().trim().max(240).nullable().default(null),error:z.string().trim().min(2).max(1000).nullable().default(null)}).superRefine((value,context)=>{if(value.outcome==="failed"&&!value.error)context.addIssue({code:"custom",message:"Failed delivery requires an error",path:["error"]});});
 export type ClaimedDelivery={id:string;leaseToken:string;notificationId:string;recipientUserId:string;recipientEmail:string;channel:"email"|"push";locale:string;title:string;message:string;attemptCount:number;leaseExpiresAt:string};
 export type DeliveryMetrics={pending:number;processing:number;delivered:number;failed:number;cancelled:number;ready:number;oldestReadyAt:string|null};
