@@ -8,6 +8,34 @@ type ProviderWebhookRequest = FastifyRequest & {
   providerRawBody?: string;
 };
 
+type ProviderProfile = {
+  id: string;
+  secretRef: string | null;
+};
+
+type ProviderProfileQuery = (
+  sql: string,
+  values: unknown[],
+) => Promise<{ rows: ProviderProfile[] }>;
+
+export async function findProviderProfileForDelivery(
+  query: ProviderProfileQuery,
+  provider: string,
+  deliveryId: string,
+) {
+  const result = await query(
+    `SELECT profile.id, profile.webhook_secret_env_ref AS "secretRef"
+     FROM notification_provider_profiles profile
+     JOIN notification_delivery_outbox delivery
+       ON delivery.provider_profile_id = profile.id
+     WHERE profile.provider = $1
+       AND delivery.id = $2
+     LIMIT 1`,
+    [provider, deliveryId],
+  );
+  return result.rows[0];
+}
+
 export function registerProviderWebhookJsonParser(app: FastifyInstance) {
   const parseJson = app.getDefaultJsonParser("error", "error");
   app.removeContentTypeParser("application/json");
@@ -40,15 +68,11 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
     const signature = request.headers["x-filo-signature"] as string | undefined;
 
     return withTenantTransaction(tenantId, tenantId, async (client) => {
-      const profile = (
-        await client.query(
-          `SELECT id, webhook_secret_env_ref AS "secretRef"
-           FROM notification_provider_profiles
-           WHERE provider = $1 AND status = 'active'
-             AND webhook_secret_env_ref IS NOT NULL`,
-          [provider],
-        )
-      ).rows[0];
+      const profile = await findProviderProfileForDelivery(
+        (sql, values) => client.query<ProviderProfile>(sql, values),
+        provider,
+        parsed.data.deliveryId,
+      );
       const secret = profile?.secretRef
         ? process.env[profile.secretRef] ?? ""
         : config.notificationWebhookSecret;

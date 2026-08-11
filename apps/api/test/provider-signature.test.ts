@@ -59,6 +59,34 @@ describe("provider webhook signatures", () => {
       metadata: { attempt: 1 },
     });
   });
+
+  it("binds a callback to the provider profile recorded on its delivery", async () => {
+    const deliveryId = "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac";
+    const { findProviderProfileForDelivery } = await import(
+      "../src/routes/provider-webhooks.js"
+    );
+    const profile = await findProviderProfileForDelivery(
+      async (sql, values) => {
+        assert.match(
+          sql,
+          /JOIN notification_delivery_outbox delivery\s+ON delivery\.provider_profile_id = profile\.id/u,
+        );
+        assert.match(sql, /delivery\.id = \$2/u);
+        assert.doesNotMatch(sql, /profile\.status/u);
+        assert.deepEqual(values, ["mail-provider", deliveryId]);
+        return {
+          rows: [{ id: "provider-profile-1", secretRef: "ROTATED_PROVIDER_SECRET" }],
+        };
+      },
+      "mail-provider",
+      deliveryId,
+    );
+
+    assert.deepEqual(profile, {
+      id: "provider-profile-1",
+      secretRef: "ROTATED_PROVIDER_SECRET",
+    });
+  });
 });
 
 type FastifyRequestWithProviderBody = {

@@ -152,7 +152,11 @@ iç işçi endpoint'leri bu tarayıcı sınırından ayrı tutulur.
 Provider webhook imzaları, JSON ayrıştırılıp yeniden oluşturulmadan önce alınan
 değişmemiş istek gövdesi üzerinden doğrulanır. Böylece geçerli boşluk ve JSON
 biçimlendirme farklılıkları imzayı bozmaz; ayrıştırılmış veri yine aynı şema ve
-API gövde boyutu sınırından geçer.
+API gövde boyutu sınırından geçer. Callback'teki teslimat kimliği, teslimatın
+kaydedilmiş provider profiline bağlanır; aynı provider'ın birden fazla kanalda
+kullanılması veya profil rotasyonu yanlış secret seçimine yol açmaz. Daha önce
+gönderilmiş bir teslimatın geçerli callback'i profil sonradan pasif olsa da
+doğru kayıtlı profil üzerinden işlenir.
 
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
