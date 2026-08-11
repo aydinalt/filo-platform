@@ -8,6 +8,7 @@ process.env.NOTIFICATION_WORKER_KEY =
 
 const {
   cancelSuppressedQueuedDeliveries,
+  cancelInactiveRecipientDeliveries,
   claimDeliveryBatch,
   completeClaimedDelivery,
   isCompletionProviderMessageIdConsistent,
@@ -30,6 +31,7 @@ describe("notification delivery worker lifecycle", () => {
       payload: {
         tenantId: "10000000-0000-4000-8000-000000000001",
         actorUserId: "20000000-0000-4000-8000-000000000002",
+        workerId: "worker-primary",
         leaseToken: "40000000-0000-4000-8000-000000000004",
         outcome: "delivered",
         providerMessageId: "provider-message-1",
@@ -77,6 +79,18 @@ describe("notification delivery worker lifecycle", () => {
     assert.equal(reconciled, 2);
   });
 
+  it("cancels queued delivery when its recipient is no longer active in the tenant", async () => {
+    const tenantId = "10000000-0000-4000-8000-000000000001";
+    await cancelInactiveRecipientDeliveries(async (sql, values) => {
+      assert.match(sql, /delivery\.tenant_id = \$1/u);
+      assert.match(sql, /recipient\.disabled_at IS NULL/u);
+      assert.match(sql, /membership\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /RECIPIENT_INACTIVE/u);
+      assert.deepEqual(values, [tenantId]);
+      return { rows: [], rowCount: 1 };
+    }, tenantId);
+  });
+
   it("keeps suppression cleanup and claims explicitly tenant scoped", async () => {
     const tenantId = "10000000-0000-4000-8000-000000000001";
     await cancelSuppressedQueuedDeliveries(async (sql, values) => {
@@ -91,7 +105,13 @@ describe("notification delivery worker lifecycle", () => {
     const rows = await claimDeliveryBatch(async (sql, values) => {
       assert.match(sql, /delivery\.tenant_id = \$1/u);
       assert.match(sql, /provider\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /delivery\.provider_profile_id IS NULL AND provider\.status = 'active'/u);
+      assert.match(sql, /provider\.id = delivery\.provider_profile_id/u);
+      assert.match(sql, /provider\.credential_env_ref/u);
+      assert.match(sql, /COALESCE\(delivery\.provider_profile_id, candidates\.provider_id\)/u);
       assert.match(sql, /suppression\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /membership\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /recipient\.disabled_at IS NULL/u);
       assert.match(sql, /FOR UPDATE OF delivery SKIP LOCKED/u);
       assert.match(sql, /WHERE delivery\.tenant_id = \$1/u);
       assert.deepEqual(values, [tenantId, 25, "worker-primary"]);
@@ -104,7 +124,9 @@ describe("notification delivery worker lifecycle", () => {
             recipientUserId: "60000000-0000-4000-8000-000000000006",
             recipientEmail: "operator@example.com",
             channel: "email" as const,
+            providerProfileId: "70000000-0000-4000-8000-000000000007",
             provider: "mail-provider",
+            credentialEnvRef: "FILO_EMAIL_PROVIDER_KEY",
             title: "Title",
             message: "Message",
             locale: "tr-TR",
@@ -122,16 +144,18 @@ describe("notification delivery worker lifecycle", () => {
     const deliveryId = "30000000-0000-4000-8000-000000000003";
     const leaseToken = "40000000-0000-4000-8000-000000000004";
     const providerMessageId = "provider-message-1";
+    const workerId = "worker-primary";
 
     const locked = await lockDeliveryForCompletion(async (sql, values) => {
       assert.match(sql, /WHERE tenant_id = \$1/u);
       assert.match(sql, /id = \$2/u);
       assert.match(sql, /lease_token = \$3/u);
+      assert.match(sql, /locked_by = \$4/u);
       assert.match(sql, /lease_expires_at > now\(\)/u);
       assert.match(sql, /FOR UPDATE/u);
-      assert.deepEqual(values, [tenantId, deliveryId, leaseToken]);
+      assert.deepEqual(values, [tenantId, deliveryId, leaseToken, workerId]);
       return { rows: [{ attemptCount: 2, providerMessageId }] };
-    }, tenantId, deliveryId, leaseToken);
+    }, tenantId, deliveryId, leaseToken, workerId);
     assert.deepEqual(locked, { attemptCount: 2, providerMessageId });
     assert.equal(isCompletionProviderMessageIdConsistent(null, providerMessageId), true);
     assert.equal(
@@ -150,6 +174,7 @@ describe("notification delivery worker lifecycle", () => {
         assert.match(sql, /WHERE tenant_id = \$1/u);
         assert.match(sql, /id = \$2/u);
         assert.match(sql, /lease_token = \$7/u);
+        assert.match(sql, /locked_by = \$8/u);
         assert.match(sql, /COALESCE\(provider_message_id, \$6\)/u);
         assert.deepEqual(values, [
           tenantId,
@@ -159,6 +184,7 @@ describe("notification delivery worker lifecycle", () => {
           2,
           providerMessageId,
           leaseToken,
+          workerId,
         ]);
         return { rows: [], rowCount: 1 };
       }
@@ -169,6 +195,7 @@ describe("notification delivery worker lifecycle", () => {
       tenantId,
       deliveryId,
       leaseToken,
+      workerId,
       outcome: "delivered",
       providerMessageId,
       error: null,

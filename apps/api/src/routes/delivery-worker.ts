@@ -24,7 +24,9 @@ type ClaimedDeliveryRow = {
   recipientUserId: string;
   recipientEmail: string;
   channel: "email" | "push";
+  providerProfileId: string;
   provider: string;
+  credentialEnvRef: string;
   title: string;
   message: string;
   locale: string;
@@ -122,6 +124,35 @@ export async function cancelSuppressedQueuedDeliveries(
   return result.rowCount ?? 0;
 }
 
+export async function cancelInactiveRecipientDeliveries(
+  query: DeliveryWorkerQuery,
+  tenantId: string,
+) {
+  const result = await query(
+    `UPDATE notification_delivery_outbox delivery
+     SET status = 'cancelled',
+         last_error = 'RECIPIENT_INACTIVE',
+         lease_token = NULL,
+         lease_expires_at = NULL,
+         locked_at = NULL,
+         locked_by = NULL,
+         updated_at = now()
+     WHERE delivery.tenant_id = $1
+       AND delivery.status IN ('pending', 'failed')
+       AND NOT EXISTS (
+         SELECT 1
+         FROM users recipient
+         JOIN memberships membership
+           ON membership.user_id = recipient.id
+          AND membership.tenant_id = delivery.tenant_id
+         WHERE recipient.id = delivery.recipient_user_id
+           AND recipient.disabled_at IS NULL
+       )`,
+    [tenantId],
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function claimDeliveryBatch(
   query: DeliveryWorkerQuery,
   input: {
@@ -134,12 +165,16 @@ export async function claimDeliveryBatch(
     `WITH candidates AS (
        SELECT delivery.id,
               provider.id AS provider_id,
-              provider.provider
+              provider.provider,
+              provider.credential_env_ref
        FROM notification_delivery_outbox delivery
        JOIN notification_provider_profiles provider
          ON provider.tenant_id = delivery.tenant_id
         AND provider.channel = delivery.channel
-        AND provider.status = 'active'
+        AND (
+          (delivery.provider_profile_id IS NULL AND provider.status = 'active')
+          OR provider.id = delivery.provider_profile_id
+        )
        WHERE delivery.tenant_id = $1
          AND delivery.status IN ('pending', 'failed')
          AND delivery.available_at <= now()
@@ -165,19 +200,28 @@ export async function claimDeliveryBatch(
          lease_token = gen_random_uuid(),
          lease_expires_at = now() + interval '5 minutes',
          attempt_count = attempt_count + 1,
-         provider_profile_id = candidates.provider_id,
+         provider_profile_id = COALESCE(delivery.provider_profile_id, candidates.provider_id),
          updated_at = now()
      FROM candidates, users recipient
      WHERE delivery.tenant_id = $1
        AND delivery.id = candidates.id
        AND recipient.id = delivery.recipient_user_id
+       AND recipient.disabled_at IS NULL
+       AND EXISTS (
+         SELECT 1
+         FROM memberships membership
+         WHERE membership.tenant_id = delivery.tenant_id
+           AND membership.user_id = recipient.id
+       )
      RETURNING delivery.id,
                delivery.lease_token AS "leaseToken",
                delivery.notification_id AS "notificationId",
                delivery.recipient_user_id AS "recipientUserId",
                recipient.email AS "recipientEmail",
                delivery.channel,
+               candidates.provider_id AS "providerProfileId",
                candidates.provider,
+               candidates.credential_env_ref AS "credentialEnvRef",
                delivery.rendered_subject AS title,
                delivery.rendered_body AS message,
                delivery.locale,
@@ -193,6 +237,7 @@ export async function lockDeliveryForCompletion(
   tenantId: string,
   deliveryId: string,
   leaseToken: string,
+  workerId: string,
 ) {
   const result = await query<LockedDelivery>(
     `SELECT attempt_count AS "attemptCount",
@@ -201,10 +246,11 @@ export async function lockDeliveryForCompletion(
      WHERE tenant_id = $1
        AND id = $2
        AND lease_token = $3
+       AND locked_by = $4
        AND status = 'processing'
        AND lease_expires_at > now()
      FOR UPDATE`,
-    [tenantId, deliveryId, leaseToken],
+    [tenantId, deliveryId, leaseToken, workerId],
   );
   return result.rows[0];
 }
@@ -226,6 +272,7 @@ export async function completeClaimedDelivery(
     tenantId: string;
     deliveryId: string;
     leaseToken: string;
+    workerId: string;
     outcome: "delivered" | "failed";
     providerMessageId: string | null;
     error: string | null;
@@ -260,6 +307,7 @@ export async function completeClaimedDelivery(
      WHERE tenant_id = $1
        AND id = $2
        AND lease_token = $7
+       AND locked_by = $8
        AND status = 'processing'
        AND lease_expires_at > now()`,
     [
@@ -270,6 +318,7 @@ export async function completeClaimedDelivery(
       retryDelay,
       input.providerMessageId,
       input.leaseToken,
+      input.workerId,
     ],
   );
   if (updated.rowCount !== 1) return false;
@@ -304,6 +353,7 @@ export async function deliveryWorkerRoutes(app: FastifyInstance) {
         return reply.code(403).send({ error: "INVALID_DELIVERY_WORKER_ACTOR" });
       }
       await reconcileExpiredDeliveryLeases(query, input.tenantId);
+      await cancelInactiveRecipientDeliveries(query, input.tenantId);
       await cancelSuppressedQueuedDeliveries(query, input.tenantId);
       const rows = await claimDeliveryBatch(query, input);
       return {
@@ -333,6 +383,7 @@ export async function deliveryWorkerRoutes(app: FastifyInstance) {
         input.tenantId,
         route.data.id,
         input.leaseToken,
+        input.workerId,
       );
       if (!delivery) {
         return reply.code(409).send({ error: "DELIVERY_LEASE_INVALID_OR_EXPIRED" });

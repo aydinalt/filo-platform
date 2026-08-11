@@ -195,6 +195,15 @@ tüketmiş teslimat tekrar gönderilmeden iptal edilir. Completion yalnız geçe
 tenant kapsamlı lease'i kapatabilir. Başarılı provider mesaj kimliği ilk completion'da
 teslimata yazılır ve sonraki bir completion ile değiştirilemez.
 
+Provider dispatch sınırı ilk claim'de seçilen provider profilini teslimata sabitler;
+retry işlemleri aktif profil değişmiş olsa bile aynı profil ve credential referansını
+kullanır. Claim yanıtı yalnız ortam değişkeni adını taşır, credential değerini taşımaz.
+Tenant üyeliği kaldırılmış veya devre dışı bırakılmış alıcılara ait bekleyen teslimatlar
+provider'a gönderilmeden iptal edilir. Completion yalnız lease'i alan aynı worker kimliği
+tarafından yapılabilir; başarılı sonuç sınırlı provider mesaj kimliği, başarısız sonuç
+ise yalnız güvenli ve sınırlı bir hata kodu kabul eder. Belirsiz veya çelişkili sonuçlar
+teslimat durumunu değiştirmeden reddedilir.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

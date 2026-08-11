@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { assignNotificationArchiveReconciliationSchema, createNotificationProviderSchema, createNotificationSuppressionSchema, deliveryCompletionParamsSchema, deliveryQuerySchema, manualNotificationArchiveReconciliationReminderSchema, manualReconcileNotificationArchiveSchema, notificationActionTargetSchema, notificationAnalyticsQuerySchema, notificationArchiveReconciliationParamsSchema, notificationProviderHealthQuerySchema, notificationProviderIncidentQuerySchema, providerWebhookParamsSchema, providerWebhookSchema, reconcileNotificationArchiveAttemptsSchema, retryNotificationArchiveSchema, runNotificationArchiveReconciliationReminderSchema, runNotificationArchiveSchema, runNotificationProviderIncidentScanSchema, updateDeliveryStatusSchema, updateNotificationArchiveReconciliationSchema, updateNotificationPreferencesSchema, updateNotificationProviderHealthSettingsSchema, updateNotificationProviderIncidentScanSettingsSchema, updateNotificationProviderIncidentSchema, updateNotificationRetentionSchema } from "@filo/contracts";
+import { assignNotificationArchiveReconciliationSchema, claimDeliveriesSchema, completeDeliverySchema, createNotificationProviderSchema, createNotificationSuppressionSchema, deliveryCompletionParamsSchema, deliveryQuerySchema, manualNotificationArchiveReconciliationReminderSchema, manualReconcileNotificationArchiveSchema, notificationActionTargetSchema, notificationAnalyticsQuerySchema, notificationArchiveReconciliationParamsSchema, notificationProviderHealthQuerySchema, notificationProviderIncidentQuerySchema, providerWebhookParamsSchema, providerWebhookSchema, reconcileNotificationArchiveAttemptsSchema, retryNotificationArchiveSchema, runNotificationArchiveReconciliationReminderSchema, runNotificationArchiveSchema, runNotificationProviderIncidentScanSchema, updateDeliveryStatusSchema, updateNotificationArchiveReconciliationSchema, updateNotificationPreferencesSchema, updateNotificationProviderHealthSettingsSchema, updateNotificationProviderIncidentScanSettingsSchema, updateNotificationProviderIncidentSchema, updateNotificationRetentionSchema } from "@filo/contracts";
 import { actionQuerySchema, createActionItemSchema, updateActionItemSchema, createNotificationRuleSchema, notificationQuerySchema, createAlertRuleSchema, createAssignmentSchema, createDeviceSchema, createDriverSchema, createGeofenceSchema, createLocationEventSchema, createMaintenancePlanSchema, createSafetyEventSchema, createTireSetSchema, createVehicleDocumentSchema, createVehicleExpenseSchema, createVehicleIncidentSchema, createVehicleInspectionSchema, createVehicleSchema, loginSchema, mountTireSetSchema, removeTireSetSchema, reportQuerySchema, updateInspectionDefectStatusSchema, updateMemberRoleSchema, updateTrackingSchema, updateVehicleIncidentSchema } from "@filo/contracts";
 
 describe("API contracts", () => {
@@ -40,6 +40,15 @@ describe("API contracts", () => {
     assert.equal(updateDeliveryStatusSchema.safeParse({status:"failed",error:"Provider timeout"}).success,true);
     assert.equal(deliveryCompletionParamsSchema.safeParse({id:"10000000-0000-4000-8000-000000000001"}).success,true);
     assert.equal(deliveryCompletionParamsSchema.safeParse({id:"latest"}).success,false);
+  });
+  it("validates provider dispatch completion outcomes",()=>{
+    const worker={tenantId:"10000000-0000-4000-8000-000000000001",actorUserId:"20000000-0000-4000-8000-000000000002",workerId:"worker-primary",leaseToken:"30000000-0000-4000-8000-000000000003"};
+    assert.equal(claimDeliveriesSchema.safeParse({...worker,limit:25}).success,true);
+    assert.equal(claimDeliveriesSchema.safeParse({...worker,workerId:"unsafe worker",limit:25}).success,false);
+    assert.equal(completeDeliverySchema.safeParse({...worker,outcome:"delivered",providerMessageId:"provider-message-1",error:null}).success,true);
+    assert.equal(completeDeliverySchema.safeParse({...worker,outcome:"delivered",providerMessageId:null,error:null}).success,false);
+    assert.equal(completeDeliverySchema.safeParse({...worker,outcome:"failed",providerMessageId:null,error:"PROVIDER_TIMEOUT"}).success,true);
+    assert.equal(completeDeliverySchema.safeParse({...worker,outcome:"failed",providerMessageId:"ambiguous",error:"Provider timeout: secret=value"}).success,false);
   });
   it("validates notification rules and inbox filters",()=>{
     assert.equal(createNotificationRuleSchema.safeParse({name:"Aksiyon son tarihi",sourceType:"action",leadDays:7,severity:"warning",targetRole:"operator"}).success,true);
