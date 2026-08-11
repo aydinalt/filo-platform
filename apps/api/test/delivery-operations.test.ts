@@ -12,7 +12,8 @@ describe("notification delivery operator actions",()=>{
    assert.match(sql,/WHERE tenant_id=\$1/u);
    assert.match(sql,/\$3='retry' AND status='failed' AND attempt_count<10/u);
    assert.match(sql,/\$3='cancel' AND status IN \('pending','failed'\)/u);
-   assert.match(sql,/\$3<>'retry' OR NOT EXISTS/u);
+   assert.match(sql,/\$3<>'retry' OR purpose='account_recovery' OR NOT EXISTS/u);
+   assert.match(sql,/purpose <> 'account_recovery' OR sensitive_expires_at > now\(\)/u);
    assert.match(sql,/preference\.tenant_id=notification_delivery_outbox\.tenant_id/u);
    assert.match(sql,/NOT preference\.email_enabled/u);
    assert.match(sql,/status=CASE WHEN \$3='retry' THEN 'pending' ELSE 'cancelled' END/u);
@@ -21,6 +22,7 @@ describe("notification delivery operator actions",()=>{
    assert.doesNotMatch(sql,/attempt_count\s*=/u);
    assert.match(sql,/lease_token=NULL/u);
    assert.match(sql,/locked_by=NULL/u);
+   assert.match(sql,/redacted: operator cancelled recovery delivery/u);
    assert.match(sql,/notification_delivery\.operator_action/u);
    assert.match(sql,/previousStatus/u);
    assert.match(sql,/nextStatus/u);

@@ -1,4 +1,4 @@
-# Filo Platform V1 — firma onboarding ve hesap erişimi v0.90
+# Filo Platform V1 — hesap kurtarma ve oturum güvenliği v0.91
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -13,6 +13,12 @@ v0.90, yeni firmanın owner hesabıyla kendi tenant'ını oluşturmasını, tek 
 ve 7 gün süreli kullanıcı davetlerini, davet kabulünde güvenli parola/oturum kurulumunu
 ve owner tarafından kullanıcı erişiminin anında kapatılıp açılmasını ekler. Ham davet
 tokenı veritabanında saklanmaz; erişim kapatıldığında mevcut oturumlar iptal edilir.
+
+v0.91, hesap varlığını açıklamayan parola kurtarma isteğini, 30 dakika geçerli ve
+tek kullanımlık sıfırlama bağlantısını, parola değişiminde diğer oturumların kapatılmasını
+ve kullanıcı tarafından aktif oturumların görüntülenip sonlandırılmasını ekler. Kurtarma
+e-postaları production worker üzerinden gönderilir; hassas bağlantı gönderimden, kullanım
+veya süre bitiminden sonra teslimat kaydında otomatik olarak temizlenir.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.
@@ -146,6 +152,13 @@ rolünü alır. Kullanıcılar ekranında oluşturulan davet bağlantısı yaln�
 gösterilir; güvenli bir kanaldan alıcıya iletilmelidir. Davetler iptal edilebilir, kabul
 edildikten sonra yeniden kullanılamaz ve 7 gün sonunda geçersiz olur. Owner erişimi
 kapatılan kullanıcının açık oturumları aynı veritabanı işlemi içinde iptal edilir.
+
+Giriş ekranındaki `Parolamı unuttum` akışı her zaman aynı genel yanıtı verir. Bağlantı
+yalnız 30 dakika kullanılabilir; parola yenilendiğinde tüm eski oturumlar iptal edilir.
+Giriş sonrasındaki `Hesap Güvenliği` ekranı parola değişimini, aktif oturum listesini ve
+diğer oturumların tek tek kapatılmasını sağlar. Hesap kurtarma e-postası kullanıcı bildirim
+tercihlerinden bağımsız zorunlu bir hesap işlemi olarak gönderilir; aktif bounce/complaint
+baskılama kaydı varsa teslimat yine engellenir.
 
 Giriş endpoint'i istemci IP'si başına varsayılan olarak dakikada 5 denemeyle
 sınırlıdır. `AUTH_LOGIN_RATE_LIMIT_MAX` ve `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`

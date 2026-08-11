@@ -101,3 +101,23 @@ Member deactivation is owner-only, cannot target the owner or acting user, and r
 all active sessions for the target tenant in the same transaction. Reactivation restores
 access without manufacturing a session; the user must authenticate again. Invitation
 creation, cancellation, acceptance and access transitions produce tenant audit evidence.
+
+## Account recovery and session security
+
+Password recovery returns the same accepted response for known and unknown email addresses
+and has a dedicated hourly rate limit plus a minimum response duration. A known account gets
+a tenant-bound 256-bit capability whose SHA-256 digest is stored in a forced-RLS table. The
+capability is single-use, expires after 30 minutes and is invalidated when a newer request is
+created.
+
+Recovery mail uses the existing leased production delivery worker. It is classified as a
+transactional account-recovery delivery, so optional notification preferences cannot block
+it; provider bounce and complaint suppression still applies. The temporary link is retained
+only while dispatch can still succeed and is redacted after delivery, password completion,
+operator cancellation, recipient deactivation or expiry.
+
+Reset completion locks the capability, changes the password and revokes every active user
+session atomically. Authenticated password change verifies the current password, preserves
+the current session and revokes all other sessions. Users can list only their own live
+tenant sessions and revoke non-current sessions. Each security transition creates tenant
+audit evidence.

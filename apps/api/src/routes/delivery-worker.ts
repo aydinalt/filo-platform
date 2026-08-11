@@ -134,6 +134,10 @@ export async function cancelSuppressedQueuedDeliveries(
     `UPDATE notification_delivery_outbox delivery
      SET status = 'cancelled',
          last_error = 'RECIPIENT_SUPPRESSED',
+         rendered_body = CASE
+           WHEN purpose = 'account_recovery' THEN '[redacted: suppressed recovery delivery]'
+           ELSE rendered_body
+         END,
          lease_token = NULL,
          lease_expires_at = NULL,
          locked_at = NULL,
@@ -168,6 +172,7 @@ export async function cancelPreferenceDisabledQueuedDeliveries(
          locked_by = NULL,
          updated_at = now()
      WHERE delivery.tenant_id = $1
+       AND delivery.purpose = 'notification'
        AND delivery.status IN ('pending', 'failed')
        AND EXISTS (
          SELECT 1
@@ -184,6 +189,29 @@ export async function cancelPreferenceDisabledQueuedDeliveries(
   return result.rowCount ?? 0;
 }
 
+export async function cancelExpiredSensitiveDeliveries(
+  query: DeliveryWorkerQuery,
+  tenantId: string,
+) {
+  const result = await query(
+    `UPDATE notification_delivery_outbox
+     SET status = 'cancelled',
+         rendered_body = '[redacted: expired recovery link]',
+         last_error = 'ACCOUNT_RECOVERY_EXPIRED',
+         lease_token = NULL,
+         lease_expires_at = NULL,
+         locked_at = NULL,
+         locked_by = NULL,
+         updated_at = now()
+     WHERE tenant_id = $1
+       AND purpose = 'account_recovery'
+       AND status IN ('pending', 'failed')
+       AND sensitive_expires_at <= now()`,
+    [tenantId],
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function cancelInactiveRecipientDeliveries(
   query: DeliveryWorkerQuery,
   tenantId: string,
@@ -192,6 +220,10 @@ export async function cancelInactiveRecipientDeliveries(
     `UPDATE notification_delivery_outbox delivery
      SET status = 'cancelled',
          last_error = 'RECIPIENT_INACTIVE',
+         rendered_body = CASE
+           WHEN purpose = 'account_recovery' THEN '[redacted: inactive recovery recipient]'
+           ELSE rendered_body
+         END,
          lease_token = NULL,
          lease_expires_at = NULL,
          locked_at = NULL,
@@ -240,6 +272,7 @@ export async function claimDeliveryBatch(
          AND delivery.available_at <= now()
          AND delivery.attempt_count < 10
          AND delivery.rendered_body IS NOT NULL
+         AND (delivery.sensitive_expires_at IS NULL OR delivery.sensitive_expires_at > now())
          AND (delivery.lease_expires_at IS NULL OR delivery.lease_expires_at < now())
          AND NOT EXISTS (
            SELECT 1
@@ -254,6 +287,7 @@ export async function claimDeliveryBatch(
            FROM notification_preferences preference
            WHERE preference.tenant_id = delivery.tenant_id
              AND preference.user_id = delivery.recipient_user_id
+             AND delivery.purpose = 'notification'
              AND (
                (delivery.channel = 'email' AND NOT preference.email_enabled)
                OR (delivery.channel = 'push' AND NOT preference.push_enabled)
@@ -435,6 +469,11 @@ export async function completeClaimedDelivery(
            WHEN $3 = 'delivered' THEN COALESCE(provider_message_id, $6)
            ELSE provider_message_id
          END,
+         rendered_body = CASE
+           WHEN $3 = 'delivered' AND purpose = 'account_recovery'
+           THEN '[redacted after recovery email delivery]'
+           ELSE rendered_body
+         END,
          lease_token = NULL,
          lease_expires_at = NULL,
          locked_at = NULL,
@@ -497,6 +536,7 @@ export async function deliveryWorkerRoutes(app: FastifyInstance) {
         return reply.code(403).send({ error: "INVALID_DELIVERY_WORKER_ACTOR" });
       }
       await reconcileExpiredDeliveryLeases(query, input.tenantId);
+      await cancelExpiredSensitiveDeliveries(query, input.tenantId);
       await cancelInactiveRecipientDeliveries(query, input.tenantId);
       await cancelSuppressedQueuedDeliveries(query, input.tenantId);
       await cancelPreferenceDisabledQueuedDeliveries(query, input.tenantId);

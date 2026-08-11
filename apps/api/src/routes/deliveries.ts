@@ -135,7 +135,7 @@ export async function enqueueNotificationDeliveries(query:DeliveryOperationQuery
 
 export async function applyDeliveryOperatorAction(query:DeliveryOperationQuery,input:{tenantId:string;deliveryId:string;actorUserId:string;action:"retry"|"cancel";reason:string}){
  const result=await query(`WITH candidate AS (
-   SELECT id,status
+	   SELECT id,status,purpose
    FROM notification_delivery_outbox
    WHERE tenant_id=$1
      AND id=$2
@@ -143,7 +143,8 @@ export async function applyDeliveryOperatorAction(query:DeliveryOperationQuery,i
        ($3='retry' AND status='failed' AND attempt_count<10)
        OR ($3='cancel' AND status IN ('pending','failed'))
      )
-     AND ($3<>'retry' OR NOT EXISTS(
+     AND (purpose <> 'account_recovery' OR sensitive_expires_at > now())
+	     AND ($3<>'retry' OR purpose='account_recovery' OR NOT EXISTS(
        SELECT 1 FROM notification_preferences preference
        WHERE preference.tenant_id=notification_delivery_outbox.tenant_id
          AND preference.user_id=notification_delivery_outbox.recipient_user_id
@@ -159,8 +160,13 @@ export async function applyDeliveryOperatorAction(query:DeliveryOperationQuery,i
        lease_token=NULL,
        lease_expires_at=NULL,
        locked_at=NULL,
-       locked_by=NULL,
-       updated_at=now()
+	       locked_by=NULL,
+	       rendered_body=CASE
+	         WHEN $3='cancel' AND candidate.purpose='account_recovery'
+	         THEN '[redacted: operator cancelled recovery delivery]'
+	         ELSE delivery.rendered_body
+	       END,
+	       updated_at=now()
    FROM candidate
    WHERE delivery.tenant_id=$1
      AND delivery.id=candidate.id

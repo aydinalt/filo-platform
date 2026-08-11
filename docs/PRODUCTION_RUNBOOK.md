@@ -1,6 +1,6 @@
 # Filo Platform V1 — Production Runbook
 
-Bu runbook, v0.90 ile API, web paneli ve sürekli bildirim worker'ını kontrollü pilot
+Bu runbook, v0.91 ile API, web paneli ve sürekli bildirim worker'ını kontrollü pilot
 ortamında açmak için uygulanacak sırayı tanımlar.
 
 ## 1. Zorunlu altyapı
@@ -80,9 +80,26 @@ bulunur. Pilot sırasında desteklenmeyen push kanalını kullanıcı tercihleri
 
 Arayüzdeki `terms-v1` ve `privacy-v1` kabul sürümleri, hukuk/KVKK sahibi tarafından
 onaylanmış ve kullanıcıya erişilebilir gerçek metinlerle eşleştirilmeden dış kullanıcı
-kaydı açılmamalıdır. v0.90 kabul kanıtını saklar; hukuki metnin kendisini üretmez.
+kaydı açılmamalıdır. v0.91 kabul kanıtını saklar; hukuki metnin kendisini üretmez.
 
-## 6. Pilot açılış kapıları
+## 6. Hesap kurtarma ve oturum güvenliği
+
+1. Kayıtlı bir kullanıcı için `Parolamı unuttum` isteği oluşturun ve endpoint'in `202`
+   döndüğünü doğrulayın.
+2. Aynı isteği kayıtlı olmayan bir adresle yapın; yanıt gövdesinin ve durumunun aynı
+   kaldığını doğrulayın.
+3. Worker'ın kurtarma e-postasını Resend üzerinden teslim ettiğini ve teslimat kaydındaki
+   bağlantının gönderim sonrası redakte edildiğini doğrulayın.
+4. Bağlantıyla parolayı yenileyin; ikinci kullanımın ve 30 dakikayı aşan bağlantının
+   `410` verdiğini doğrulayın.
+5. Parola sıfırlama öncesinde açılmış tüm oturumların sonraki istekte reddedildiğini
+   doğrulayın.
+6. `Hesap Güvenliği` ekranında parola değiştirin; yalnız mevcut oturumun kaldığını ve
+   başka bir oturumun tek tek kapatılabildiğini doğrulayın.
+7. `account.password_reset_requested`, `account.password_reset_completed`,
+   `account.password_changed` ve `account.session_revoked` audit kayıtlarını kontrol edin.
+
+## 7. Pilot açılış kapıları
 
 - PostgreSQL PITR özelliği açık ve sağlayıcı ekran görüntüsü/kanıtı kayıtlı.
 - Boş bir veritabanına restore provası tamamlanmış ve süre kaydedilmiş.
@@ -90,6 +107,7 @@ kaydı açılmamalıdır. v0.90 kabul kanıtını saklar; hukuki metnin kendisin
 - Test bildirimi, retry ve provider rate-limit senaryoları kanıtlanmış.
 - Web/API origin, secure cookie ve secret kontrolleri production modunda geçmiş.
 - Firma kaydı, davet kabulü, davet iptali ve oturum iptali saha provası tamamlanmış.
+- Parola kurtarma e-postası, tek kullanımlılık ve tüm oturumları kapatma provası tamamlanmış.
 - KVKK metinleri, telefon sahipliği ve çalışan bilgilendirme akışı onaylanmış.
 - Mobil arka plan konum takibi gerçek cihaz pilotu tamamlanmadan kesintisiz takip
   vaadi verilmemiş.

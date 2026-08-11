@@ -10,6 +10,7 @@ const {
   cancelPreferenceDisabledQueuedDeliveries,
   cancelSuppressedQueuedDeliveries,
   cancelInactiveRecipientDeliveries,
+  cancelExpiredSensitiveDeliveries,
   claimDeliveryBatch,
   completeClaimedDelivery,
   findCompletionReceipt,
@@ -126,6 +127,7 @@ describe("notification delivery worker lifecycle", () => {
     const tenantId = "10000000-0000-4000-8000-000000000001";
     await cancelPreferenceDisabledQueuedDeliveries(async (sql, values) => {
       assert.match(sql, /delivery\.tenant_id = \$1/u);
+      assert.match(sql, /delivery\.purpose = 'notification'/u);
       assert.match(sql, /delivery\.status IN \('pending', 'failed'\)/u);
       assert.match(sql, /preference\.tenant_id = delivery\.tenant_id/u);
       assert.match(sql, /preference\.user_id = delivery\.recipient_user_id/u);
@@ -136,6 +138,19 @@ describe("notification delivery worker lifecycle", () => {
       assert.deepEqual(values, [tenantId]);
       return { rows: [], rowCount: 2 };
     }, tenantId);
+  });
+
+  it("expires sensitive recovery deliveries and redacts their links", async () => {
+    const tenantId = "10000000-0000-4000-8000-000000000001";
+    const cancelled = await cancelExpiredSensitiveDeliveries(async (sql, values) => {
+      assert.match(sql, /purpose = 'account_recovery'/u);
+      assert.match(sql, /sensitive_expires_at <= now\(\)/u);
+      assert.match(sql, /rendered_body = '\[redacted: expired recovery link\]'/u);
+      assert.match(sql, /ACCOUNT_RECOVERY_EXPIRED/u);
+      assert.deepEqual(values, [tenantId]);
+      return { rows: [], rowCount: 1 };
+    }, tenantId);
+    assert.equal(cancelled, 1);
   });
 
   it("keeps suppression cleanup and claims explicitly tenant scoped", async () => {
@@ -159,6 +174,8 @@ describe("notification delivery worker lifecycle", () => {
       assert.match(sql, /COALESCE\(delivery\.provider_profile_id, candidates\.provider_id\)/u);
       assert.match(sql, /suppression\.tenant_id = delivery\.tenant_id/u);
       assert.match(sql, /preference\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /delivery\.purpose = 'notification'/u);
+      assert.match(sql, /delivery\.sensitive_expires_at IS NULL/u);
       assert.match(sql, /NOT preference\.email_enabled/u);
       assert.match(sql, /membership\.tenant_id = delivery\.tenant_id/u);
       assert.match(sql, /recipient\.disabled_at IS NULL/u);
@@ -228,6 +245,8 @@ describe("notification delivery worker lifecycle", () => {
         assert.match(sql, /lease_token = \$7/u);
         assert.match(sql, /locked_by = \$8/u);
         assert.match(sql, /COALESCE\(provider_message_id, \$6\)/u);
+        assert.match(sql, /purpose = 'account_recovery'/u);
+        assert.match(sql, /redacted after recovery email delivery/u);
         assert.deepEqual(values, [
           tenantId,
           deliveryId,

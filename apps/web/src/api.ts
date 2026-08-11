@@ -2,7 +2,7 @@ import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, No
 import type { FleetReport } from "@filo/contracts";
 import type { NotificationAnalytics, NotificationArchiveAttempt, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention, NotificationRetentionSettings } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
-import type { AcceptMemberInvitationInput, CreateMemberInvitationInput, MemberInvitation, RegisterTenantInput } from "@filo/contracts";
+import type { AcceptMemberInvitationInput, AccountSession, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, MemberInvitation, RegisterTenantInput, RequestPasswordResetInput } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -25,6 +25,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  requestPasswordReset: (input: RequestPasswordResetInput) =>
+    request<{ accepted: true }>("/api/auth/password-reset/request", {
+      method: "POST", body: JSON.stringify(input)
+    }),
+  completePasswordReset: (input: CompletePasswordResetInput) =>
+    request<void>("/api/auth/password-reset/complete", {
+      method: "POST", body: JSON.stringify(input)
+    }),
+  changePassword: (input: ChangePasswordInput) =>
+    request<void>("/api/auth/password/change", {
+      method: "POST", body: JSON.stringify(input)
+    }),
+  sessions: () => request<{ sessions: AccountSession[] }>("/api/auth/sessions"),
+  revokeSession: (sessionId: string) =>
+    request<void>(`/api/auth/sessions/${sessionId}`, { method: "DELETE" }),
   registerTenant: (input: RegisterTenantInput) =>
     request<{ user: SessionUser }>("/api/onboarding/register", {
       method: "POST", body: JSON.stringify(input)

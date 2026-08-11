@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type {
   ActionItem,
+  AccountSession,
   AlertRule,
   Assignment,
   AuditEvent,
@@ -48,6 +49,10 @@ import { api } from "./api";
 
 function invitationTokenFromUrl() {
   return new URLSearchParams(window.location.search).get("invite") ?? "";
+}
+
+function passwordResetTokenFromUrl() {
+  return new URLSearchParams(window.location.search).get("reset") ?? "";
 }
 
 function slugifyTenant(value: string) {
@@ -112,8 +117,58 @@ function InviteAcceptance({ token, onLogin }: { token: string; onLogin: (user: S
   );
 }
 
+function PasswordReset({ token }: { token: string }) {
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (password !== confirmation) {
+      setError("Parolalar eşleşmiyor.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.completePasswordReset({ token, password });
+      setMessage("Parolanız yenilendi. Tüm eski oturumlar kapatıldı; yeniden giriş yapabilirsiniz.");
+    } catch {
+      setError("Bağlantı geçersiz, kullanılmış veya 30 dakikalık süresi dolmuş.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function returnToLogin() {
+    window.history.replaceState({}, "", window.location.pathname);
+    window.location.reload();
+  }
+
+  return (
+    <main className="login-shell single-auth">
+      <form className="login-card" onSubmit={submit}>
+        <p className="eyebrow">HESAP KURTARMA</p>
+        <h2>Yeni parolanızı belirleyin</h2>
+        <p className="auth-context">Bağlantı yalnız bir kez kullanılabilir ve oluşturulduktan sonra 30 dakika geçerlidir.</p>
+        {!message && <>
+          <label>Yeni parola<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" minLength={12} maxLength={128} required /></label>
+          <label>Yeni parola tekrar<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} type="password" minLength={12} maxLength={128} required /></label>
+          <small>En az 12 karakter, bir harf ve bir rakam kullanın.</small>
+          {error && <p className="error" role="alert">{error}</p>}
+          <button disabled={busy}>{busy ? "Parola yenileniyor…" : "Parolayı yenile"}</button>
+        </>}
+        {message && <p className="success" role="status">{message}</p>}
+        <button type="button" className="auth-link" onClick={returnToLogin}>Giriş ekranına dön</button>
+      </form>
+    </main>
+  );
+}
+
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "recover">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -123,15 +178,17 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       if (mode === "login") {
         onLogin((await api.login(email, password)).user);
-      } else {
+      } else if (mode === "register") {
         onLogin((await api.registerTenant({
           tenantName,
           tenantSlug,
@@ -141,6 +198,9 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
           termsAccepted: true,
           privacyAccepted: true,
         })).user);
+      } else {
+        await api.requestPasswordReset({ email });
+        setNotice("Bu e-posta kayıtlıysa 30 dakika geçerli parola yenileme bağlantısı gönderildi.");
       }
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "";
@@ -150,7 +210,9 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
           ? "Bu e-posta adresiyle zaten bir hesap bulunuyor."
           : mode === "login"
             ? "E-posta veya parola hatalı."
-            : "Firma hesabı oluşturulamadı. Bilgileri kontrol edin.");
+            : mode === "register"
+              ? "Firma hesabı oluşturulamadı. Bilgileri kontrol edin."
+              : "Kurtarma isteği alınamadı. E-posta adresini kontrol edin.");
     } finally {
       setBusy(false);
     }
@@ -176,8 +238,8 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
           <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Giriş</button>
           <button type="button" className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setError(""); }}>Yeni firma</button>
         </div>
-        <p className="eyebrow">{mode === "login" ? "GÜVENLİ GİRİŞ" : "FİRMA KURULUMU"}</p>
-        <h2>{mode === "login" ? "Hesabınıza giriş yapın" : "Filonuzu oluşturmaya başlayın"}</h2>
+        <p className="eyebrow">{mode === "login" ? "GÜVENLİ GİRİŞ" : mode === "register" ? "FİRMA KURULUMU" : "HESAP KURTARMA"}</p>
+        <h2>{mode === "login" ? "Hesabınıza giriş yapın" : mode === "register" ? "Filonuzu oluşturmaya başlayın" : "Parolanızı yenileyin"}</h2>
         {mode === "register" && <>
           <label>Firma adı<input value={tenantName} onChange={(event) => { setTenantName(event.target.value); setTenantSlug(slugifyTenant(event.target.value)); }} minLength={2} maxLength={120} required /></label>
           <label>Firma adresi<input value={tenantSlug} onChange={(event) => setTenantSlug(slugifyTenant(event.target.value))} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" minLength={2} maxLength={80} required /><small>İleride firma bağlantılarında kullanılacak: {tenantSlug || "firma-adi"}</small></label>
@@ -192,7 +254,7 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
             required
           />
         </label>
-        <label>
+        {mode !== "recover" && <label>
           Parola
           <input
             value={password}
@@ -202,7 +264,7 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
             maxLength={128}
             required
           />
-        </label>
+        </label>}
         {mode === "register" && <>
           <small>En az 12 karakter, bir harf ve bir rakam kullanın.</small>
           <label className="check-line"><input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} required /> Kullanım koşullarını kabul ediyorum.</label>
@@ -213,10 +275,13 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
             {error}
           </p>
         )}
+        {notice && <p className="success" role="status">{notice}</p>}
         <button disabled={busy || (mode === "register" && (!termsAccepted || !privacyAccepted))}>
-          {busy ? "İşlem yapılıyor…" : mode === "login" ? "Giriş yap" : "Firma hesabını oluştur"}
+          {busy ? "İşlem yapılıyor…" : mode === "login" ? "Giriş yap" : mode === "register" ? "Firma hesabını oluştur" : "Yenileme bağlantısı gönder"}
         </button>
-        <small>{mode === "login" ? "Oturumunuz güvenli ve tenant kapsamlıdır." : "İlk kullanıcı owner yetkisiyle oluşturulur."}</small>
+        {mode === "login" && <button type="button" className="auth-link" onClick={() => { setMode("recover"); setError(""); setNotice(""); }}>Parolamı unuttum</button>}
+        {mode === "recover" && <button type="button" className="auth-link" onClick={() => { setMode("login"); setError(""); setNotice(""); }}>Giriş ekranına dön</button>}
+        <small>{mode === "login" ? "Oturumunuz güvenli ve tenant kapsamlıdır." : mode === "register" ? "İlk kullanıcı owner yetkisiyle oluşturulur." : "Güvenlik nedeniyle hesap varlığı açıklanmaz."}</small>
       </form>
     </main>
   );
@@ -443,6 +508,73 @@ function ProviderIncidentsPanel({
   );
 }
 
+function AccountSecurityPanel() {
+  const [sessions, setSessions] = useState<AccountSession[]>([]);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function refreshSessions() {
+    setSessions((await api.sessions()).sessions);
+  }
+
+  useEffect(() => {
+    void refreshSessions().catch(() => setError("Oturumlar yüklenemedi."));
+  }, []);
+
+  async function changePassword(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    if (newPassword !== confirmation) {
+      setError("Yeni parolalar eşleşmiyor.");
+      return;
+    }
+    try {
+      await api.changePassword({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmation("");
+      setMessage("Parola değiştirildi ve diğer açık oturumlar kapatıldı.");
+      await refreshSessions();
+    } catch (caught) {
+      setError(caught instanceof Error && caught.message === "CURRENT_PASSWORD_INVALID"
+        ? "Mevcut parola hatalı."
+        : "Parola değiştirilemedi.");
+    }
+  }
+
+  async function revokeSession(sessionId: string) {
+    await api.revokeSession(sessionId);
+    await refreshSessions();
+  }
+
+  return (
+    <>
+      <section className="table-card">
+        <div className="section-head"><div><p className="eyebrow">HESAP GÜVENLİĞİ</p><h2>Parola değiştir</h2></div></div>
+        <form className="security-form" onSubmit={changePassword}>
+          <label>Mevcut parola<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} minLength={8} maxLength={128} required /></label>
+          <label>Yeni parola<input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={12} maxLength={128} required /></label>
+          <label>Yeni parola tekrar<input type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} minLength={12} maxLength={128} required /></label>
+          <button>Parolayı değiştir</button>
+        </form>
+        <small>Parola değiştirildiğinde bu oturum korunur, diğer tüm aktif oturumlar kapatılır.</small>
+        {error && <p className="error" role="alert">{error}</p>}
+        {message && <p className="success" role="status">{message}</p>}
+      </section>
+      <section className="table-card spaced">
+        <div className="section-head"><div><p className="eyebrow">AKTİF OTURUMLAR</p><h2>Hesabınıza bağlı oturumlar</h2></div><button className="secondary" onClick={() => void refreshSessions()}>Yenile</button></div>
+        <div className="table-wrap"><table><thead><tr><th>Oturum</th><th>Açılış</th><th>Geçerlilik</th><th>İşlem</th></tr></thead><tbody>
+          {sessions.map((session) => <tr key={session.id}><td><b>{session.current ? "Bu cihaz" : `Oturum ${session.id.slice(0, 8)}`}</b></td><td>{new Date(session.createdAt).toLocaleString("tr-TR")}</td><td>{new Date(session.expiresAt).toLocaleString("tr-TR")}</td><td>{session.current ? "Aktif" : <button className="secondary" onClick={() => void revokeSession(session.id)}>Oturumu kapat</button>}</td></tr>)}
+        </tbody></table></div>
+      </section>
+    </>
+  );
+}
+
 function Dashboard({
   user,
   onLogout,
@@ -568,6 +700,7 @@ function Dashboard({
     | "notifications"
     | "mobile"
     | "members"
+    | "security"
     | "audit"
   >("overview");
   const [error, setError] = useState("");
@@ -1374,6 +1507,12 @@ function Dashboard({
               ♟ Kullanıcılar
             </button>
           )}
+          <button
+            className={view === "security" ? "active" : ""}
+            onClick={() => setView("security")}
+          >
+            ◈ Hesap Güvenliği
+          </button>
         </nav>
         <div className="aside-foot">
           <small>AKTİF TENANT</small>
@@ -1710,6 +1849,7 @@ function Dashboard({
             </section>
           </>
         )}
+        {view === "security" && <AccountSecurityPanel />}
         {view === "operations" && (
           <>
             <section className="table-card">
@@ -4460,6 +4600,8 @@ export function App() {
   if (loading) return <div className="loader">Filo hazırlanıyor…</div>;
   if (!user) {
     const invitationToken = invitationTokenFromUrl();
+    const resetToken = passwordResetTokenFromUrl();
+    if (resetToken) return <PasswordReset token={resetToken} />;
     return invitationToken
       ? <InviteAcceptance token={invitationToken} onLogin={setUser} />
       : <Login onLogin={setUser} />;

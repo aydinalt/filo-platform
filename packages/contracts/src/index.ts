@@ -9,6 +9,23 @@ const accountPasswordSchema = z.string().min(12).max(128)
   .regex(/[A-Za-z]/u, "Password must contain a letter")
   .regex(/[0-9]/u, "Password must contain a number");
 
+export const requestPasswordResetSchema = z.object({
+  email: z.string().email().max(254).transform((value) => value.toLowerCase()),
+});
+
+export const completePasswordResetSchema = z.object({
+  token: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[A-Za-z0-9_-]{43}$/iu),
+  password: accountPasswordSchema,
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(8).max(128),
+  newPassword: accountPasswordSchema,
+}).refine((value) => value.currentPassword !== value.newPassword, {
+  message: "New password must be different",
+  path: ["newPassword"],
+});
+
 export const registerTenantSchema = z.object({
   tenantName: z.string().trim().min(2).max(120),
   tenantSlug: z.string().trim().min(2).max(80)
@@ -47,6 +64,9 @@ export const updateVehicleStatusSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;
+export type CompletePasswordResetInput = z.infer<typeof completePasswordResetSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type RegisterTenantInput = z.infer<typeof registerTenantSchema>;
 export type AcceptMemberInvitationInput = z.infer<typeof acceptMemberInvitationSchema>;
 export type CreateMemberInvitationInput = z.infer<typeof createMemberInvitationSchema>;
@@ -60,6 +80,13 @@ export type SessionUser = {
   email: string;
   fullName: string;
   role: "owner" | "admin" | "operator" | "viewer";
+};
+
+export type AccountSession = {
+  id: string;
+  current: boolean;
+  createdAt: string;
+  expiresAt: string;
 };
 
 export type AuditEvent = {

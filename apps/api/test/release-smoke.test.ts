@@ -134,6 +134,25 @@ describe("release smoke boundaries", () => {
     assert.deepEqual(response.json(), { error: "INVALID_INPUT" });
   });
 
+  it("rejects malformed account recovery input before database work", async () => {
+    const requestResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/password-reset/request",
+      headers: { origin: process.env.WEB_ORIGIN!, "x-filo-csrf": "1" },
+      payload: { email: "not-an-email" },
+    });
+    const completionResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/password-reset/complete",
+      headers: { origin: process.env.WEB_ORIGIN!, "x-filo-csrf": "1" },
+      payload: { token: "not-a-token", password: "YeniParola2026" },
+    });
+    assert.equal(requestResponse.statusCode, 400);
+    assert.deepEqual(requestResponse.json(), { error: "INVALID_INPUT" });
+    assert.equal(completionResponse.statusCode, 400);
+    assert.deepEqual(completionResponse.json(), { error: "INVALID_INPUT" });
+  });
+
   it("blocks provider rotation without an authenticated browser context", async () => {
     const response = await app.inject({
       method: "PATCH",

@@ -30,4 +30,7 @@ aside nav button small{font-size:10px}
 .login-card .auth-link{background:transparent;color:#117d6b;margin-top:8px}.auth-context{padding:12px;background:#eef8f5;border-radius:9px;color:#33554f;font-size:13px;line-height:1.5}
 .invite-link-banner{display:grid;grid-template-columns:auto minmax(220px,1fr) auto;gap:14px;align-items:center;padding:16px 22px;background:#edf8f5;border-bottom:1px solid #d4ebe5}.invite-link-banner div{display:grid}.invite-link-banner small{color:#56726c}.invite-link-banner input{min-width:0;border:1px solid #b9d8d1;border-radius:8px;padding:10px;background:#fff}.invite-link-banner .secondary{margin:0}
 .spaced{margin-top:18px}
+.success{padding:12px 14px;border:1px solid #9fd6c8;border-radius:10px;background:#edf9f5;color:#1f6657}
+.security-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:12px;align-items:end;margin:18px 0 10px}.security-form label{display:grid;gap:7px}.security-form input{min-width:0;border:1px solid #d8e4e1;border-radius:8px;padding:10px}
 @media(max-width:760px){.invite-link-banner{grid-template-columns:1fr}.invite-link-banner .secondary{width:100%}}
+@media(max-width:980px){.security-form{grid-template-columns:1fr}.security-form button{width:100%}}
