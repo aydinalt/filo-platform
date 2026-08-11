@@ -37,6 +37,13 @@ type ClaimedDeliveryRow = {
 type LockedDelivery = {
   attemptCount: number;
   providerMessageId: string | null;
+  providerProfileId: string;
+};
+
+type CompletionReceipt = {
+  outcome: "delivered" | "failed";
+  providerMessageId: string | null;
+  error: string | null;
 };
 
 const workerGuard = { preHandler: requireNotificationWorker };
@@ -64,32 +71,50 @@ export async function reconcileExpiredDeliveryLeases(
   tenantId: string,
 ) {
   const result = await query(
-    `WITH expired AS (
-       UPDATE notification_delivery_outbox
-       SET status = CASE WHEN attempt_count >= 10 THEN 'cancelled' ELSE 'failed' END,
+    `WITH expired_candidates AS (
+       SELECT id, attempt_count, locked_by, lease_token, provider_profile_id
+       FROM notification_delivery_outbox
+       WHERE tenant_id = $1
+         AND status = 'processing'
+         AND lease_expires_at <= now()
+       FOR UPDATE
+     ), expired AS (
+       UPDATE notification_delivery_outbox delivery
+       SET status = CASE
+             WHEN candidate.attempt_count >= 10 THEN 'cancelled'
+             ELSE 'failed'
+           END,
            last_error = 'DELIVERY_LEASE_EXPIRED',
            available_at = CASE
-             WHEN attempt_count < 10
+             WHEN candidate.attempt_count < 10
              THEN now() + LEAST(
                interval '1 hour',
-               interval '1 minute' * power(2, GREATEST(attempt_count - 1, 0))
+               interval '1 minute' * power(2, GREATEST(candidate.attempt_count - 1, 0))
              )
-             ELSE available_at
+             ELSE delivery.available_at
            END,
            lease_token = NULL,
            lease_expires_at = NULL,
            locked_at = NULL,
            locked_by = NULL,
            updated_at = now()
-       WHERE tenant_id = $1
-         AND status = 'processing'
-         AND lease_expires_at <= now()
-       RETURNING id
+       FROM expired_candidates candidate
+       WHERE delivery.tenant_id = $1
+         AND delivery.id = candidate.id
+       RETURNING delivery.id,
+                 candidate.attempt_count,
+                 candidate.locked_by,
+                 candidate.lease_token,
+                 candidate.provider_profile_id
      )
      INSERT INTO notification_delivery_attempts (
-       tenant_id, delivery_id, outcome, provider_message_id, error
+       tenant_id, delivery_id, outcome, provider_message_id, error,
+       attempt_number, worker_id, lease_token_hash, provider_profile_id
      )
-     SELECT $1, id, 'failed', NULL, 'DELIVERY_LEASE_EXPIRED'
+     SELECT $1, id, 'failed', NULL, 'DELIVERY_LEASE_EXPIRED',
+            attempt_count, locked_by,
+            encode(digest(lease_token::text, 'sha256'), 'hex'),
+            provider_profile_id
      FROM expired`,
     [tenantId],
   );
@@ -241,7 +266,8 @@ export async function lockDeliveryForCompletion(
 ) {
   const result = await query<LockedDelivery>(
     `SELECT attempt_count AS "attemptCount",
-            provider_message_id AS "providerMessageId"
+            provider_message_id AS "providerMessageId",
+            provider_profile_id AS "providerProfileId"
      FROM notification_delivery_outbox
      WHERE tenant_id = $1
        AND id = $2
@@ -253,6 +279,40 @@ export async function lockDeliveryForCompletion(
     [tenantId, deliveryId, leaseToken, workerId],
   );
   return result.rows[0];
+}
+
+export async function findCompletionReceipt(
+  query: DeliveryWorkerQuery,
+  tenantId: string,
+  deliveryId: string,
+  leaseToken: string,
+  workerId: string,
+) {
+  const result = await query<CompletionReceipt>(
+    `SELECT outcome,
+            provider_message_id AS "providerMessageId",
+            error
+     FROM notification_delivery_attempts
+     WHERE tenant_id = $1
+       AND delivery_id = $2
+       AND lease_token_hash = encode(digest(($3::uuid)::text, 'sha256'), 'hex')
+       AND worker_id = $4
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [tenantId, deliveryId, leaseToken, workerId],
+  );
+  return result.rows[0];
+}
+
+export function isCompletionReplayConsistent(
+  receipt: CompletionReceipt,
+  supplied: Pick<CompletionReceipt, "outcome" | "providerMessageId" | "error">,
+) {
+  return (
+    receipt.outcome === supplied.outcome &&
+    receipt.providerMessageId === supplied.providerMessageId &&
+    receipt.error === supplied.error
+  );
 }
 
 export function isCompletionProviderMessageIdConsistent(
@@ -277,6 +337,7 @@ export async function completeClaimedDelivery(
     providerMessageId: string | null;
     error: string | null;
     attemptCount: number;
+    providerProfileId: string;
   },
 ) {
   const status =
@@ -325,15 +386,23 @@ export async function completeClaimedDelivery(
 
   await query(
     `INSERT INTO notification_delivery_attempts (
-       tenant_id, delivery_id, outcome, provider_message_id, error
+       tenant_id, delivery_id, outcome, provider_message_id, error,
+       attempt_number, worker_id, lease_token_hash, provider_profile_id
      )
-     VALUES ($1, $2, $3, $4, $5)`,
+     VALUES (
+       $1, $2, $3, $4, $5, $6, $7,
+       encode(digest(($8::uuid)::text, 'sha256'), 'hex'), $9
+     )`,
     [
       input.tenantId,
       input.deliveryId,
       input.outcome,
       input.providerMessageId,
       input.error,
+      input.attemptCount,
+      input.workerId,
+      input.leaseToken,
+      input.providerProfileId,
     ],
   );
   return true;
@@ -386,6 +455,19 @@ export async function deliveryWorkerRoutes(app: FastifyInstance) {
         input.workerId,
       );
       if (!delivery) {
+        const receipt = await findCompletionReceipt(
+          query,
+          input.tenantId,
+          route.data.id,
+          input.leaseToken,
+          input.workerId,
+        );
+        if (receipt && isCompletionReplayConsistent(receipt, input)) {
+          return reply.code(204).send();
+        }
+        if (receipt) {
+          return reply.code(409).send({ error: "DELIVERY_COMPLETION_CONFLICT" });
+        }
         return reply.code(409).send({ error: "DELIVERY_LEASE_INVALID_OR_EXPIRED" });
       }
       if (
@@ -400,6 +482,7 @@ export async function deliveryWorkerRoutes(app: FastifyInstance) {
         ...input,
         deliveryId: route.data.id,
         attemptCount: delivery.attemptCount,
+        providerProfileId: delivery.providerProfileId,
       });
       if (!completed) {
         return reply.code(409).send({ error: "DELIVERY_LEASE_INVALID_OR_EXPIRED" });

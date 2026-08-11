@@ -204,6 +204,15 @@ tarafından yapılabilir; başarılı sonuç sınırlı provider mesaj kimliği,
 ise yalnız güvenli ve sınırlı bir hata kodu kabul eder. Belirsiz veya çelişkili sonuçlar
 teslimat durumunu değiştirmeden reddedilir.
 
+Her worker denemesi attempt numarası, worker kimliği, tek yönlü lease özeti ve sabitlenmiş
+provider profiliyle denetim geçmişine yazılır. Completion yanıtı ağda kaybolursa aynı
+worker aynı lease ve aynı sonuçla isteği güvenle tekrarlayabilir; önceki sonuçla birebir
+eşleşen tekrar `204` döner ve ikinci deneme kaydı oluşturmaz. Aynı lease için farklı
+sonuç, hata kodu veya provider mesaj kimliği gönderilirse mevcut durum korunur ve
+çatışma reddedilir. Süresi dolan lease'ler de temizlenmeden önce aynı bağlamla kayda
+alınır; ham lease geçmişte saklanmaz ve veritabanı benzersizlik kuralı bir lease için
+yalnız tek makbuza izin verir.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

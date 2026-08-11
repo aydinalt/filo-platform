@@ -11,6 +11,8 @@ const {
   cancelInactiveRecipientDeliveries,
   claimDeliveryBatch,
   completeClaimedDelivery,
+  findCompletionReceipt,
+  isCompletionReplayConsistent,
   isCompletionProviderMessageIdConsistent,
   isOperationalDeliveryWorkerActor,
   lockDeliveryForCompletion,
@@ -69,9 +71,15 @@ describe("notification delivery worker lifecycle", () => {
       assert.match(sql, /WHERE tenant_id = \$1/u);
       assert.match(sql, /status = 'processing'/u);
       assert.match(sql, /lease_expires_at <= now\(\)/u);
-      assert.match(sql, /attempt_count >= 10 THEN 'cancelled'/u);
-      assert.match(sql, /attempt_count < 10/u);
+      assert.match(sql, /candidate\.attempt_count >= 10 THEN 'cancelled'/u);
+      assert.match(sql, /candidate\.attempt_count < 10/u);
       assert.match(sql, /DELIVERY_LEASE_EXPIRED/u);
+      assert.match(sql, /candidate\.attempt_count/u);
+      assert.match(sql, /candidate\.locked_by/u);
+      assert.match(sql, /candidate\.lease_token/u);
+      assert.match(sql, /candidate\.provider_profile_id/u);
+      assert.match(sql, /attempt_number, worker_id, lease_token_hash, provider_profile_id/u);
+      assert.match(sql, /encode\(digest\(lease_token::text, 'sha256'\), 'hex'\)/u);
       assert.match(sql, /INSERT INTO notification_delivery_attempts/u);
       assert.deepEqual(values, [tenantId]);
       return { rows: [], rowCount: 2 };
@@ -145,6 +153,7 @@ describe("notification delivery worker lifecycle", () => {
     const leaseToken = "40000000-0000-4000-8000-000000000004";
     const providerMessageId = "provider-message-1";
     const workerId = "worker-primary";
+    const providerProfileId = "70000000-0000-4000-8000-000000000007";
 
     const locked = await lockDeliveryForCompletion(async (sql, values) => {
       assert.match(sql, /WHERE tenant_id = \$1/u);
@@ -152,11 +161,12 @@ describe("notification delivery worker lifecycle", () => {
       assert.match(sql, /lease_token = \$3/u);
       assert.match(sql, /locked_by = \$4/u);
       assert.match(sql, /lease_expires_at > now\(\)/u);
+      assert.match(sql, /provider_profile_id AS "providerProfileId"/u);
       assert.match(sql, /FOR UPDATE/u);
       assert.deepEqual(values, [tenantId, deliveryId, leaseToken, workerId]);
-      return { rows: [{ attemptCount: 2, providerMessageId }] };
+      return { rows: [{ attemptCount: 2, providerMessageId, providerProfileId }] };
     }, tenantId, deliveryId, leaseToken, workerId);
-    assert.deepEqual(locked, { attemptCount: 2, providerMessageId });
+    assert.deepEqual(locked, { attemptCount: 2, providerMessageId, providerProfileId });
     assert.equal(isCompletionProviderMessageIdConsistent(null, providerMessageId), true);
     assert.equal(
       isCompletionProviderMessageIdConsistent(providerMessageId, providerMessageId),
@@ -189,7 +199,19 @@ describe("notification delivery worker lifecycle", () => {
         return { rows: [], rowCount: 1 };
       }
       assert.match(sql, /INSERT INTO notification_delivery_attempts/u);
-      assert.deepEqual(values, [tenantId, deliveryId, "delivered", providerMessageId, null]);
+      assert.match(sql, /attempt_number, worker_id, lease_token_hash, provider_profile_id/u);
+      assert.match(sql, /encode\(digest\(\(\$8::uuid\)::text, 'sha256'\), 'hex'\)/u);
+      assert.deepEqual(values, [
+        tenantId,
+        deliveryId,
+        "delivered",
+        providerMessageId,
+        null,
+        2,
+        workerId,
+        leaseToken,
+        providerProfileId,
+      ]);
       return { rows: [], rowCount: 1 };
     }, {
       tenantId,
@@ -200,8 +222,45 @@ describe("notification delivery worker lifecycle", () => {
       providerMessageId,
       error: null,
       attemptCount: 2,
+      providerProfileId,
     });
     assert.equal(completed, true);
     assert.equal(queryCount, 2);
+  });
+
+  it("accepts only an identical completion replay for the same worker lease", async () => {
+    const tenantId = "10000000-0000-4000-8000-000000000001";
+    const deliveryId = "30000000-0000-4000-8000-000000000003";
+    const leaseToken = "40000000-0000-4000-8000-000000000004";
+    const workerId = "worker-primary";
+    const receipt = await findCompletionReceipt(async (sql, values) => {
+      assert.match(sql, /FROM notification_delivery_attempts/u);
+      assert.match(sql, /tenant_id = \$1/u);
+      assert.match(sql, /delivery_id = \$2/u);
+      assert.match(sql, /lease_token_hash = encode\(digest\(\(\$3::uuid\)::text, 'sha256'\), 'hex'\)/u);
+      assert.match(sql, /worker_id = \$4/u);
+      assert.deepEqual(values, [tenantId, deliveryId, leaseToken, workerId]);
+      return {
+        rows: [{ outcome: "failed" as const, providerMessageId: null, error: "PROVIDER_TIMEOUT" }],
+      };
+    }, tenantId, deliveryId, leaseToken, workerId);
+
+    assert.ok(receipt);
+    assert.equal(
+      isCompletionReplayConsistent(receipt, {
+        outcome: "failed",
+        providerMessageId: null,
+        error: "PROVIDER_TIMEOUT",
+      }),
+      true,
+    );
+    assert.equal(
+      isCompletionReplayConsistent(receipt, {
+        outcome: "failed",
+        providerMessageId: null,
+        error: "PROVIDER_REJECTED",
+      }),
+      false,
+    );
   });
 });
