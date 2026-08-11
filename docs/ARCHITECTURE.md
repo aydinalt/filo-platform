@@ -60,3 +60,24 @@ Incident lists, joined provider profiles, incident-event history, lifecycle upda
 related notification updates all carry explicit tenant predicates in addition to forced
 RLS, preventing administrative incident operations from depending on implicit connection
 context alone.
+
+## Production notification runtime
+
+The notification runtime is a separate always-on process, not an in-process API timer.
+It authenticates only with the shared notification worker key and discovers a bounded set
+of tenant scopes through an internal endpoint. Scope discovery chooses one active owner,
+admin or operator actor per tenant; every claim, completion and maintenance operation then
+revalidates that actor in its tenant transaction.
+
+Provider credentials remain in the worker environment. A claimed delivery exposes only
+the validated environment-variable reference recorded on its pinned provider profile.
+The worker resolves that reference locally, dispatches supported provider requests and
+completes the existing tenant/worker/lease-bound lifecycle. Identical completion calls are
+retried after transient API response loss; the API's receipt boundary rejects conflicting
+replays.
+
+Delivery polling and scheduled maintenance share a process but not a failure boundary.
+A failed tenant claim does not stop later tenants. Provider health, archive, reconciliation,
+overdue reminder and interrupted-run maintenance jobs use stable minute-bucketed keys and
+are attempted independently. The runtime carries no database credential and cannot bypass
+the API's actor, tenant, RLS or audit controls.

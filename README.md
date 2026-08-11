@@ -1,4 +1,4 @@
-# Filo Platform V1 — güvenli canlı konum dilimi v0.5
+# Filo Platform V1 — üretim bildirim çalışma zamanı v0.89
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -115,6 +115,26 @@ API her yanıtla sunucu üretimli bir `x-request-id` döndürür. Destek ve olay
 incelemesinde bu kimlik kullanılmalı; istemciden gelen istek kimliklerine
 güvenilmemelidir. Üretim log seviyesi varsayılan olarak `LOG_LEVEL=info` kalır;
 oturum, yetkilendirme ve webhook imza başlıkları merkezi olarak maskelenir.
+
+v0.89, API'den ayrı ve sürekli çalışan `@filo/worker` sürecini ekler. Worker,
+yalnız paylaşılan güçlü worker anahtarıyla erişilebilen dahili kapsam endpoint'inden
+her tenant için tek bir aktif operasyon aktörü alır; teslimatları tenant bazında claim
+eder, aktif `resend` e-posta profilinin ortam referansını çözer ve sonucu aynı lease ile
+tamamlar. Sağlayıcı anahtarı API yanıtına, loglara veya denetim kaydına yazılmaz.
+
+Worker aynı süreçte idempotent dakika anahtarlarıyla provider sağlık taraması, bildirim
+arşivleme, kesintiye uğramış arşiv denemesi uzlaştırması, gecikmiş operasyon hatırlatması
+ve hatırlatma bakımını yürütür. Bir tenant'taki hata diğer tenant kapsamlarının devamını
+engellemez. Render Blueprint, API ve worker'ın aynı `NOTIFICATION_WORKER_KEY` ile
+çalışması için ortak environment group kullanır. Worker servisi sürekli compute ister;
+Render'ın ücretsiz web servisi bu görev için yeterli değildir.
+
+İlk gerçek e-posta gönderimi için yönetim panelinde provider değeri `resend`, credential
+referansı `FILO_EMAIL_PROVIDER_KEY` ve durum `active` olan bir e-posta profili oluşturun.
+Worker servisinde `FILO_EMAIL_PROVIDER_KEY` ile doğrulanmış gönderen adresini taşıyan
+`EMAIL_FROM` değerlerini tanımlayın. Push adapter tamamlanana kadar kullanıcı push
+tercihleri pilotta kapalı tutulmalıdır. Ayrıntılı sıra `docs/PRODUCTION_RUNBOOK.md`
+dosyasındadır.
 
 Giriş endpoint'i istemci IP'si başına varsayılan olarak dakikada 5 denemeyle
 sınırlıdır. `AUTH_LOGIN_RATE_LIMIT_MAX` ve `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`

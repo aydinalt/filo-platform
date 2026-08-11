@@ -39,6 +39,7 @@ import { notificationProviderHealthRoutes } from "./routes/notification-provider
 import { notificationProviderIncidentRoutes } from "./routes/notification-provider-incidents.js";
 import { notificationHealthScanRoutes } from "./routes/notification-health-scans.js";
 import { notificationRetentionWorkerRoutes } from "./routes/notification-retention-worker.js";
+import { notificationWorkerScopeRoutes } from "./routes/notification-worker-scopes.js";
 
 type BuildAppOptions = {
   readinessCheck?: () => Promise<void>;
@@ -137,6 +138,7 @@ export async function buildApp({ readinessCheck = checkDatabaseConnection }: Bui
   await app.register(notificationProviderIncidentRoutes, { prefix: "/api/notification-provider-incidents" });
   await app.register(notificationHealthScanRoutes, { prefix: "/api/internal/notification-health-scans" });
   await app.register(notificationRetentionWorkerRoutes, { prefix: "/api/internal/notification-retention" });
+  await app.register(notificationWorkerScopeRoutes, { prefix: "/api/internal/notification-worker-scopes" });
 
   app.setNotFoundHandler((request, reply) => {
     request.log.warn({ method: request.method, url: request.url }, "route not found");
