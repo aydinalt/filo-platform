@@ -13,6 +13,14 @@ type ProviderProfile = {
   secretRef: string | null;
 };
 
+type ProviderEventType = "delivered" | "bounced" | "complained";
+
+type ProviderDelivery = {
+  status: string;
+  recipientUserId: string;
+  channel: string;
+};
+
 type ProviderProfileQuery = (
   sql: string,
   values: unknown[],
@@ -34,6 +42,45 @@ export async function findProviderProfileForDelivery(
     [provider, deliveryId],
   );
   return result.rows[0];
+}
+
+type ProviderDeliveryQuery = (
+  sql: string,
+  values: unknown[],
+) => Promise<{ rows: ProviderDelivery[] }>;
+
+export async function lockProviderDelivery(
+  query: ProviderDeliveryQuery,
+  deliveryId: string,
+  profileId: string,
+) {
+  const result = await query(
+    `SELECT status,
+            recipient_user_id AS "recipientUserId",
+            channel
+     FROM notification_delivery_outbox
+     WHERE id = $1 AND provider_profile_id = $2
+     FOR UPDATE`,
+    [deliveryId, profileId],
+  );
+  return result.rows[0];
+}
+
+const providerEventStatusRank: Record<ProviderEventType, number> = {
+  delivered: 1,
+  bounced: 2,
+  complained: 3,
+};
+
+export function nextProviderDeliveryStatus(
+  currentStatus: string,
+  eventType: ProviderEventType,
+) {
+  const currentRank =
+    currentStatus in providerEventStatusRank
+      ? providerEventStatusRank[currentStatus as ProviderEventType]
+      : 0;
+  return providerEventStatusRank[eventType] > currentRank ? eventType : currentStatus;
 }
 
 export function registerProviderWebhookJsonParser(app: FastifyInstance) {
@@ -80,6 +127,15 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
         return reply.code(401).send({ error: "INVALID_WEBHOOK_SIGNATURE" });
       }
 
+      const lockedDelivery = await lockProviderDelivery(
+        (sql, values) => client.query<ProviderDelivery>(sql, values),
+        parsed.data.deliveryId,
+        profile.id,
+      );
+      if (!lockedDelivery) {
+        return reply.code(401).send({ error: "INVALID_WEBHOOK_SIGNATURE" });
+      }
+
       const event = parsed.data;
       const inserted = await client.query(
         `INSERT INTO notification_provider_events (
@@ -101,26 +157,30 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
       );
 
       if (inserted.rowCount) {
-        const status =
-          event.event === "delivered"
-            ? "delivered"
-            : event.event === "bounced"
-              ? "bounced"
-              : "complained";
-        const delivery = (
-          await client.query(
-            `UPDATE notification_delivery_outbox
-             SET status = $2,
-                 provider_message_id = COALESCE($3, provider_message_id),
-                 delivered_at = CASE WHEN $2 = 'delivered' THEN $4 ELSE delivered_at END,
-                 updated_at = now()
-             WHERE id = $1 AND provider_profile_id = $5
-             RETURNING recipient_user_id, channel`,
-            [event.deliveryId, status, event.providerMessageId, event.occurredAt, profile.id],
-          )
-        ).rows[0];
+        const status = nextProviderDeliveryStatus(lockedDelivery.status, event.event);
+        await client.query(
+          `UPDATE notification_delivery_outbox
+           SET status = $2,
+               provider_message_id = COALESCE($3, provider_message_id),
+               delivered_at = CASE
+                 WHEN $6 = 'delivered'
+                   AND (delivered_at IS NULL OR delivered_at > $4::timestamptz)
+                 THEN $4::timestamptz
+                 ELSE delivered_at
+               END,
+               updated_at = now()
+           WHERE id = $1 AND provider_profile_id = $5`,
+          [
+            event.deliveryId,
+            status,
+            event.providerMessageId,
+            event.occurredAt,
+            profile.id,
+            event.event,
+          ],
+        );
 
-        if (delivery && (event.event === "bounced" || event.event === "complained")) {
+        if (event.event === "bounced" || event.event === "complained") {
           await client.query(
             `INSERT INTO notification_suppressions (
                tenant_id, recipient_user_id, channel, reason, source_delivery_id, details
@@ -129,8 +189,8 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
              ON CONFLICT (tenant_id, recipient_user_id, channel) WHERE active DO NOTHING`,
             [
               tenantId,
-              delivery.recipient_user_id,
-              delivery.channel,
+              lockedDelivery.recipientUserId,
+              lockedDelivery.channel,
               event.event === "bounced" ? "hard_bounce" : "complaint",
               event.deliveryId,
               event.metadata?.reason ?? null,

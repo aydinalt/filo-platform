@@ -87,6 +87,38 @@ describe("provider webhook signatures", () => {
       secretRef: "ROTATED_PROVIDER_SECRET",
     });
   });
+
+  it("serializes callbacks and keeps terminal delivery states monotonic", async () => {
+    const { lockProviderDelivery, nextProviderDeliveryStatus } = await import(
+      "../src/routes/provider-webhooks.js"
+    );
+    const deliveryId = "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac";
+    const delivery = await lockProviderDelivery(
+      async (sql, values) => {
+        assert.match(sql, /WHERE id = \$1 AND provider_profile_id = \$2/u);
+        assert.match(sql, /FOR UPDATE/u);
+        assert.deepEqual(values, [deliveryId, "provider-profile-1"]);
+        return {
+          rows: [
+            {
+              status: "complained",
+              recipientUserId: "recipient-1",
+              channel: "email",
+            },
+          ],
+        };
+      },
+      deliveryId,
+      "provider-profile-1",
+    );
+
+    assert.equal(delivery?.status, "complained");
+    assert.equal(nextProviderDeliveryStatus("pending", "delivered"), "delivered");
+    assert.equal(nextProviderDeliveryStatus("delivered", "bounced"), "bounced");
+    assert.equal(nextProviderDeliveryStatus("bounced", "complained"), "complained");
+    assert.equal(nextProviderDeliveryStatus("complained", "delivered"), "complained");
+    assert.equal(nextProviderDeliveryStatus("bounced", "delivered"), "bounced");
+  });
 });
 
 type FastifyRequestWithProviderBody = {

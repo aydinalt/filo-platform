@@ -157,6 +157,12 @@ kaydedilmiş provider profiline bağlanır; aynı provider'ın birden fazla kana
 kullanılması veya profil rotasyonu yanlış secret seçimine yol açmaz. Daha önce
 gönderilmiş bir teslimatın geçerli callback'i profil sonradan pasif olsa da
 doğru kayıtlı profil üzerinden işlenir.
+Callback'ler imza doğrulamasından sonra teslimat satırını kilitler ve terminal
+durumu yalnız ileri taşır: `complained`, `bounced` ve `delivered` sırasıyla
+azalan önceliktedir. Böylece gecikmiş veya eşzamanlı provider olayları şikâyet
+ya da bounce durumunu yeniden delivered durumuna düşüremez. Olayların tamamı
+idempotent denetim kaydında korunur; geçerli teslim zamanı en erken provider
+zaman damgasıyla saklanır.
 
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
