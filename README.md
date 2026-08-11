@@ -227,6 +227,14 @@ lease'leri değiştirilemez ve manuel retry deneme sayısını artırmaz. Her i�
 onay ve güvenli neden kodu gerektirir; önceki ve sonraki durumla birlikte tenant kapsamlı
 denetim kaydına yazılır.
 
+Alıcı tercih kaydı henüz oluşmamış olsa da varsayılan e-posta ve push kanalları
+teslimat kuyruğuna alınır. Sessiz saatler sunucu saatine göre değil, alıcının doğrulanmış
+IANA zaman dilimine göre hesaplanır; aynı gün içindeki ve gece yarısını aşan aralıklar
+doğru yerel bitiş anına ertelenir. Yerel zaman tekrarları ve ileri atlamaları PostgreSQL
+zaman dilimi kurallarıyla UTC teslimat anına çevrilir. Geçersiz yeni zaman dilimleri
+veritabanı işleminden önce reddedilir; eski geçersiz kayıtlar güvenli İstanbul varsayılanına
+düşürülür.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

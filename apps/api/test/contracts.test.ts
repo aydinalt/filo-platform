@@ -34,6 +34,7 @@ describe("API contracts", () => {
     const base={emailEnabled:true,pushEnabled:false,quietHoursEnabled:true,quietStart:"22:00",quietEnd:"07:00",timezone:"Europe/Istanbul"};
     assert.equal(updateNotificationPreferencesSchema.safeParse(base).success,true);
     assert.equal(updateNotificationPreferencesSchema.safeParse({...base,quietStart:null}).success,false);
+    assert.equal(updateNotificationPreferencesSchema.safeParse({...base,quietEnd:"22:00"}).success,false);
     assert.equal(deliveryQuerySchema.safeParse({status:"failed"}).success,true);
     assert.equal(deliveryQuerySchema.safeParse({status:"unknown"}).success,false);
     assert.equal(deliveryOperatorActionSchema.safeParse({action:"delivered",reason:"MANUAL",confirmation:"APPLY_DELIVERY_ACTION"}).success,false);
