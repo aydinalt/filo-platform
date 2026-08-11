@@ -187,6 +187,14 @@ Provider'a özel secret ortamda eksik veya zayıfsa callback imza hatası gibi k
 biçimde reddedilmez; hiçbir olay yazılmadan `503` ve sınırlı `Retry-After` yanıtıyla
 güvenli yeniden denemeye bırakılır.
 
+Bildirim teslimat worker'ı her claim ve completion çağrısında etkin owner, admin
+veya operator üyeliğini doğrular; iş kimlikleri ve sorgular RLS'ye ek olarak açık
+tenant koşullarıyla bağlanır. Worker kesintisinden sonra süresi dolan lease başarısız
+deneme olarak kaydedilir, üstel gecikmeyle yeniden kuyruğa alınır ve onuncu denemeyi
+tüketmiş teslimat tekrar gönderilmeden iptal edilir. Completion yalnız geçerli,
+tenant kapsamlı lease'i kapatabilir. Başarılı provider mesaj kimliği ilk completion'da
+teslimata yazılır ve sonraki bir completion ile değiştirilemez.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

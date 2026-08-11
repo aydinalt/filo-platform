@@ -1,0 +1,180 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import Fastify from "fastify";
+
+process.env.SESSION_SECRET = "delivery-worker-test-session-secret-at-least-32-characters";
+process.env.NOTIFICATION_WORKER_KEY =
+  "delivery-worker-test-worker-secret-at-least-32-characters";
+
+const {
+  cancelSuppressedQueuedDeliveries,
+  claimDeliveryBatch,
+  completeClaimedDelivery,
+  isCompletionProviderMessageIdConsistent,
+  isOperationalDeliveryWorkerActor,
+  lockDeliveryForCompletion,
+  reconcileExpiredDeliveryLeases,
+  deliveryWorkerRoutes,
+} = await import("../src/routes/delivery-worker.js");
+
+describe("notification delivery worker lifecycle", () => {
+  it("rejects a malformed completion identity before database work", async () => {
+    const app = Fastify();
+    await app.register(deliveryWorkerRoutes, { prefix: "/notification-worker" });
+    const response = await app.inject({
+      method: "POST",
+      url: "/notification-worker/not-a-delivery/complete",
+      headers: {
+        "x-worker-key": process.env.NOTIFICATION_WORKER_KEY!,
+      },
+      payload: {
+        tenantId: "10000000-0000-4000-8000-000000000001",
+        actorUserId: "20000000-0000-4000-8000-000000000002",
+        leaseToken: "40000000-0000-4000-8000-000000000004",
+        outcome: "delivered",
+        providerMessageId: "provider-message-1",
+      },
+    });
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(response.json(), { error: "INVALID_COMPLETION_REQUEST" });
+    await app.close();
+  });
+
+  it("requires an active operational tenant membership", async () => {
+    const tenantId = "10000000-0000-4000-8000-000000000001";
+    const actorUserId = "20000000-0000-4000-8000-000000000002";
+    const accepted = await isOperationalDeliveryWorkerActor(async (sql, values) => {
+      assert.match(sql, /membership\.tenant_id = \$1/u);
+      assert.match(sql, /membership\.user_id = \$2/u);
+      assert.match(sql, /membership\.role IN \('owner', 'admin', 'operator'\)/u);
+      assert.match(sql, /actor\.disabled_at IS NULL/u);
+      assert.deepEqual(values, [tenantId, actorUserId]);
+      return { rows: [{ exists: true }] };
+    }, tenantId, actorUserId);
+    assert.equal(accepted, true);
+
+    const rejected = await isOperationalDeliveryWorkerActor(
+      async () => ({ rows: [] }),
+      tenantId,
+      actorUserId,
+    );
+    assert.equal(rejected, false);
+  });
+
+  it("reconciles expired leases into auditable retries or terminal cancellation", async () => {
+    const tenantId = "10000000-0000-4000-8000-000000000001";
+    const reconciled = await reconcileExpiredDeliveryLeases(async (sql, values) => {
+      assert.match(sql, /WHERE tenant_id = \$1/u);
+      assert.match(sql, /status = 'processing'/u);
+      assert.match(sql, /lease_expires_at <= now\(\)/u);
+      assert.match(sql, /attempt_count >= 10 THEN 'cancelled'/u);
+      assert.match(sql, /attempt_count < 10/u);
+      assert.match(sql, /DELIVERY_LEASE_EXPIRED/u);
+      assert.match(sql, /INSERT INTO notification_delivery_attempts/u);
+      assert.deepEqual(values, [tenantId]);
+      return { rows: [], rowCount: 2 };
+    }, tenantId);
+    assert.equal(reconciled, 2);
+  });
+
+  it("keeps suppression cleanup and claims explicitly tenant scoped", async () => {
+    const tenantId = "10000000-0000-4000-8000-000000000001";
+    await cancelSuppressedQueuedDeliveries(async (sql, values) => {
+      assert.match(sql, /delivery\.tenant_id = \$1/u);
+      assert.match(sql, /suppression\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /delivery\.status IN \('pending', 'failed'\)/u);
+      assert.match(sql, /lease_token = NULL/u);
+      assert.deepEqual(values, [tenantId]);
+      return { rows: [], rowCount: 1 };
+    }, tenantId);
+
+    const rows = await claimDeliveryBatch(async (sql, values) => {
+      assert.match(sql, /delivery\.tenant_id = \$1/u);
+      assert.match(sql, /provider\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /suppression\.tenant_id = delivery\.tenant_id/u);
+      assert.match(sql, /FOR UPDATE OF delivery SKIP LOCKED/u);
+      assert.match(sql, /WHERE delivery\.tenant_id = \$1/u);
+      assert.deepEqual(values, [tenantId, 25, "worker-primary"]);
+      return {
+        rows: [
+          {
+            id: "30000000-0000-4000-8000-000000000003",
+            leaseToken: "40000000-0000-4000-8000-000000000004",
+            notificationId: "50000000-0000-4000-8000-000000000005",
+            recipientUserId: "60000000-0000-4000-8000-000000000006",
+            recipientEmail: "operator@example.com",
+            channel: "email" as const,
+            provider: "mail-provider",
+            title: "Title",
+            message: "Message",
+            locale: "tr-TR",
+            attemptCount: 2,
+            leaseExpiresAt: new Date("2026-08-11T11:00:00.000Z"),
+          },
+        ],
+      };
+    }, { tenantId, limit: 25, workerId: "worker-primary" });
+    assert.equal(rows.length, 1);
+  });
+
+  it("binds completion to tenant and lease while preserving provider identity", async () => {
+    const tenantId = "10000000-0000-4000-8000-000000000001";
+    const deliveryId = "30000000-0000-4000-8000-000000000003";
+    const leaseToken = "40000000-0000-4000-8000-000000000004";
+    const providerMessageId = "provider-message-1";
+
+    const locked = await lockDeliveryForCompletion(async (sql, values) => {
+      assert.match(sql, /WHERE tenant_id = \$1/u);
+      assert.match(sql, /id = \$2/u);
+      assert.match(sql, /lease_token = \$3/u);
+      assert.match(sql, /lease_expires_at > now\(\)/u);
+      assert.match(sql, /FOR UPDATE/u);
+      assert.deepEqual(values, [tenantId, deliveryId, leaseToken]);
+      return { rows: [{ attemptCount: 2, providerMessageId }] };
+    }, tenantId, deliveryId, leaseToken);
+    assert.deepEqual(locked, { attemptCount: 2, providerMessageId });
+    assert.equal(isCompletionProviderMessageIdConsistent(null, providerMessageId), true);
+    assert.equal(
+      isCompletionProviderMessageIdConsistent(providerMessageId, providerMessageId),
+      true,
+    );
+    assert.equal(
+      isCompletionProviderMessageIdConsistent(providerMessageId, "provider-message-2"),
+      false,
+    );
+
+    let queryCount = 0;
+    const completed = await completeClaimedDelivery(async (sql, values) => {
+      queryCount += 1;
+      if (queryCount === 1) {
+        assert.match(sql, /WHERE tenant_id = \$1/u);
+        assert.match(sql, /id = \$2/u);
+        assert.match(sql, /lease_token = \$7/u);
+        assert.match(sql, /COALESCE\(provider_message_id, \$6\)/u);
+        assert.deepEqual(values, [
+          tenantId,
+          deliveryId,
+          "delivered",
+          null,
+          2,
+          providerMessageId,
+          leaseToken,
+        ]);
+        return { rows: [], rowCount: 1 };
+      }
+      assert.match(sql, /INSERT INTO notification_delivery_attempts/u);
+      assert.deepEqual(values, [tenantId, deliveryId, "delivered", providerMessageId, null]);
+      return { rows: [], rowCount: 1 };
+    }, {
+      tenantId,
+      deliveryId,
+      leaseToken,
+      outcome: "delivered",
+      providerMessageId,
+      error: null,
+      attemptCount: 2,
+    });
+    assert.equal(completed, true);
+    assert.equal(queryCount, 2);
+  });
+});
