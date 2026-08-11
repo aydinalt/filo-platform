@@ -220,6 +220,13 @@ lease süresini geriye çekmez. Süresi dolmuş, tamamlanmış, sahipliği uyuş
 son sınıra ulaşmış lease hiçbir durum değişikliği yapılmadan reddedilir; başarılı yanıt
 kanonik ISO son kullanma zamanını döndürür.
 
+Operatör müdahalesi worker yaşam döngüsünü artık atlayamaz. Yönetim API'si bir
+teslimatı elle başarılı veya başarısız göstermez; yalnız başarısız teslimatı yeniden
+kuyruğa alabilir ya da bekleyen/başarısız teslimatı iptal edebilir. Aktif `processing`
+lease'leri değiştirilemez ve manuel retry deneme sayısını artırmaz. Her işlem açık bir
+onay ve güvenli neden kodu gerektirir; önceki ve sonraki durumla birlikte tenant kapsamlı
+denetim kaydına yazılır.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

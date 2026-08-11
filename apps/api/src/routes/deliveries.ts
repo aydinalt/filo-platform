@@ -1,5 +1,5 @@
 import type {FastifyInstance} from "fastify";
-import {deliveryQuerySchema,updateDeliveryStatusSchema,updateNotificationPreferencesSchema} from "@filo/contracts";
+import {deliveryCompletionParamsSchema,deliveryOperatorActionSchema,deliveryQuerySchema,updateNotificationPreferencesSchema} from "@filo/contracts";
 import {withTenantTransaction} from "@filo/database";
 import {requireSession} from "../lib/auth.js";
 import {allow} from "../lib/permissions.js";
@@ -8,6 +8,42 @@ import {renderTemplate} from "../lib/template-renderer.js";
 const preferencesSelect=`SELECT email_enabled AS "emailEnabled",push_enabled AS "pushEnabled",quiet_hours_enabled AS "quietHoursEnabled",to_char(quiet_start,'HH24:MI') AS "quietStart",to_char(quiet_end,'HH24:MI') AS "quietEnd",timezone,updated_at AS "updatedAt" FROM notification_preferences WHERE user_id=$1`;
 const deliverySelect=`SELECT o.id,o.notification_id AS "notificationId",n.title,o.recipient_user_id AS "recipientUserId",u.full_name AS "recipientName",o.channel,o.status,o.attempt_count AS "attemptCount",o.available_at AS "availableAt",o.delivered_at AS "deliveredAt",o.last_error AS "lastError",o.created_at AS "createdAt" FROM notification_delivery_outbox o JOIN in_app_notifications n ON n.id=o.notification_id JOIN users u ON u.id=o.recipient_user_id`;
 const shape=(row:any)=>({...row,updatedAt:row.updatedAt?.toISOString()??null,availableAt:row.availableAt?.toISOString(),deliveredAt:row.deliveredAt?.toISOString()??null,createdAt:row.createdAt?.toISOString()});
+
+type DeliveryOperationQuery=(sql:string,values?:unknown[])=>Promise<{rows:unknown[];rowCount?:number|null}>;
+
+export async function applyDeliveryOperatorAction(query:DeliveryOperationQuery,input:{tenantId:string;deliveryId:string;actorUserId:string;action:"retry"|"cancel";reason:string}){
+ const result=await query(`WITH candidate AS (
+   SELECT id,status
+   FROM notification_delivery_outbox
+   WHERE tenant_id=$1
+     AND id=$2
+     AND (
+       ($3='retry' AND status='failed' AND attempt_count<10)
+       OR ($3='cancel' AND status IN ('pending','failed'))
+     )
+   FOR UPDATE
+  ), changed AS (
+   UPDATE notification_delivery_outbox delivery
+   SET status=CASE WHEN $3='retry' THEN 'pending' ELSE 'cancelled' END,
+       available_at=CASE WHEN $3='retry' THEN now() ELSE delivery.available_at END,
+       last_error=CASE WHEN $3='retry' THEN NULL ELSE $4 END,
+       delivered_at=NULL,
+       lease_token=NULL,
+       lease_expires_at=NULL,
+       locked_at=NULL,
+       locked_by=NULL,
+       updated_at=now()
+   FROM candidate
+   WHERE delivery.tenant_id=$1
+     AND delivery.id=candidate.id
+   RETURNING delivery.id,candidate.status AS previous_status,delivery.status AS next_status
+  )
+  INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+  SELECT $1,$5,'notification_delivery.operator_action','notification_delivery',id,
+         jsonb_build_object('operation',$3,'reason',$4,'previousStatus',previous_status,'nextStatus',next_status)
+  FROM changed`,[input.tenantId,input.deliveryId,input.action,input.reason,input.actorUserId]);
+ return result.rowCount===1;
+}
 
 export async function deliveryRoutes(app:FastifyInstance){
  app.get("/preferences",{preHandler:requireSession},async request=>withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async c=>{const row=(await c.query(preferencesSelect,[request.sessionUser.id])).rows[0];return{preferences:row?shape(row):{emailEnabled:true,pushEnabled:true,quietHoursEnabled:false,quietStart:null,quietEnd:null,timezone:"Europe/Istanbul",updatedAt:null}};}));
@@ -28,5 +64,5 @@ export async function deliveryRoutes(app:FastifyInstance){
  }));
  app.get("/",{preHandler:[requireSession,allow("owner","admin","operator")]},async(request,reply)=>{const parsed=deliveryQuerySchema.safeParse(request.query);if(!parsed.success)return reply.code(400).send({error:"INVALID_DELIVERY_QUERY"});return withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async c=>{const params:any[]=[];const where=parsed.data.status==="all"?"":` WHERE o.status=$1`;if(where)params.push(parsed.data.status);return{deliveries:(await c.query(`${deliverySelect}${where} ORDER BY o.created_at DESC LIMIT 500`,params)).rows.map(shape)};});});
  app.get("/metrics",{preHandler:[requireSession,allow("owner","admin","operator")]},async request=>withTenantTransaction(request.sessionUser.tenantId,request.sessionUser.id,async c=>{const row=(await c.query(`SELECT count(*) FILTER(WHERE status='pending')::int AS pending,count(*) FILTER(WHERE status='processing')::int AS processing,count(*) FILTER(WHERE status='delivered')::int AS delivered,count(*) FILTER(WHERE status='failed')::int AS failed,count(*) FILTER(WHERE status='cancelled')::int AS cancelled,count(*) FILTER(WHERE status IN ('pending','failed') AND available_at<=now())::int AS ready,min(available_at) FILTER(WHERE status IN ('pending','failed') AND available_at<=now()) AS "oldestReadyAt" FROM notification_delivery_outbox`)).rows[0];return{metrics:{...row,oldestReadyAt:row.oldestReadyAt?.toISOString()??null}};}));
- app.patch("/:id",{preHandler:[requireSession,allow("owner","admin","operator")]},async(request,reply)=>{const id=(request.params as any).id,parsed=updateDeliveryStatusSchema.safeParse(request.body);if(!id||!parsed.success)return reply.code(400).send({error:"INVALID_DELIVERY_UPDATE"});const user=request.sessionUser;const changed=await withTenantTransaction(user.tenantId,user.id,async c=>(await c.query(`UPDATE notification_delivery_outbox SET status=$2,attempt_count=attempt_count+1,last_error=$3,delivered_at=CASE WHEN $2='delivered' THEN now() ELSE NULL END,available_at=CASE WHEN $2='failed' THEN now()+LEAST(interval '1 hour',interval '1 minute'*power(2,attempt_count)) ELSE available_at END,updated_at=now() WHERE id=$1 AND status IN ('pending','processing','failed') AND attempt_count<10`,[id,parsed.data.status,parsed.data.error])).rowCount);return changed?reply.code(204).send():reply.code(404).send({error:"DELIVERY_NOT_FOUND_OR_FINAL"});});
+ app.patch("/:id",{preHandler:[requireSession,allow("owner","admin","operator")]},async(request,reply)=>{const route=deliveryCompletionParamsSchema.safeParse(request.params),parsed=deliveryOperatorActionSchema.safeParse(request.body);if(!route.success||!parsed.success)return reply.code(400).send({error:"INVALID_DELIVERY_ACTION"});const user=request.sessionUser;const changed=await withTenantTransaction(user.tenantId,user.id,async c=>applyDeliveryOperatorAction(((sql:string,values?:unknown[])=>c.query(sql,values)) as DeliveryOperationQuery,{tenantId:user.tenantId,deliveryId:route.data.id,actorUserId:user.id,...parsed.data}));return changed?reply.code(204).send():reply.code(409).send({error:"DELIVERY_ACTION_NOT_ALLOWED"});});
 }
