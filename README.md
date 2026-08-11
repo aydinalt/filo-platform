@@ -213,6 +213,13 @@ sonuç, hata kodu veya provider mesaj kimliği gönderilirse mevcut durum korunu
 alınır; ham lease geçmişte saklanmaz ve veritabanı benzersizlik kuralı bir lease için
 yalnız tek makbuza izin verir.
 
+Uzun süren provider çağrılarında worker, geçerli lease'i aynı tenant, worker kimliği ve
+token ile yenileyebilir. Her yenileme canlı lease'i en çok beş dakika ileri taşır ve
+ilk claim anından itibaren on beş dakikalık mutlak son sınırı aşamaz. Yinelenen çağrılar
+lease süresini geriye çekmez. Süresi dolmuş, tamamlanmış, sahipliği uyuşmayan veya mutlak
+son sınıra ulaşmış lease hiçbir durum değişikliği yapılmadan reddedilir; başarılı yanıt
+kanonik ISO son kullanma zamanını döndürür.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

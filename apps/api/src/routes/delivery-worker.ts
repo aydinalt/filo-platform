@@ -3,6 +3,7 @@ import {
   claimDeliveriesSchema,
   completeDeliverySchema,
   deliveryCompletionParamsSchema,
+  renewDeliveryLeaseSchema,
 } from "@filo/contracts";
 import { withTenantTransaction } from "@filo/database";
 import { requireNotificationWorker, retryDelayMinutes } from "../lib/worker-auth.js";
@@ -44,6 +45,10 @@ type CompletionReceipt = {
   outcome: "delivered" | "failed";
   providerMessageId: string | null;
   error: string | null;
+};
+
+type RenewedDeliveryLease = {
+  leaseExpiresAt: Date | string;
 };
 
 const workerGuard = { preHandler: requireNotificationWorker };
@@ -281,6 +286,36 @@ export async function lockDeliveryForCompletion(
   return result.rows[0];
 }
 
+export async function renewClaimedDeliveryLease(
+  query: DeliveryWorkerQuery,
+  input: {
+    tenantId: string;
+    deliveryId: string;
+    leaseToken: string;
+    workerId: string;
+  },
+) {
+  const result = await query<RenewedDeliveryLease>(
+    `UPDATE notification_delivery_outbox
+     SET lease_expires_at = GREATEST(
+           lease_expires_at,
+           LEAST(locked_at + interval '15 minutes', now() + interval '5 minutes')
+         ),
+         updated_at = now()
+     WHERE tenant_id = $1
+       AND id = $2
+       AND lease_token = $3
+       AND locked_by = $4
+       AND status = 'processing'
+       AND locked_at IS NOT NULL
+       AND lease_expires_at > now()
+       AND now() < locked_at + interval '15 minutes'
+     RETURNING lease_expires_at AS "leaseExpiresAt"`,
+    [input.tenantId, input.deliveryId, input.leaseToken, input.workerId],
+  );
+  return result.rows[0];
+}
+
 export async function findCompletionReceipt(
   query: DeliveryWorkerQuery,
   tenantId: string,
@@ -430,6 +465,32 @@ export async function deliveryWorkerRoutes(app: FastifyInstance) {
           ...row,
           leaseExpiresAt: new Date(row.leaseExpiresAt).toISOString(),
         })),
+      };
+    });
+  });
+
+  app.post("/:id/lease/renew", workerGuard, async (request, reply) => {
+    const route = deliveryCompletionParamsSchema.safeParse(request.params);
+    const parsed = renewDeliveryLeaseSchema.safeParse(request.body);
+    if (!route.success || !parsed.success) {
+      return reply.code(400).send({ error: "INVALID_LEASE_RENEWAL_REQUEST" });
+    }
+    const input = parsed.data;
+    return withTenantTransaction(input.tenantId, input.actorUserId, async (client) => {
+      const query = ((sql: string, values?: unknown[]) =>
+        client.query(sql, values)) as DeliveryWorkerQuery;
+      if (!(await isOperationalDeliveryWorkerActor(query, input.tenantId, input.actorUserId))) {
+        return reply.code(403).send({ error: "INVALID_DELIVERY_WORKER_ACTOR" });
+      }
+      const lease = await renewClaimedDeliveryLease(query, {
+        ...input,
+        deliveryId: route.data.id,
+      });
+      if (!lease) {
+        return reply.code(409).send({ error: "DELIVERY_LEASE_NOT_RENEWABLE" });
+      }
+      return {
+        leaseExpiresAt: new Date(lease.leaseExpiresAt).toISOString(),
       };
     });
   });
