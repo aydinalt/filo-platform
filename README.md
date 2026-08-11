@@ -149,6 +149,11 @@ Tarayıcıdan gelen tüm durum değiştiren API istekleri özel CSRF başlığı
 tam `WEB_ORIGIN` eşleşmesiyle doğrulanır. Provider webhook'ları ve anahtarla korunan
 iç işçi endpoint'leri bu tarayıcı sınırından ayrı tutulur.
 
+Provider webhook imzaları, JSON ayrıştırılıp yeniden oluşturulmadan önce alınan
+değişmemiş istek gövdesi üzerinden doğrulanır. Böylece geçerli boşluk ve JSON
+biçimlendirme farklılıkları imzayı bozmaz; ayrıştırılmış veri yine aynı şema ve
+API gövde boyutu sınırından geçer.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden
