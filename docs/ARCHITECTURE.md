@@ -42,3 +42,10 @@ credential reference while unassigned deliveries resolve the currently active pr
 All provider status transitions reread and row-lock the target after acquiring the
 tenant/channel advisory lock. Replayed requests for the current status are no-ops, and
 audit events are emitted only for transitions based on the locked current state.
+
+Provider creation uses the same tenant/channel lock. Creating an active profile captures
+the displaced active profile identifiers and records both creation and rotation evidence
+inside the transaction; creating an inactive profile records creation only. Known provider
+name and single-active uniqueness conflicts are returned as bounded conflicts, while
+unrelated database failures remain server errors. The created profile response is loaded
+with an explicit tenant predicate in addition to RLS.

@@ -3,9 +3,131 @@ import { describe, it } from "node:test";
 
 process.env.SESSION_SECRET = "provider-rotation-test-session-secret-at-least-32-characters";
 
-const { changeProviderStatus, lockProviderChannel, rotateActiveProvider } = await import(
+const {
+  changeProviderStatus,
+  createProviderProfile,
+  lockProviderChannel,
+  providerCreationConflict,
+  rotateActiveProvider,
+} = await import(
   "../src/routes/notification-providers.js"
 );
+
+describe("notification provider creation", () => {
+  it("records an active creation and its displaced provider atomically", async () => {
+    let call = 0;
+    const providerProfileId = await createProviderProfile(async (sql, values) => {
+      call += 1;
+      if (call === 1) {
+        assert.match(sql, /pg_advisory_xact_lock/u);
+        assert.deepEqual(values, ["tenant-1", "email"]);
+        return { rows: [] };
+      }
+      if (call === 2) {
+        assert.match(sql, /SET status = 'inactive'/u);
+        assert.match(sql, /RETURNING id/u);
+        assert.deepEqual(values, ["tenant-1", "email"]);
+        return { rows: [{ id: "provider-old" }] };
+      }
+      if (call === 3) {
+        assert.match(sql, /INSERT INTO notification_provider_profiles/u);
+        assert.deepEqual(values, [
+          "tenant-1",
+          "Primary email",
+          "email",
+          "resend",
+          "FILO_EMAIL_PROVIDER_KEY",
+          "FILO_EMAIL_WEBHOOK_SECRET",
+          "active",
+          "actor-1",
+        ]);
+        return { rows: [{ id: "provider-new" }] };
+      }
+      if (call === 4) {
+        assert.match(sql, /notification_provider\.created/u);
+        assert.match(sql, /deactivatedProviderIds/u);
+        assert.deepEqual(values, [
+          "tenant-1",
+          "actor-1",
+          "provider-new",
+          "email",
+          "resend",
+          "active",
+          '["provider-old"]',
+        ]);
+        return { rows: [] };
+      }
+      assert.match(sql, /notification_provider\.rotated/u);
+      assert.deepEqual(values, [
+        "tenant-1",
+        "actor-1",
+        "provider-new",
+        "email",
+        '["provider-old"]',
+      ]);
+      return { rows: [] };
+    }, {
+      tenantId: "tenant-1",
+      actorUserId: "actor-1",
+      name: "Primary email",
+      channel: "email",
+      provider: "resend",
+      credentialEnvRef: "FILO_EMAIL_PROVIDER_KEY",
+      webhookSecretEnvRef: "FILO_EMAIL_WEBHOOK_SECRET",
+      status: "active",
+    });
+    assert.equal(providerProfileId, "provider-new");
+    assert.equal(call, 5);
+  });
+
+  it("creates an inactive profile without emitting a rotation", async () => {
+    let call = 0;
+    const providerProfileId = await createProviderProfile(async (sql, values) => {
+      call += 1;
+      if (call === 1) return { rows: [] };
+      if (call === 2) {
+        assert.match(sql, /INSERT INTO notification_provider_profiles/u);
+        return { rows: [{ id: "provider-new" }] };
+      }
+      assert.match(sql, /notification_provider\.created/u);
+      assert.doesNotMatch(sql, /notification_provider\.rotated/u);
+      assert.deepEqual(values, [
+        "tenant-1",
+        "actor-1",
+        "provider-new",
+        "push",
+        "firebase",
+        "inactive",
+        "[]",
+      ]);
+      return { rows: [] };
+    }, {
+      tenantId: "tenant-1",
+      actorUserId: "actor-1",
+      name: "Backup push",
+      channel: "push",
+      provider: "firebase",
+      credentialEnvRef: "FILO_PUSH_PROVIDER_KEY",
+      webhookSecretEnvRef: null,
+      status: "inactive",
+    });
+    assert.equal(providerProfileId, "provider-new");
+    assert.equal(call, 3);
+  });
+
+  it("maps only known provider uniqueness conflicts to safe API errors", () => {
+    assert.equal(providerCreationConflict({
+      code: "23505",
+      constraint: "notification_provider_profiles_tenant_id_name_key",
+    }), "PROVIDER_NAME_EXISTS");
+    assert.equal(providerCreationConflict({
+      code: "23505",
+      constraint: "notification_provider_one_active_channel_idx",
+    }), "ACTIVE_PROVIDER_CONFLICT");
+    assert.equal(providerCreationConflict({ code: "23505", constraint: "other_key" }), undefined);
+    assert.equal(providerCreationConflict(new Error("database unavailable")), undefined);
+  });
+});
 
 describe("notification provider rotation", () => {
   it("serializes rotations by tenant and channel", async () => {

@@ -255,6 +255,13 @@ okunarak uygulanır. Böylece eşzamanlı yönetici istekleri denetim geçmişin
 durumu yazamaz; zaten geçerli olan durumu yeniden isteyen çağrılar değişiklik veya
 yinelenen denetim olayı üretmeden başarılı olur.
 
+Yeni bir aktif provider profili oluşturmak da aynı tenant/kanal kilidi altında önceki
+aktif profili kapatır. Oluşturma ve rotasyon olayları devreden profil kimlikleriyle aynı
+transaction içinde ayrı ayrı kaydedilir; pasif profil oluşturmak rotasyon olayı üretmez.
+Yinelenen profil adı ve beklenmeyen tek-aktif-provider çakışmaları genel sunucu hatasına
+dönüşmeden sınırlı `409` yanıtlarıyla bildirilir. Oluşturulan profil yanıtı da açık tenant
+koşuluyla yeniden okunur.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden
