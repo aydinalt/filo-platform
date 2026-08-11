@@ -152,8 +152,9 @@ describe("notification delivery worker lifecycle", () => {
     const rows = await claimDeliveryBatch(async (sql, values) => {
       assert.match(sql, /delivery\.tenant_id = \$1/u);
       assert.match(sql, /provider\.tenant_id = delivery\.tenant_id/u);
-      assert.match(sql, /delivery\.provider_profile_id IS NULL AND provider\.status = 'active'/u);
       assert.match(sql, /provider\.id = delivery\.provider_profile_id/u);
+      assert.match(sql, /delivery\.provider_profile_id IS NULL AND provider\.status = 'active'/u);
+      assert.doesNotMatch(sql, /provider\.id = delivery\.provider_profile_id AND provider\.status = 'active'/u);
       assert.match(sql, /provider\.credential_env_ref/u);
       assert.match(sql, /COALESCE\(delivery\.provider_profile_id, candidates\.provider_id\)/u);
       assert.match(sql, /suppression\.tenant_id = delivery\.tenant_id/u);

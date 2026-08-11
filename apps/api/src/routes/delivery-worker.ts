@@ -232,8 +232,8 @@ export async function claimDeliveryBatch(
          ON provider.tenant_id = delivery.tenant_id
         AND provider.channel = delivery.channel
         AND (
-          (delivery.provider_profile_id IS NULL AND provider.status = 'active')
-          OR provider.id = delivery.provider_profile_id
+          provider.id = delivery.provider_profile_id
+          OR (delivery.provider_profile_id IS NULL AND provider.status = 'active')
         )
        WHERE delivery.tenant_id = $1
          AND delivery.status IN ('pending', 'failed')

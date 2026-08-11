@@ -30,3 +30,11 @@ kalmasına izin vermez.
 
 Gerçek konum noktası toplama, sürücü mobil uygulaması, public firma sayfası,
 CRM, teklif, özel alan adı ve ödeme yoktur. Bunlar ayrı dikey dilimlerdir.
+## Notification provider rotation
+
+Provider activation is serialized per tenant and channel with a transaction-scoped
+PostgreSQL advisory lock. A rotation first verifies and locks the target profile in
+the same tenant/channel, deactivates the displaced active profile, activates the
+target, and writes one audit event in the same transaction. Delivery rows retain
+their selected `provider_profile_id`; retries therefore use the originally selected
+credential reference while unassigned deliveries resolve the currently active profile.

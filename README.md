@@ -243,6 +243,13 @@ yeniden denetler; operatör retry işlemi de kapatılmış bir kanalı yeniden k
 Aktif `processing` lease'leri korunur. Önceki ve sonraki tercihler ile iptal/erteleme sayıları
 tenant kapsamlı denetim kaydında saklanır.
 
+Provider aktivasyonu tenant ve kanal başına işlem-kapsamlı kilitle seri hale getirilir.
+Eşzamanlı yönetici değişiklikleri tek-aktif-provider kuralını yarış durumuna sokamaz;
+yerine geçen ve devreden profil kimlikleri denetim geçmişine yazılır. Daha önce bir
+teslimata sabitlenmiş profil pasif hale gelse bile worker retry işlemi aynı provider ve
+credential referansını kullanmaya devam eder; yeni teslimatlar yalnız yeni aktif profile
+bağlanır.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

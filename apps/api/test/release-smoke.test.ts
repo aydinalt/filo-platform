@@ -111,6 +111,16 @@ describe("release smoke boundaries", () => {
     assert.deepEqual(response.json(), { error: "AUTH_REQUIRED" });
   });
 
+  it("blocks provider rotation without an authenticated browser context", async () => {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/notification-providers/70000000-0000-4000-8000-000000000007",
+      headers: { "x-csrf-protection": "1" },
+      payload: { status: "active" },
+    });
+    assert.equal(response.statusCode, 403);
+  });
+
   it("prevents API responses from being stored by browsers or shared caches", async () => {
     const protectedResponse = await app.inject({
       method: "GET",
