@@ -163,6 +163,10 @@ azalan önceliktedir. Böylece gecikmiş veya eşzamanlı provider olayları şi
 ya da bounce durumunu yeniden delivered durumuna düşüremez. Olayların tamamı
 idempotent denetim kaydında korunur; geçerli teslim zamanı en erken provider
 zaman damgasıyla saklanır.
+Aynı provider olay kimliği yalnız teslimat, olay türü, provider mesaj kimliği ve
+olay zamanı da eşleşiyorsa güvenli tekrar kabul edilir. Aynı kimliğin farklı bir
+çekirdek olay için yeniden kullanılması sessizce yutulmaz; veri bütünlüğü
+çatışması olarak reddedilir ve mevcut teslimat kaydı değiştirilmez.
 
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.

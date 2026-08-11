@@ -21,6 +21,13 @@ type ProviderDelivery = {
   channel: string;
 };
 
+type StoredProviderEvent = {
+  deliveryId: string;
+  eventType: ProviderEventType;
+  providerMessageId: string | null;
+  occurredAt: Date | string;
+};
+
 type ProviderProfileQuery = (
   sql: string,
   values: unknown[],
@@ -81,6 +88,49 @@ export function nextProviderDeliveryStatus(
       ? providerEventStatusRank[currentStatus as ProviderEventType]
       : 0;
   return providerEventStatusRank[eventType] > currentRank ? eventType : currentStatus;
+}
+
+type ProviderEventQuery = (
+  sql: string,
+  values: unknown[],
+) => Promise<{ rows: StoredProviderEvent[] }>;
+
+export async function findProviderEventById(
+  query: ProviderEventQuery,
+  tenantId: string,
+  profileId: string,
+  eventId: string,
+) {
+  const result = await query(
+    `SELECT delivery_id AS "deliveryId",
+            event_type AS "eventType",
+            provider_message_id AS "providerMessageId",
+            occurred_at AS "occurredAt"
+     FROM notification_provider_events
+     WHERE tenant_id = $1
+       AND provider_profile_id = $2
+       AND provider_event_id = $3
+     LIMIT 1`,
+    [tenantId, profileId, eventId],
+  );
+  return result.rows[0];
+}
+
+export function isSameProviderEvent(
+  stored: StoredProviderEvent,
+  incoming: {
+    deliveryId: string;
+    event: ProviderEventType;
+    providerMessageId: string | null;
+    occurredAt: string;
+  },
+) {
+  return (
+    stored.deliveryId === incoming.deliveryId &&
+    stored.eventType === incoming.event &&
+    stored.providerMessageId === incoming.providerMessageId &&
+    new Date(stored.occurredAt).getTime() === new Date(incoming.occurredAt).getTime()
+  );
 }
 
 export function registerProviderWebhookJsonParser(app: FastifyInstance) {
@@ -155,6 +205,18 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
           event.metadata,
         ],
       );
+
+      if (!inserted.rowCount) {
+        const existingEvent = await findProviderEventById(
+          (sql, values) => client.query<StoredProviderEvent>(sql, values),
+          tenantId,
+          profile.id,
+          event.eventId,
+        );
+        if (!existingEvent || !isSameProviderEvent(existingEvent, event)) {
+          return reply.code(409).send({ error: "PROVIDER_EVENT_ID_CONFLICT" });
+        }
+      }
 
       if (inserted.rowCount) {
         const status = nextProviderDeliveryStatus(lockedDelivery.status, event.event);

@@ -119,6 +119,59 @@ describe("provider webhook signatures", () => {
     assert.equal(nextProviderDeliveryStatus("complained", "delivered"), "complained");
     assert.equal(nextProviderDeliveryStatus("bounced", "delivered"), "bounced");
   });
+
+  it("accepts only an identical callback as an idempotent provider event", async () => {
+    const { findProviderEventById, isSameProviderEvent } = await import(
+      "../src/routes/provider-webhooks.js"
+    );
+    const tenantId = "22455242-9c0e-4481-892b-0ef95c304922";
+    const event = await findProviderEventById(
+      async (sql, values) => {
+        assert.match(sql, /tenant_id = \$1/u);
+        assert.match(sql, /provider_profile_id = \$2/u);
+        assert.match(sql, /provider_event_id = \$3/u);
+        assert.deepEqual(values, [tenantId, "provider-profile-1", "event-1"]);
+        return {
+          rows: [
+            {
+              deliveryId: "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac",
+              eventType: "bounced" as const,
+              providerMessageId: "provider-message-1",
+              occurredAt: new Date("2026-08-11T08:00:00.000Z"),
+            },
+          ],
+        };
+      },
+      tenantId,
+      "provider-profile-1",
+      "event-1",
+    );
+
+    assert.ok(event);
+    const duplicate = {
+      deliveryId: "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac",
+      event: "bounced" as const,
+      providerMessageId: "provider-message-1",
+      occurredAt: "2026-08-11T08:00:00Z",
+    };
+    assert.equal(isSameProviderEvent(event, duplicate), true);
+    assert.equal(
+      isSameProviderEvent(event, {
+        ...duplicate,
+        deliveryId: "70d34a48-1e7a-4f66-9ae5-822cf0033f59",
+      }),
+      false,
+    );
+    assert.equal(isSameProviderEvent(event, { ...duplicate, event: "complained" }), false);
+    assert.equal(
+      isSameProviderEvent(event, { ...duplicate, providerMessageId: "provider-message-2" }),
+      false,
+    );
+    assert.equal(
+      isSameProviderEvent(event, { ...duplicate, occurredAt: "2026-08-11T08:00:01Z" }),
+      false,
+    );
+  });
 });
 
 type FastifyRequestWithProviderBody = {
