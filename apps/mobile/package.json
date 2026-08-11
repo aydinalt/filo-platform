@@ -1,6 +1,6 @@
 {
   "name": "@filo/mobile",
-  "version": "0.92.0",
+  "version": "0.93.0",
   "private": true,
   "main": "index.ts",
   "scripts": {
@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@filo/contracts": "*",
+    "@react-native-community/netinfo": "^12.0.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "expo": "^57.0.12",
+    "expo-battery": "~57.0.1",
     "expo-crypto": "~57.0.1",
     "expo-location": "~57.0.9",
     "expo-secure-store": "~57.0.1",

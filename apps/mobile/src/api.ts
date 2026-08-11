@@ -1,5 +1,6 @@
 import type {
   ClaimMobileEnrollmentInput,
+  MobileHeartbeatInput,
   MobileLocationBatchInput,
   MobilePrincipal,
   MobileTrackingStateInput,
@@ -26,6 +27,10 @@ export const mobileApi = {
     }),
   me: (credential: string) =>
     request<{ principal: MobilePrincipal }>("/api/mobile/me", {}, credential),
+  heartbeat: (credential: string, input: MobileHeartbeatInput) =>
+    request<{ accepted: true; serverTime: string }>("/api/mobile/heartbeat", {
+      method: "POST", body: JSON.stringify(input),
+    }, credential),
   startShift: (credential: string) =>
     request<{ shift: { id: string; existing: boolean } }>("/api/mobile/shift/start", { method: "POST" }, credential),
   endShift: (credential: string) =>

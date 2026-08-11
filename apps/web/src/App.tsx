@@ -17,6 +17,7 @@ import type {
   MaintenancePlan,
   Member,
   MemberInvitation,
+  MobileDeviceStatus,
   MobileEnrollment,
   NotificationItem,
   NotificationRule,
@@ -70,6 +71,16 @@ function slugifyTenant(value: string) {
     .replace(/^-|-$/gu, "")
     .slice(0, 80);
 }
+
+const mobileHealthLabels: Record<MobileDeviceStatus["health"], string> = {
+  healthy: "Sağlıklı",
+  idle: "Beklemede",
+  delayed: "Kuyruk gecikiyor",
+  offline: "Çevrimdışı",
+  permission_issue: "İzin sorunu",
+  tracking_error: "Takip hatası",
+  never_seen: "Heartbeat bekleniyor",
+};
 
 function InviteAcceptance({ token, onLogin }: { token: string; onLogin: (user: SessionUser) => void }) {
   const [preview, setPreview] = useState<{ tenantName: string; email: string; role: string; expiresAt: string } | null>(null);
@@ -708,6 +719,7 @@ function Dashboard({
   const [mobileAssignment, setMobileAssignment] = useState("");
   const [mobileMessage, setMobileMessage] = useState("Takip kapalı");
   const [mobileEnrollments, setMobileEnrollments] = useState<MobileEnrollment[]>([]);
+  const [mobileDeviceStatuses, setMobileDeviceStatuses] = useState<MobileDeviceStatus[]>([]);
   const [mobileEnrollmentToken, setMobileEnrollmentToken] = useState("");
   const watchId = useRef<number | null>(null);
 
@@ -821,6 +833,7 @@ function Dashboard({
       setNotificationTemplates(templateResult.templates);
       if (user.role !== "viewer") {
         setMobileEnrollments((await api.mobileEnrollments()).enrollments);
+        setMobileDeviceStatuses((await api.mobileDeviceStatuses()).devices);
         setNotificationAnalytics((await api.notificationAnalytics()).analytics);
         setNotificationProviderHealth(await api.notificationProviderHealth());
         const providerIncidentResult =
@@ -2084,6 +2097,41 @@ function Dashboard({
         )}
         {view === "mobile" && (
           <>
+            <section className="table-card mobile-tracking">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">MOBİL PİLOT GÖZLEMİ</p>
+                  <h2>Saha cihaz sağlığı</h2>
+                </div>
+                <button className="secondary" onClick={() => void refresh()}>Yenile</button>
+              </div>
+              <p>
+                Cihaz heartbeat’i 10 dakikayı aşarsa çevrimdışı, bekleyen en eski konum
+                5 dakikayı aşarsa kuyruk gecikiyor olarak işaretlenir.
+              </p>
+              <div className="stats-grid">
+                <article><small>AKTİF CİHAZ</small><strong>{mobileDeviceStatuses.length}</strong></article>
+                <article><small>SAĞLIKLI</small><strong>{mobileDeviceStatuses.filter((device) => device.health === "healthy").length}</strong></article>
+                <article><small>MÜDAHALE</small><strong>{mobileDeviceStatuses.filter((device) => !["healthy", "idle"].includes(device.health)).length}</strong></article>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Araç / sürücü</th><th>Cihaz</th><th>Sağlık</th><th>Bağlantı / pil</th><th>Kuyruk</th><th>Son sinyal</th></tr></thead>
+                  <tbody>
+                    {mobileDeviceStatuses.length === 0 && <tr><td colSpan={6}>Aktif kayıtlı saha cihazı bulunmuyor.</td></tr>}
+                    {mobileDeviceStatuses.map((device) => <tr key={device.credentialId}>
+                      <td>{device.vehiclePlate}<small>{device.driverName}</small></td>
+                      <td>{device.deviceName}<small>{device.platform} · {device.appVersion ?? "sürüm bekleniyor"}</small></td>
+                      <td><span className="status">{mobileHealthLabels[device.health]}</span>{device.lastErrorCode && <small>{device.lastErrorCode}</small>}</td>
+                      <td>{device.networkType ?? "—"} · {device.batteryPercent === null ? "—" : `%${device.batteryPercent}`}{device.lowPowerMode && <small>Düşük güç modu</small>}</td>
+                      <td>{device.pendingLocationCount}<small>{device.oldestQueuedAt ? `En eski: ${new Date(device.oldestQueuedAt).toLocaleTimeString("tr-TR")}` : "Bekleyen yok"}</small></td>
+                      <td>{device.lastHeartbeatAt ? new Date(device.lastHeartbeatAt).toLocaleString("tr-TR") : "Henüz yok"}<small>{device.lastLocationAt ? `Konum: ${new Date(device.lastLocationAt).toLocaleTimeString("tr-TR")}` : "Konum bekleniyor"}</small></td>
+                    </tr>)}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
             <section className="table-card mobile-tracking">
               <div className="section-head">
                 <div>

@@ -2,7 +2,7 @@ import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, No
 import type { FleetReport } from "@filo/contracts";
 import type { NotificationAnalytics, NotificationArchiveAttempt, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention, NotificationRetentionSettings } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
-import type { AcceptMemberInvitationInput, AccountSession, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileEnrollmentInput, MemberInvitation, MobileEnrollment, RegisterTenantInput, RequestPasswordResetInput } from "@filo/contracts";
+import type { AcceptMemberInvitationInput, AccountSession, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileEnrollmentInput, MemberInvitation, MobileDeviceStatus, MobileEnrollment, RegisterTenantInput, RequestPasswordResetInput } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -27,6 +27,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   mobileEnrollments: () =>
     request<{ enrollments: MobileEnrollment[] }>("/api/mobile/enrollments"),
+  mobileDeviceStatuses: () =>
+    request<{ devices: MobileDeviceStatus[]; serverTime: string }>("/api/mobile/devices/status"),
   createMobileEnrollment: (input: CreateMobileEnrollmentInput) =>
     request<{ enrollment: { id: string; assignmentId: string; label: string; expiresAt: string }; token: string }>("/api/mobile/enrollments", {
       method: "POST", body: JSON.stringify(input)

@@ -140,3 +140,20 @@ state is `tracking`. Offline points remain in a bounded device queue, are sent c
 in batches of at most 100, and retain stable UUID event identities so API retries are
 idempotent. Geofence and speeding evaluation reuse the same tenant-scoped ingestion path as
 foreground web points.
+
+## Mobile pilot reliability and diagnostics
+
+Mobile health is based on explicit heartbeats, never generic authenticated activity. Each
+heartbeat is schema-bounded and updates only the active credential inside the resolved
+tenant transaction. The latest application/OS version, battery and low-power state,
+network type, permission, tracking state, queue depth, oldest queued point and last bounded
+error are retained; raw secrets and arbitrary device payloads are not accepted.
+
+The operational panel reads active credentials with an explicit tenant predicate in
+addition to forced RLS. Health is classified server-side: no heartbeat is `never_seen`,
+signals older than ten minutes are `offline`, permission/runtime failures take precedence,
+and queues older than five minutes are `delayed`. Successful location batches record the
+last sync and last location time. The mobile runtime sends periodic and event-driven
+heartbeats and retries its idempotent queue when connectivity returns. Queue writes are
+serialized locally, and successful sync removes only acknowledged event identities so a
+location collected during an in-flight request cannot be overwritten by an older snapshot.

@@ -17,3 +17,8 @@ export function mergeLocationQueue(
 export function takeLocationBatch(queue: QueuedLocation[], maximum = 100) {
   return { batch: queue.slice(0, maximum), remaining: queue.slice(maximum) };
 }
+
+export function removeLocationEvents(queue: QueuedLocation[], eventIds: string[]) {
+  const ids = new Set(eventIds);
+  return queue.filter((event) => !ids.has(event.eventId));
+}

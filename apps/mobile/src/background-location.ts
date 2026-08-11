@@ -2,23 +2,25 @@ import * as Crypto from "expo-crypto";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { mobileApi } from "./api";
-import { credentialStore, enqueueLocations, peekBatch, replaceQueue } from "./storage";
+import { BACKGROUND_LOCATION_TASK } from "./constants";
+import { sendMobileHeartbeat } from "./diagnostics";
+import { credentialStore, enqueueLocations, peekBatch, readQueue, removeQueuedEvents } from "./storage";
 
-export const BACKGROUND_LOCATION_TASK = "filo-background-location-v1";
+export { BACKGROUND_LOCATION_TASK } from "./constants";
 
 export async function flushLocationQueue() {
   const credential = await credentialStore.read();
   if (!credential) return { sent: 0, queued: (await peekBatch()).batch.length };
   let sent = 0;
   while (true) {
-    const { batch, remaining } = await peekBatch();
+    const { batch } = await peekBatch();
     if (batch.length === 0) return { sent, queued: 0 };
     try {
       await mobileApi.locations(credential, { events: batch });
       sent += batch.length;
-      await replaceQueue(remaining);
+      await removeQueuedEvents(batch.map((event) => event.eventId));
     } catch {
-      return { sent, queued: batch.length + remaining.length };
+      return { sent, queued: (await readQueue()).length };
     }
   }
 }
@@ -40,6 +42,7 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
       : null,
   })));
   await flushLocationQueue();
+  await sendMobileHeartbeat();
 });
 
 export async function startBackgroundTracking() {

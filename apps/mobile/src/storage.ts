@@ -1,9 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
-import { mergeLocationQueue, takeLocationBatch, type QueuedLocation } from "./queue";
+import { mergeLocationQueue, removeLocationEvents, takeLocationBatch, type QueuedLocation } from "./queue";
 
 const CREDENTIAL_KEY = "filo.mobile.credential";
 const QUEUE_KEY = "filo.mobile.locations";
+let queueMutation: Promise<unknown> = Promise.resolve();
 
 export const credentialStore = {
   read: () => SecureStore.getItemAsync(CREDENTIAL_KEY),
@@ -11,7 +12,7 @@ export const credentialStore = {
   clear: () => SecureStore.deleteItemAsync(CREDENTIAL_KEY),
 };
 
-export async function readQueue(): Promise<QueuedLocation[]> {
+async function readQueueUnsafe(): Promise<QueuedLocation[]> {
   const raw = await AsyncStorage.getItem(QUEUE_KEY);
   if (!raw) return [];
   try {
@@ -22,10 +23,26 @@ export async function readQueue(): Promise<QueuedLocation[]> {
   }
 }
 
+export async function readQueue(): Promise<QueuedLocation[]> {
+  await queueMutation;
+  return readQueueUnsafe();
+}
+
+function mutateQueue<T>(mutation: (queue: QueuedLocation[]) => { queue: QueuedLocation[]; result: T }) {
+  const operation = queueMutation.then(async () => {
+    const next = mutation(await readQueueUnsafe());
+    await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(next.queue));
+    return next.result;
+  });
+  queueMutation = operation.then(() => undefined, () => undefined);
+  return operation;
+}
+
 export async function enqueueLocations(events: QueuedLocation[]) {
-  const queue = mergeLocationQueue(await readQueue(), events);
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-  return queue.length;
+  return mutateQueue((current) => {
+    const queue = mergeLocationQueue(current, events);
+    return { queue, result: queue.length };
+  });
 }
 
 export async function peekBatch() {
@@ -33,5 +50,12 @@ export async function peekBatch() {
 }
 
 export async function replaceQueue(queue: QueuedLocation[]) {
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  return mutateQueue(() => ({ queue, result: undefined }));
+}
+
+export async function removeQueuedEvents(eventIds: string[]) {
+  return mutateQueue((current) => {
+    const queue = removeLocationEvents(current, eventIds);
+    return { queue, result: queue.length };
+  });
 }

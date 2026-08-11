@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mergeLocationQueue, takeLocationBatch } from "../src/queue";
+import { mergeLocationQueue, removeLocationEvents, takeLocationBatch } from "../src/queue";
 
 const event = (eventId: string, recordedAt: string) => ({
   eventId,
@@ -33,5 +33,17 @@ describe("mobile offline location queue", () => {
     const result = takeLocationBatch(queue);
     assert.equal(result.batch.length, 100);
     assert.equal(result.remaining.length, 5);
+  });
+
+  it("removes only acknowledged identities and preserves newer points", () => {
+    const current = [
+      event("10000000-0000-4000-8000-000000000001", "2026-08-12T10:00:00.000Z"),
+      event("10000000-0000-4000-8000-000000000002", "2026-08-12T10:01:00.000Z"),
+      event("10000000-0000-4000-8000-000000000003", "2026-08-12T10:02:00.000Z"),
+    ];
+    assert.deepEqual(
+      removeLocationEvents(current, ["10000000-0000-4000-8000-000000000001"]).map((item) => item.eventId),
+      ["10000000-0000-4000-8000-000000000002", "10000000-0000-4000-8000-000000000003"],
+    );
   });
 });

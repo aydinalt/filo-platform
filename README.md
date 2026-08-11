@@ -1,4 +1,4 @@
-# Filo Platform V1 — yerel mobil arka plan takibi v0.92
+# Filo Platform V1 — mobil pilot güvenilirliği v0.93
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -26,6 +26,12 @@ aktif vardiya kontrollü arka plan konumunu ve çevrimdışı konum kuyruğunu e
 Mobil noktalar en fazla 100 kayıtlık kronolojik paketlerle gönderilir; `eventId`
 tekrarları sunucuda idempotent kabul edilir ve aynı atama için yeni telefon kaydı
 önceki mobil erişimi otomatik kapatır.
+
+v0.93, fiziksel cihaz pilotu için açık saha tanılaması ekler. Mobil uygulama
+heartbeat, izin, batarya, ağ, takip ve çevrimdışı kuyruk durumunu güvenli mobil
+kimliğiyle bildirir. Panel aktif cihazları sağlıklı, gecikmeli, çevrimdışı veya
+müdahale gerektiren durumda gösterir; bağlantı geri geldiğinde uygulama kuyruğu
+otomatik eşitleyip güncel sağlık sinyali gönderir.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.

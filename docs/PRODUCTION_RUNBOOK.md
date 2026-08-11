@@ -1,6 +1,6 @@
 # Filo Platform V1 — Production Runbook
 
-Bu runbook, v0.92 ile API, web paneli, yerel sürücü uygulaması ve sürekli bildirim worker'ını kontrollü pilot
+Bu runbook, v0.93 ile API, web paneli, yerel sürücü uygulaması ve sürekli bildirim worker'ını kontrollü pilot
 ortamında açmak için uygulanacak sırayı tanımlar.
 
 ## 1. Zorunlu altyapı
@@ -80,7 +80,7 @@ bulunur. Pilot sırasında desteklenmeyen push kanalını kullanıcı tercihleri
 
 Arayüzdeki `terms-v1` ve `privacy-v1` kabul sürümleri, hukuk/KVKK sahibi tarafından
 onaylanmış ve kullanıcıya erişilebilir gerçek metinlerle eşleştirilmeden dış kullanıcı
-kaydı açılmamalıdır. v0.92 kabul kanıtını saklar; hukuki metnin kendisini üretmez.
+kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisini üretmez.
 
 ## 6. Hesap kurtarma ve oturum güvenliği
 
@@ -110,6 +110,9 @@ kaydı açılmamalıdır. v0.92 kabul kanıtını saklar; hukuki metnin kendisin
 7. Uçak modunda en az 20 nokta biriktirin; bağlantı geldiğinde noktaların kronolojik ve tekrarsız aktarıldığını doğrulayın.
 8. Web panelinden kaydı iptal edin; telefonun yeni konum gönderemediğini doğrulayın.
 9. Android OEM pil optimizasyonu ve iOS uygulama sonlandırma davranışını pilot cihaz modelinde ayrıca kaydedin.
+10. `Telefon Takibi > Saha cihaz sağlığı` tablosunda heartbeat, izin, pil, ağ ve kuyruk değerlerini doğrulayın.
+11. Uygulamayı 10 dakikadan uzun süre ağsız bırakıp cihazın `Çevrimdışı`; en eski kuyruk noktası 5 dakikayı aşınca `Kuyruk gecikiyor` durumuna geçtiğini doğrulayın.
+12. Bağlantıyı geri açın; otomatik eşitleme sonrası kuyruk sayısının sıfıra ve cihazın sağlıklı duruma döndüğünü doğrulayın.
 
 ## 8. Pilot açılış kapıları
 
@@ -123,5 +126,6 @@ kaydı açılmamalıdır. v0.92 kabul kanıtını saklar; hukuki metnin kendisin
 - KVKK metinleri, telefon sahipliği ve çalışan bilgilendirme akışı onaylanmış.
 - iOS ve en az iki Android/OEM cihazda 60 dakikalık arka plan rota pilotu tamamlanmış.
 - Uçak modu kuyruğu, yeniden bağlantı eşitlemesi, credential rotasyonu ve uzaktan iptal kanıtlanmış.
+- Heartbeat, çevrimdışı cihaz, izin kaybı, düşük güç modu ve geciken kuyruk sinyalleri panelde kanıtlanmış.
 
 Bu kapılar tamamlanmadan gerçek kullanıcı veya sürekli saha verisi açılmaz.

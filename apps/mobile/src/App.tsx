@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import NetInfo from "@react-native-community/netinfo";
 import { Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Pressable } from "react-native";
 import type { MobilePrincipal } from "@filo/contracts";
 import { mobileApi } from "./api";
 import { flushLocationQueue, startBackgroundTracking, stopBackgroundTracking } from "./background-location";
+import { sendMobileHeartbeat } from "./diagnostics";
 import { credentialStore, readQueue } from "./storage";
 
 export default function App() {
@@ -29,10 +31,30 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!credential) return undefined;
+    const reconcile = async () => {
+      const result = await flushLocationQueue();
+      setQueued(result.queued);
+      await sendMobileHeartbeat();
+    };
+    void reconcile();
+    const timer = setInterval(() => { void reconcile(); }, 60_000);
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      if (state.isConnected) void reconcile();
+    });
+    return () => {
+      clearInterval(timer);
+      unsubscribe();
+    };
+  }, [credential]);
+
   async function run(action: () => Promise<void>) {
     setBusy(true);
     try { await action(); } catch (error) {
-      setStatus(error instanceof Error ? error.message : "İşlem tamamlanamadı");
+      const code = error instanceof Error ? error.message : "MOBILE_OPERATION_FAILED";
+      setStatus(code);
+      await sendMobileHeartbeat(code.slice(0, 80));
     } finally { setBusy(false); }
   }
 
@@ -54,6 +76,7 @@ export default function App() {
     await mobileApi.startShift(credential);
     await startBackgroundTracking();
     await mobileApi.tracking(credential, { permission: "granted_always", state: "tracking" });
+    await sendMobileHeartbeat();
     setStatus("Vardiya ve arka plan konum paylaşımı aktif.");
   }
 
@@ -63,12 +86,14 @@ export default function App() {
     await flushLocationQueue();
     await mobileApi.tracking(credential, { permission: "granted_always", state: "paused" });
     await mobileApi.endShift(credential);
+    await sendMobileHeartbeat();
     setQueued((await readQueue()).length);
     setStatus("Vardiya kapatıldı; konum paylaşımı durdu.");
   }
 
   async function sync() {
     const result = await flushLocationQueue();
+    await sendMobileHeartbeat();
     setQueued(result.queued);
     setStatus(`${result.sent} konum gönderildi, ${result.queued} konum bekliyor.`);
   }

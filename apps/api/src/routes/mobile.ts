@@ -3,8 +3,10 @@ import { randomUUID } from "node:crypto";
 import {
   claimMobileEnrollmentSchema,
   createMobileEnrollmentSchema,
+  mobileHeartbeatSchema,
   mobileLocationBatchSchema,
   mobileTrackingStateSchema,
+  type MobileDeviceStatus,
   type MobileEnrollment,
   type MobilePrincipal,
 } from "@filo/contracts";
@@ -14,6 +16,7 @@ import { allow } from "../lib/permissions.js";
 import { ingestLocationEvent } from "../lib/location-ingestion.js";
 import { requireMobileCredential } from "../lib/mobile-auth.js";
 import { createMobileSecret, hashMobileSecret, parseMobileToken } from "../lib/mobile-token.js";
+import { classifyMobileDeviceHealth } from "../lib/mobile-device-health.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -26,6 +29,16 @@ type EnrollmentRow = Omit<MobileEnrollment, "expiresAt" | "claimedAt" | "revoked
 
 type PrincipalRow = Omit<MobilePrincipal, "expiresAt"> & { expiresAt: Date };
 
+type MobileDeviceStatusRow = Omit<
+  MobileDeviceStatus,
+  "health" | "oldestQueuedAt" | "lastHeartbeatAt" | "lastSyncAt" | "lastLocationAt"
+> & {
+  oldestQueuedAt: Date | null;
+  lastHeartbeatAt: Date | null;
+  lastSyncAt: Date | null;
+  lastLocationAt: Date | null;
+};
+
 function serializeEnrollment(row: EnrollmentRow): MobileEnrollment {
   return {
     ...row,
@@ -37,6 +50,45 @@ function serializeEnrollment(row: EnrollmentRow): MobileEnrollment {
 }
 
 export async function mobileRoutes(app: FastifyInstance) {
+  app.get("/devices/status", { preHandler: [requireSession, allow("owner", "admin", "operator")] }, async (request) => {
+    const user = request.sessionUser;
+    return withTenantTransaction(user.tenantId, user.id, async (client) => {
+      const result = await client.query<MobileDeviceStatusRow>(
+        `SELECT credential.id AS "credentialId", credential.assignment_id AS "assignmentId",
+                vehicle.plate AS "vehiclePlate", driver.full_name AS "driverName",
+                credential.device_name AS "deviceName", credential.platform,
+                credential.app_version AS "appVersion", credential.os_version AS "osVersion",
+                credential.battery_percent AS "batteryPercent", credential.low_power_mode AS "lowPowerMode",
+                credential.network_type AS "networkType", credential.permission_state AS permission,
+                credential.mobile_tracking_state AS "trackingState",
+                credential.pending_location_count AS "pendingLocationCount",
+                credential.oldest_queued_at AS "oldestQueuedAt",
+                credential.last_error_code AS "lastErrorCode",
+                credential.last_heartbeat_at AS "lastHeartbeatAt",
+                credential.last_sync_at AS "lastSyncAt",
+                credential.last_location_at AS "lastLocationAt"
+         FROM mobile_access_credentials credential
+         JOIN vehicle_driver_assignments assignment ON assignment.id = credential.assignment_id
+           AND assignment.tenant_id = credential.tenant_id AND assignment.ended_at IS NULL
+         JOIN vehicles vehicle ON vehicle.id = assignment.vehicle_id AND vehicle.tenant_id = credential.tenant_id
+         JOIN drivers driver ON driver.id = assignment.driver_id AND driver.tenant_id = credential.tenant_id
+         WHERE credential.tenant_id = $1 AND credential.revoked_at IS NULL
+           AND credential.expires_at > now()
+         ORDER BY credential.created_at DESC LIMIT 100`,
+        [user.tenantId],
+      );
+      const devices: MobileDeviceStatus[] = result.rows.map((row) => ({
+        ...row,
+        health: classifyMobileDeviceHealth(row),
+        oldestQueuedAt: row.oldestQueuedAt?.toISOString() ?? null,
+        lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
+        lastSyncAt: row.lastSyncAt?.toISOString() ?? null,
+        lastLocationAt: row.lastLocationAt?.toISOString() ?? null,
+      }));
+      return { devices, serverTime: new Date().toISOString() };
+    });
+  });
+
   app.get("/enrollments", { preHandler: [requireSession, allow("owner", "admin", "operator")] }, async (request) => {
     const user = request.sessionUser;
     return withTenantTransaction(user.tenantId, user.id, async (client) => {
@@ -157,6 +209,32 @@ export async function mobileRoutes(app: FastifyInstance) {
     principal: request.mobilePrincipal,
   }));
 
+  app.post("/heartbeat", { preHandler: requireMobileCredential }, async (request, reply) => {
+    const parsed = mobileHeartbeatSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_MOBILE_HEARTBEAT" });
+    const principal = request.mobilePrincipal;
+    const heartbeatAt = new Date();
+    await withTenantTransaction(principal.tenantId, principal.actorUserId, async (client) => {
+      await client.query(
+        `UPDATE mobile_access_credentials
+         SET app_version = $3, os_version = $4, battery_percent = $5,
+             low_power_mode = $6, network_type = $7, permission_state = $8,
+             mobile_tracking_state = $9, pending_location_count = $10,
+             oldest_queued_at = $11, last_error_code = $12,
+             last_heartbeat_at = $13
+         WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL`,
+        [
+          principal.tenantId, principal.credentialId, parsed.data.appVersion,
+          parsed.data.osVersion, parsed.data.batteryPercent, parsed.data.lowPowerMode,
+          parsed.data.networkType, parsed.data.permission, parsed.data.trackingState,
+          parsed.data.pendingLocationCount, parsed.data.oldestQueuedAt,
+          parsed.data.lastErrorCode, heartbeatAt,
+        ],
+      );
+    });
+    return reply.code(202).send({ accepted: true, serverTime: heartbeatAt.toISOString() });
+  });
+
   app.post("/shift/start", { preHandler: requireMobileCredential }, async (request, reply) => {
     const principal = request.mobilePrincipal;
     const result = await withTenantTransaction(principal.tenantId, principal.actorUserId, async (client) => {
@@ -265,6 +343,17 @@ export async function mobileRoutes(app: FastifyInstance) {
         if (result === "created") created += 1;
         if (result === "duplicate") duplicate += 1;
       }
+      await client.query(
+        `UPDATE mobile_access_credentials
+         SET last_sync_at = now(), last_location_at = $3,
+             pending_location_count = GREATEST(0, pending_location_count - $4),
+             oldest_queued_at = CASE
+               WHEN pending_location_count - $4 <= 0 THEN NULL
+               ELSE oldest_queued_at
+             END
+         WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL`,
+        [principal.tenantId, principal.credentialId, events.at(-1)!.recordedAt, events.length],
+      );
       return { accepted: events.length, created, duplicate };
     });
     return summary

@@ -7,6 +7,7 @@ import {
   claimMobileEnrollmentSchema,
   createMobileEnrollmentSchema,
   mobileLocationBatchSchema,
+  mobileHeartbeatSchema,
   mobileTrackingStateSchema,
 } from "@filo/contracts";
 import { createMobileSecret, hashMobileSecret, parseMobileToken } from "../src/lib/mobile-token.js";
@@ -42,6 +43,18 @@ describe("native mobile background tracking boundary", () => {
       permission: "denied", state: "tracking",
     }).success, false);
     assert.equal(mobileLocationBatchSchema.safeParse({ events: [] }).success, false);
+    assert.equal(mobileHeartbeatSchema.safeParse({
+      appVersion: "0.93.0", osVersion: "android 36", batteryPercent: 74,
+      lowPowerMode: false, networkType: "cellular", permission: "granted_always",
+      trackingState: "tracking", pendingLocationCount: 2,
+      oldestQueuedAt: "2026-08-12T10:00:00.000Z", lastErrorCode: null,
+    }).success, true);
+    assert.equal(mobileHeartbeatSchema.safeParse({
+      appVersion: "0.93.0", osVersion: "ios 19", batteryPercent: 74,
+      lowPowerMode: false, networkType: "wifi", permission: "granted_always",
+      trackingState: "tracking", pendingLocationCount: 0,
+      oldestQueuedAt: "2026-08-12T10:00:00.000Z", lastErrorCode: null,
+    }).success, false);
     assert.equal(mobileLocationBatchSchema.safeParse({ events: Array.from({ length: 101 }, () => ({
       eventId: "10000000-0000-4000-8000-000000000001",
       recordedAt: "2026-08-12T10:00:00.000Z",
@@ -49,6 +62,20 @@ describe("native mobile background tracking boundary", () => {
       longitude: 29,
       accuracyMeters: 10,
     })) }).success, false);
+  });
+
+  it("persists bounded pilot telemetry behind the existing tenant RLS boundary", async () => {
+    const migration = await readFile(
+      resolve(root, "packages/database/migrations/048_mobile_pilot_telemetry.sql"),
+      "utf8",
+    );
+    assert.match(migration, /last_heartbeat_at timestamptz/u);
+    assert.match(migration, /pending_location_count integer NOT NULL DEFAULT 0/u);
+    assert.match(migration, /mobile_access_queue_consistency/u);
+    const routes = await readFile(resolve(root, "apps/api/src/routes/mobile.ts"), "utf8");
+    assert.match(routes, /WHERE credential\.tenant_id = \$1 AND credential\.revoked_at IS NULL/u);
+    assert.match(routes, /app\.post\("\/heartbeat", \{ preHandler: requireMobileCredential \}/u);
+    assert.match(routes, /last_sync_at = now\(\), last_location_at = \$3/u);
   });
 
   it("keeps enrollment and mobile credentials tenant-isolated, hashed and revocable", async () => {

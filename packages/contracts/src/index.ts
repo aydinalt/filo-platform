@@ -234,10 +234,34 @@ export const mobileTrackingStateSchema = z.object({
   }
 });
 
+export const mobileHeartbeatSchema = z.object({
+  appVersion: z.string().trim().min(1).max(40),
+  osVersion: z.string().trim().min(1).max(80),
+  batteryPercent: z.number().int().min(0).max(100).nullable(),
+  lowPowerMode: z.boolean(),
+  networkType: z.enum(["wifi", "cellular", "none", "unknown", "other"]),
+  permission: z.enum(["granted_always", "denied", "restricted", "unknown"]),
+  trackingState: z.enum(["tracking", "paused", "stopped", "error"]),
+  pendingLocationCount: z.number().int().min(0).max(1000),
+  oldestQueuedAt: z.string().datetime().nullable(),
+  lastErrorCode: z.string().trim().min(1).max(80).nullable(),
+}).superRefine((value, context) => {
+  if (value.pendingLocationCount === 0 && value.oldestQueuedAt !== null) {
+    context.addIssue({ code: "custom", message: "Empty queue cannot have an oldest point", path: ["oldestQueuedAt"] });
+  }
+  if (value.pendingLocationCount > 0 && value.oldestQueuedAt === null) {
+    context.addIssue({ code: "custom", message: "Non-empty queue requires its oldest point", path: ["oldestQueuedAt"] });
+  }
+  if (value.trackingState === "tracking" && value.permission !== "granted_always") {
+    context.addIssue({ code: "custom", message: "Tracking requires always permission", path: ["permission"] });
+  }
+});
+
 export type CreateMobileEnrollmentInput = z.infer<typeof createMobileEnrollmentSchema>;
 export type ClaimMobileEnrollmentInput = z.infer<typeof claimMobileEnrollmentSchema>;
 export type MobileLocationBatchInput = z.infer<typeof mobileLocationBatchSchema>;
 export type MobileTrackingStateInput = z.infer<typeof mobileTrackingStateSchema>;
+export type MobileHeartbeatInput = z.infer<typeof mobileHeartbeatSchema>;
 
 export type MobileEnrollment = {
   id: string;
@@ -261,6 +285,38 @@ export type MobilePrincipal = {
   deviceName: string;
   platform: "android" | "ios";
   expiresAt: string;
+};
+
+export type MobileDeviceHealth =
+  | "healthy"
+  | "idle"
+  | "delayed"
+  | "offline"
+  | "permission_issue"
+  | "tracking_error"
+  | "never_seen";
+
+export type MobileDeviceStatus = {
+  credentialId: string;
+  assignmentId: string;
+  vehiclePlate: string;
+  driverName: string;
+  deviceName: string;
+  platform: "android" | "ios";
+  health: MobileDeviceHealth;
+  appVersion: string | null;
+  osVersion: string | null;
+  batteryPercent: number | null;
+  lowPowerMode: boolean | null;
+  networkType: "wifi" | "cellular" | "none" | "unknown" | "other" | null;
+  permission: "granted_always" | "denied" | "restricted" | "unknown" | null;
+  trackingState: "tracking" | "paused" | "stopped" | "error" | null;
+  pendingLocationCount: number;
+  oldestQueuedAt: string | null;
+  lastErrorCode: string | null;
+  lastHeartbeatAt: string | null;
+  lastSyncAt: string | null;
+  lastLocationAt: string | null;
 };
 
 export type LatestLocation = {
