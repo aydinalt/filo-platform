@@ -15,6 +15,7 @@ import type {
   LatestLocation,
   MaintenancePlan,
   Member,
+  MemberInvitation,
   NotificationItem,
   NotificationRule,
   OperationalAlert,
@@ -45,9 +46,81 @@ import type {
 } from "@filo/contracts";
 import { api } from "./api";
 
+function invitationTokenFromUrl() {
+  return new URLSearchParams(window.location.search).get("invite") ?? "";
+}
+
+function slugifyTenant(value: string) {
+  return value
+    .toLocaleLowerCase("tr-TR")
+    .replaceAll("ı", "i")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ş", "s")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c")
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-|-$/gu, "")
+    .slice(0, 80);
+}
+
+function InviteAcceptance({ token, onLogin }: { token: string; onLogin: (user: SessionUser) => void }) {
+  const [preview, setPreview] = useState<{ tenantName: string; email: string; role: string; expiresAt: string } | null>(null);
+  const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.invitationPreview(token)
+      .then((result) => setPreview(result.invitation))
+      .catch(() => setError("Bu davet bağlantısı geçersiz, iptal edilmiş veya süresi dolmuş."));
+  }, [token]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.acceptInvitation({ token, fullName, password });
+      window.history.replaceState({}, "", window.location.pathname);
+      onLogin(result.user);
+    } catch (caught) {
+      setError(caught instanceof Error && caught.message === "EMAIL_ALREADY_REGISTERED"
+        ? "Bu e-posta adresiyle zaten bir hesap bulunuyor."
+        : "Davet kabul edilemedi. Bağlantı kullanılmış veya süresi dolmuş olabilir.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="login-shell single-auth">
+      <form className="login-card" onSubmit={submit}>
+        <p className="eyebrow">FİLO DAVETİ</p>
+        <h2>{preview ? `${preview.tenantName} ekibine katılın` : "Davet doğrulanıyor"}</h2>
+        {preview && <p className="auth-context">{preview.email} · {preview.role} · {new Date(preview.expiresAt).toLocaleDateString("tr-TR")} tarihine kadar geçerli</p>}
+        <label>Ad soyad<input value={fullName} onChange={(event) => setFullName(event.target.value)} minLength={2} maxLength={120} required disabled={!preview} /></label>
+        <label>Parola<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" minLength={12} maxLength={128} required disabled={!preview} /></label>
+        <small>En az 12 karakter, bir harf ve bir rakam kullanın.</small>
+        {error && <p className="error" role="alert">{error}</p>}
+        <button disabled={busy || !preview}>{busy ? "Hesap hazırlanıyor…" : "Daveti kabul et"}</button>
+        <button type="button" className="auth-link" onClick={() => { window.history.replaceState({}, "", window.location.pathname); window.location.reload(); }}>Giriş ekranına dön</button>
+      </form>
+    </main>
+  );
+}
+
 function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
-  const [email, setEmail] = useState("admin@demo.filo");
-  const [password, setPassword] = useState("FiloDemo123!");
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [tenantName, setTenantName] = useState("");
+  const [tenantSlug, setTenantSlug] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -56,9 +129,28 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
     setBusy(true);
     setError("");
     try {
-      onLogin((await api.login(email, password)).user);
-    } catch {
-      setError("E-posta veya parola hatalı.");
+      if (mode === "login") {
+        onLogin((await api.login(email, password)).user);
+      } else {
+        onLogin((await api.registerTenant({
+          tenantName,
+          tenantSlug,
+          fullName,
+          email,
+          password,
+          termsAccepted: true,
+          privacyAccepted: true,
+        })).user);
+      }
+    } catch (caught) {
+      const code = caught instanceof Error ? caught.message : "";
+      setError(code === "TENANT_SLUG_TAKEN"
+        ? "Bu firma adresi kullanılıyor. Farklı bir adres seçin."
+        : code === "EMAIL_ALREADY_REGISTERED"
+          ? "Bu e-posta adresiyle zaten bir hesap bulunuyor."
+          : mode === "login"
+            ? "E-posta veya parola hatalı."
+            : "Firma hesabı oluşturulamadı. Bilgileri kontrol edin.");
     } finally {
       setBusy(false);
     }
@@ -80,8 +172,17 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
         </div>
       </section>
       <form className="login-card" onSubmit={submit}>
-        <p className="eyebrow">GÜVENLİ GİRİŞ</p>
-        <h2>Hesabınıza giriş yapın</h2>
+        <div className="auth-tabs">
+          <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Giriş</button>
+          <button type="button" className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setError(""); }}>Yeni firma</button>
+        </div>
+        <p className="eyebrow">{mode === "login" ? "GÜVENLİ GİRİŞ" : "FİRMA KURULUMU"}</p>
+        <h2>{mode === "login" ? "Hesabınıza giriş yapın" : "Filonuzu oluşturmaya başlayın"}</h2>
+        {mode === "register" && <>
+          <label>Firma adı<input value={tenantName} onChange={(event) => { setTenantName(event.target.value); setTenantSlug(slugifyTenant(event.target.value)); }} minLength={2} maxLength={120} required /></label>
+          <label>Firma adresi<input value={tenantSlug} onChange={(event) => setTenantSlug(slugifyTenant(event.target.value))} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" minLength={2} maxLength={80} required /><small>İleride firma bağlantılarında kullanılacak: {tenantSlug || "firma-adi"}</small></label>
+          <label>Ad soyad<input value={fullName} onChange={(event) => setFullName(event.target.value)} minLength={2} maxLength={120} required /></label>
+        </>}
         <label>
           E-posta
           <input
@@ -97,18 +198,25 @@ function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             type="password"
+            minLength={mode === "register" ? 12 : 8}
+            maxLength={128}
             required
           />
         </label>
+        {mode === "register" && <>
+          <small>En az 12 karakter, bir harf ve bir rakam kullanın.</small>
+          <label className="check-line"><input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} required /> Kullanım koşullarını kabul ediyorum.</label>
+          <label className="check-line"><input type="checkbox" checked={privacyAccepted} onChange={(event) => setPrivacyAccepted(event.target.checked)} required /> Gizlilik ve KVKK bilgilendirmesini okudum.</label>
+        </>}
         {error && (
           <p className="error" role="alert">
             {error}
           </p>
         )}
-        <button disabled={busy}>
-          {busy ? "Giriş yapılıyor…" : "Giriş yap"}
+        <button disabled={busy || (mode === "register" && (!termsAccepted || !privacyAccepted))}>
+          {busy ? "İşlem yapılıyor…" : mode === "login" ? "Giriş yap" : "Firma hesabını oluştur"}
         </button>
-        <small>Demo bilgileri geliştirme seed’i ile otomatik hazırlanır.</small>
+        <small>{mode === "login" ? "Oturumunuz güvenli ve tenant kapsamlıdır." : "İlk kullanıcı owner yetkisiyle oluşturulur."}</small>
       </form>
     </main>
   );
@@ -348,6 +456,8 @@ function Dashboard({
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [memberInvitations, setMemberInvitations] = useState<MemberInvitation[]>([]);
+  const [invitationLink, setInvitationLink] = useState("");
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
   const [tracking, setTracking] = useState<TrackingStatus[]>([]);
@@ -584,8 +694,14 @@ function Dashboard({
         );
         setNotificationRetention(await api.notificationRetention());
       }
-      if (["owner", "admin"].includes(user.role))
-        setMembers((await api.members()).members);
+      if (["owner", "admin"].includes(user.role)) {
+        const [memberResult, invitationResult] = await Promise.all([
+          api.members(),
+          api.memberInvitations(),
+        ]);
+        setMembers(memberResult.members);
+        setMemberInvitations(invitationResult.invitations);
+      }
     } catch {
       setError(
         "Veriler yüklenemedi. API ve veritabanı bağlantısını kontrol edin.",
@@ -673,6 +789,52 @@ function Dashboard({
       setEvents((await api.auditEvents()).events);
     } catch {
       setError("Araç durumu güncellenemedi.");
+    }
+  }
+
+  async function inviteMember() {
+    const email = window.prompt("Davet edilecek e-posta adresi")?.trim();
+    if (!email) return;
+    const allowedRoles = user.role === "owner" ? ["admin", "operator", "viewer"] : ["operator", "viewer"];
+    const role = window.prompt(`Rol (${allowedRoles.join(" / ")})`, "operator")?.trim().toLowerCase();
+    if (!role || !allowedRoles.includes(role)) {
+      setError("Geçerli bir davet rolü seçin.");
+      return;
+    }
+    try {
+      const result = await api.createMemberInvitation({
+        email,
+        role: role as "admin" | "operator" | "viewer",
+      });
+      const link = `${window.location.origin}${window.location.pathname}?invite=${result.token}`;
+      setInvitationLink(link);
+      await navigator.clipboard?.writeText(link).catch(() => undefined);
+      await refresh();
+    } catch (caught) {
+      const code = caught instanceof Error ? caught.message : "";
+      setError(code === "INVITATION_ALREADY_PENDING"
+        ? "Bu e-posta için zaten bekleyen bir davet var."
+        : code === "EMAIL_ALREADY_REGISTERED"
+          ? "Bu e-posta adresi zaten kayıtlı."
+          : "Davet oluşturulamadı.");
+    }
+  }
+
+  async function revokeInvitation(invitationId: string) {
+    try {
+      await api.revokeMemberInvitation(invitationId);
+      await refresh();
+    } catch {
+      setError("Davet iptal edilemedi.");
+    }
+  }
+
+  async function changeMemberAccess(member: Member) {
+    try {
+      await api.updateMemberAccess(member.userId, member.status !== "active");
+      await refresh();
+    } catch {
+      setError("Kullanıcı erişimi güncellenemedi.");
     }
   }
 
@@ -1476,58 +1638,77 @@ function Dashboard({
           </section>
         )}
         {view === "members" && (
-          <section className="table-card">
-            <div className="section-head">
-              <div>
-                <p className="eyebrow">ROL VE YETKİ</p>
-                <h2>Kullanıcılar</h2>
+          <>
+            <section className="table-card">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">ROL, YETKİ VE ERİŞİM</p>
+                  <h2>Kullanıcılar</h2>
+                </div>
+                <button onClick={() => void inviteMember()}>＋ Kullanıcı davet et</button>
               </div>
-            </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Kullanıcı</th>
-                    <th>E-posta</th>
-                    <th>Rol</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.map((m) => (
-                    <tr key={m.userId}>
-                      <td>
-                        <b>{m.fullName}</b>
-                      </td>
-                      <td>{m.email}</td>
-                      <td>
-                        {user.role === "owner" && m.role !== "owner" ? (
-                          <select
-                            value={m.role}
-                            onChange={async (e) => {
-                              await api.updateMemberRole(
-                                m.userId,
-                                e.target.value as
-                                  | "admin"
-                                  | "operator"
-                                  | "viewer",
-                              );
+              {invitationLink && (
+                <div className="invite-link-banner">
+                  <div><b>Davet bağlantısı hazır</b><small>Bağlantı yalnız bir kez gösterilir ve 7 gün geçerlidir.</small></div>
+                  <input readOnly value={invitationLink} onFocus={(event) => event.currentTarget.select()} />
+                  <button className="secondary" onClick={() => void navigator.clipboard?.writeText(invitationLink)}>Kopyala</button>
+                </div>
+              )}
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Kullanıcı</th><th>E-posta</th><th>Rol</th><th>Durum</th><th>İşlem</th></tr></thead>
+                  <tbody>
+                    {members.map((m) => (
+                      <tr key={m.userId}>
+                        <td><b>{m.fullName}</b></td>
+                        <td>{m.email}</td>
+                        <td>
+                          {user.role === "owner" && m.role !== "owner" ? (
+                            <select value={m.role} disabled={m.status === "disabled"} onChange={async (event) => {
+                              await api.updateMemberRole(m.userId, event.target.value as "admin" | "operator" | "viewer");
                               await refresh();
-                            }}
-                          >
-                            <option value="admin">Admin</option>
-                            <option value="operator">Operatör</option>
-                            <option value="viewer">Görüntüleyici</option>
-                          </select>
-                        ) : (
-                          m.role
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                            }}>
+                              <option value="admin">Admin</option>
+                              <option value="operator">Operatör</option>
+                              <option value="viewer">Görüntüleyici</option>
+                            </select>
+                          ) : m.role}
+                        </td>
+                        <td><span className={`status ${m.status === "disabled" ? "inactive" : ""}`}>{m.status === "active" ? "Aktif" : "Erişim kapalı"}</span></td>
+                        <td>
+                          {user.role === "owner" && m.role !== "owner" && (
+                            <button className="secondary" onClick={() => void changeMemberAccess(m)}>
+                              {m.status === "active" ? "Erişimi kapat" : "Erişimi aç"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="table-card spaced">
+              <div className="section-head"><div><p className="eyebrow">DAVET YAŞAM DÖNGÜSÜ</p><h2>Bekleyen ve geçmiş davetler</h2></div></div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>E-posta</th><th>Rol</th><th>Durum</th><th>Geçerlilik</th><th>İşlem</th></tr></thead>
+                  <tbody>
+                    {memberInvitations.map((invitation) => (
+                      <tr key={invitation.id}>
+                        <td><b>{invitation.email}</b></td>
+                        <td>{invitation.role}</td>
+                        <td>{invitation.status === "pending" ? "Bekliyor" : invitation.status === "accepted" ? "Kabul edildi" : invitation.status === "expired" ? "Süresi doldu" : "İptal edildi"}</td>
+                        <td>{new Date(invitation.expiresAt).toLocaleString("tr-TR")}</td>
+                        <td>{invitation.status === "pending" && <button className="secondary" onClick={() => void revokeInvitation(invitation.id)}>İptal et</button>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {!memberInvitations.length && <div className="empty"><b>Henüz davet yok</b><p>Yeni kullanıcı davetleri burada izlenecek.</p></div>}
+            </section>
+          </>
         )}
         {view === "operations" && (
           <>
@@ -4277,7 +4458,12 @@ export function App() {
       .finally(() => setLoading(false));
   }, []);
   if (loading) return <div className="loader">Filo hazırlanıyor…</div>;
-  if (!user) return <Login onLogin={setUser} />;
+  if (!user) {
+    const invitationToken = invitationTokenFromUrl();
+    return invitationToken
+      ? <InviteAcceptance token={invitationToken} onLogin={setUser} />
+      : <Login onLogin={setUser} />;
+  }
   return (
     <Dashboard
       user={user}

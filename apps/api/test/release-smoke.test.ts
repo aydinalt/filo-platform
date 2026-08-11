@@ -111,6 +111,29 @@ describe("release smoke boundaries", () => {
     assert.deepEqual(response.json(), { error: "AUTH_REQUIRED" });
   });
 
+  it("rejects malformed tenant registration before database work", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/onboarding/register",
+      headers: {
+        origin: process.env.WEB_ORIGIN!,
+        "x-filo-csrf": "1",
+      },
+      payload: { tenantName: "x" },
+    });
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(response.json(), { error: "INVALID_INPUT" });
+  });
+
+  it("rejects malformed invitation links before database work", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/onboarding/invitations/not-a-token",
+    });
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(response.json(), { error: "INVALID_INPUT" });
+  });
+
   it("blocks provider rotation without an authenticated browser context", async () => {
     const response = await app.inject({
       method: "PATCH",

@@ -5,6 +5,35 @@ export const loginSchema = z.object({
   password: z.string().min(8).max(128)
 });
 
+const accountPasswordSchema = z.string().min(12).max(128)
+  .regex(/[A-Za-z]/u, "Password must contain a letter")
+  .regex(/[0-9]/u, "Password must contain a number");
+
+export const registerTenantSchema = z.object({
+  tenantName: z.string().trim().min(2).max(120),
+  tenantSlug: z.string().trim().min(2).max(80)
+    .transform((value) => value.toLowerCase())
+    .pipe(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)),
+  fullName: z.string().trim().min(2).max(120),
+  email: z.string().email().max(254).transform((value) => value.toLowerCase()),
+  password: accountPasswordSchema,
+  termsAccepted: z.literal(true),
+  privacyAccepted: z.literal(true),
+});
+
+export const acceptMemberInvitationSchema = z.object({
+  token: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[A-Za-z0-9_-]{43}$/iu),
+  fullName: z.string().trim().min(2).max(120),
+  password: accountPasswordSchema,
+});
+
+export const createMemberInvitationSchema = z.object({
+  email: z.string().email().max(254).transform((value) => value.toLowerCase()),
+  role: z.enum(["admin", "operator", "viewer"]),
+});
+
+export const updateMemberAccessSchema = z.object({ enabled: z.boolean() });
+
 export const createVehicleSchema = z.object({
   plate: z.string().trim().min(5).max(16).transform((value) => value.toUpperCase()),
   make: z.string().trim().min(1).max(60),
@@ -18,6 +47,9 @@ export const updateVehicleStatusSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+export type RegisterTenantInput = z.infer<typeof registerTenantSchema>;
+export type AcceptMemberInvitationInput = z.infer<typeof acceptMemberInvitationSchema>;
+export type CreateMemberInvitationInput = z.infer<typeof createMemberInvitationSchema>;
 export type CreateVehicleInput = z.infer<typeof createVehicleSchema>;
 export type UpdateVehicleStatusInput = z.infer<typeof updateVehicleStatusSchema>;
 
@@ -77,7 +109,14 @@ export type Device = {
 
 export type Member = {
   userId: string; fullName: string; email: string;
-  role: SessionUser["role"]; createdAt: string;
+  role: SessionUser["role"]; status: "active" | "disabled";
+  disabledAt: string | null; createdAt: string;
+};
+
+export type MemberInvitation = {
+  id: string; email: string; role: "admin" | "operator" | "viewer";
+  status: "pending" | "expired" | "accepted" | "revoked";
+  expiresAt: string; createdAt: string;
 };
 
 export type Vehicle = {

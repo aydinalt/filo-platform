@@ -1,4 +1,4 @@
-# Filo Platform V1 — üretim bildirim çalışma zamanı v0.89
+# Filo Platform V1 — firma onboarding ve hesap erişimi v0.90
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -8,6 +8,11 @@ cihaz–sürücü ataması ve Owner/Admin/Operator/Viewer rol politikasını iç
 
 v0.4 araç–sürücü atama geçmişi, çakışma koruması, vardiya/çalışma oturumları,
 telefon konum izni ve güvenli takip durum makinesini ekler.
+
+v0.90, yeni firmanın owner hesabıyla kendi tenant'ını oluşturmasını, tek kullanımlık
+ve 7 gün süreli kullanıcı davetlerini, davet kabulünde güvenli parola/oturum kurulumunu
+ve owner tarafından kullanıcı erişiminin anında kapatılıp açılmasını ekler. Ham davet
+tokenı veritabanında saklanmaz; erişim kapatıldığında mevcut oturumlar iptal edilir.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.
@@ -135,6 +140,12 @@ Worker servisinde `FILO_EMAIL_PROVIDER_KEY` ile doğrulanmış gönderen adresin
 `EMAIL_FROM` değerlerini tanımlayın. Push adapter tamamlanana kadar kullanıcı push
 tercihleri pilotta kapalı tutulmalıdır. Ayrıntılı sıra `docs/PRODUCTION_RUNBOOK.md`
 dosyasındadır.
+
+Yeni firma kurulumu giriş ekranındaki `Yeni firma` sekmesinden yapılır. İlk hesap owner
+rolünü alır. Kullanıcılar ekranında oluşturulan davet bağlantısı yalnız oluşturma yanıtında
+gösterilir; güvenli bir kanaldan alıcıya iletilmelidir. Davetler iptal edilebilir, kabul
+edildikten sonra yeniden kullanılamaz ve 7 gün sonunda geçersiz olur. Owner erişimi
+kapatılan kullanıcının açık oturumları aynı veritabanı işlemi içinde iptal edilir.
 
 Giriş endpoint'i istemci IP'si başına varsayılan olarak dakikada 5 denemeyle
 sınırlıdır. `AUTH_LOGIN_RATE_LIMIT_MAX` ve `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`

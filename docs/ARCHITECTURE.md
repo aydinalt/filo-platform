@@ -81,3 +81,23 @@ A failed tenant claim does not stop later tenants. Provider health, archive, rec
 overdue reminder and interrupted-run maintenance jobs use stable minute-bucketed keys and
 are attempted independently. The runtime carries no database credential and cannot bypass
 the API's actor, tenant, RLS or audit controls.
+
+## Tenant onboarding and account access
+
+Public tenant registration and invitation acceptance are capability-bound database
+operations. They do not grant the application role general insert or update access to
+tenant, user, membership or session tables. Each operation runs through a narrowly
+granted security-definer function, establishes transaction-local tenant/user context
+before touching forced-RLS tables, and creates the initial session atomically with the
+account change.
+
+Invitation links contain a tenant UUID plus 256 bits of random secret material. The
+database stores only the SHA-256 digest. Preview and acceptance set the tenant context
+from the link before reading the forced-RLS invitation row, then require the digest,
+pending state and expiry to match. Acceptance locks the invitation and marks it used in
+the same transaction that creates the user, membership, audit event and session.
+
+Member deactivation is owner-only, cannot target the owner or acting user, and revokes
+all active sessions for the target tenant in the same transaction. Reactivation restores
+access without manufacturing a session; the user must authenticate again. Invitation
+creation, cancellation, acceptance and access transitions produce tenant audit evidence.

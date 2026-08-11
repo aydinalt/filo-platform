@@ -2,6 +2,7 @@ import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, No
 import type { FleetReport } from "@filo/contracts";
 import type { NotificationAnalytics, NotificationArchiveAttempt, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention, NotificationRetentionSettings } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
+import type { AcceptMemberInvitationInput, CreateMemberInvitationInput, MemberInvitation, RegisterTenantInput } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -24,6 +25,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  registerTenant: (input: RegisterTenantInput) =>
+    request<{ user: SessionUser }>("/api/onboarding/register", {
+      method: "POST", body: JSON.stringify(input)
+    }),
+  invitationPreview: (token: string) =>
+    request<{ invitation: { tenantName: string; email: string; role: "admin" | "operator" | "viewer"; expiresAt: string } }>(`/api/onboarding/invitations/${encodeURIComponent(token)}`),
+  acceptInvitation: (input: AcceptMemberInvitationInput) =>
+    request<{ user: SessionUser }>("/api/onboarding/invitations/accept", {
+      method: "POST", body: JSON.stringify(input)
+    }),
   login: (email: string, password: string) =>
     request<{ user: SessionUser }>("/api/auth/login", {
       method: "POST", body: JSON.stringify({ email, password })
@@ -45,8 +56,15 @@ export const api = {
   ,devices: () => request<{ devices: Device[] }>("/api/devices")
   ,createDevice: (input: CreateDeviceInput) => request<{device:Device}>("/api/devices",{method:"POST",body:JSON.stringify(input)})
   ,members: () => request<{members:Member[]}>("/api/members")
+  ,memberInvitations: () => request<{invitations:MemberInvitation[]}>("/api/members/invitations")
+  ,createMemberInvitation: (input:CreateMemberInvitationInput) =>
+    request<{invitation:MemberInvitation;token:string}>("/api/members/invitations",{method:"POST",body:JSON.stringify(input)})
+  ,revokeMemberInvitation: (invitationId:string) =>
+    request<void>(`/api/members/invitations/${invitationId}/revoke`,{method:"POST"})
   ,updateMemberRole: (userId:string,role:"admin"|"operator"|"viewer") =>
     request<{member:Member}>(`/api/members/${userId}/role`,{method:"PATCH",body:JSON.stringify({role})})
+  ,updateMemberAccess: (userId:string,enabled:boolean) =>
+    request<{member:Member}>(`/api/members/${userId}/access`,{method:"PATCH",body:JSON.stringify({enabled})})
   ,assignments: () => request<{assignments:Assignment[]}>("/api/operations/assignments")
   ,createAssignment: (vehicleId:string,driverId:string,deviceId:string|null) =>
     request<{assignment:Assignment}>("/api/operations/assignments",{method:"POST",body:JSON.stringify({vehicleId,driverId,deviceId})})

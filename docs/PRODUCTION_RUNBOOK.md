@@ -1,6 +1,6 @@
 # Filo Platform V1 — Production Runbook
 
-Bu runbook, v0.89 ile API, web paneli ve sürekli bildirim worker'ını kontrollü pilot
+Bu runbook, v0.90 ile API, web paneli ve sürekli bildirim worker'ını kontrollü pilot
 ortamında açmak için uygulanacak sırayı tanımlar.
 
 ## 1. Zorunlu altyapı
@@ -64,13 +64,32 @@ bulunur. Pilot sırasında desteklenmeyen push kanalını kullanıcı tercihleri
 8. Yanlış API anahtarıyla test ortamında bounded `PROVIDER_REJECTED` veya
    `PROVIDER_CONFIG_MISSING` sonucunun oluştuğunu doğrulayın.
 
-## 5. Pilot açılış kapıları
+## 5. Onboarding ve erişim kontrolü
+
+1. Boş test veritabanında `Yeni firma` akışıyla bir tenant ve owner oluşturun.
+2. Aynı firma adresi ve e-posta ile ikinci kayıt denemelerinin `409` verdiğini doğrulayın.
+3. Owner hesabından operator daveti oluşturun; bağlantının yalnız ilk yanıtta göründüğünü
+   ve veritabanında yalnız token özetinin bulunduğunu doğrulayın.
+4. Daveti ayrı tarayıcı oturumunda kabul edin; ikinci kullanımın ve iptal edilmiş davetin
+   `410` verdiğini doğrulayın.
+5. Operator erişimini kapatın; açık oturumun sonraki API isteğinde reddedildiğini doğrulayın.
+6. Erişimi yeniden açın ve kullanıcının mevcut parolasıyla yeniden giriş yapabildiğini
+   doğrulayın.
+7. `tenant.onboarded`, `member.invitation_created`, `member.invitation_accepted`,
+   `member.access_disabled` ve `member.access_enabled` audit kayıtlarını kontrol edin.
+
+Arayüzdeki `terms-v1` ve `privacy-v1` kabul sürümleri, hukuk/KVKK sahibi tarafından
+onaylanmış ve kullanıcıya erişilebilir gerçek metinlerle eşleştirilmeden dış kullanıcı
+kaydı açılmamalıdır. v0.90 kabul kanıtını saklar; hukuki metnin kendisini üretmez.
+
+## 6. Pilot açılış kapıları
 
 - PostgreSQL PITR özelliği açık ve sağlayıcı ekran görüntüsü/kanıtı kayıtlı.
 - Boş bir veritabanına restore provası tamamlanmış ve süre kaydedilmiş.
 - Worker en az 24 saat kesintisiz çalışmış.
 - Test bildirimi, retry ve provider rate-limit senaryoları kanıtlanmış.
 - Web/API origin, secure cookie ve secret kontrolleri production modunda geçmiş.
+- Firma kaydı, davet kabulü, davet iptali ve oturum iptali saha provası tamamlanmış.
 - KVKK metinleri, telefon sahipliği ve çalışan bilgilendirme akışı onaylanmış.
 - Mobil arka plan konum takibi gerçek cihaz pilotu tamamlanmadan kesintisiz takip
   vaadi verilmemiş.
