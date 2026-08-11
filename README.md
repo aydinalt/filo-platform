@@ -175,6 +175,10 @@ Webhook route parametreleri veritabanı işlemi açılmadan önce doğrulanır. 
 kimliği zorunlu UUID, provider adı kayıt sözleşmesiyle aynı sınırlı slug olmalıdır;
 geçersiz callback parametreleri tenant/RLS katmanına ulaşmadan güvenli biçimde
 reddedilir.
+Webhook zaman damgası ve imza biçimi de tenant veritabanı işlemi açılmadan önce
+denetlenir. Eksik, biçimsiz veya beş dakikalık kabul penceresinin dışındaki imza
+zarfları provider profili sorgulanmadan reddedilir; gerçek HMAC doğrulaması kayıtlı
+provider secret'ıyla işlem içinde tamamlanır.
 
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.

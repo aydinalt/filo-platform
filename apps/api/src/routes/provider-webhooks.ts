@@ -2,7 +2,10 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { providerWebhookParamsSchema, providerWebhookSchema } from "@filo/contracts";
 import { withTenantTransaction } from "@filo/database";
 import { config } from "../config.js";
-import { verifyProviderSignature } from "../lib/provider-signature.js";
+import {
+  isProviderSignatureEnvelopePlausible,
+  verifyProviderSignature,
+} from "../lib/provider-signature.js";
 
 type ProviderWebhookRequest = FastifyRequest & {
   providerRawBody?: string;
@@ -180,6 +183,9 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
 
     const timestamp = request.headers["x-filo-timestamp"] as string | undefined;
     const signature = request.headers["x-filo-signature"] as string | undefined;
+    if (!isProviderSignatureEnvelopePlausible(timestamp, signature)) {
+      return reply.code(401).send({ error: "INVALID_WEBHOOK_SIGNATURE" });
+    }
 
     return withTenantTransaction(tenantId, tenantId, async (client) => {
       const profile = await findProviderProfileForDelivery(

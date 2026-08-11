@@ -2,7 +2,10 @@ import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
-import { verifyProviderSignature } from "../src/lib/provider-signature.js";
+import {
+  isProviderSignatureEnvelopePlausible,
+  verifyProviderSignature,
+} from "../src/lib/provider-signature.js";
 
 process.env.SESSION_SECRET = "provider-test-session-secret-at-least-32-characters";
 
@@ -41,6 +44,45 @@ describe("provider webhook signatures", () => {
       verifyProviderSignature(payload, String(Number(timestamp) - 301), signature, secret, now),
       false,
     );
+  });
+
+  it("rejects malformed signature envelopes before tenant database work", async () => {
+    const now = Date.now();
+    const timestamp = String(Math.floor(now / 1000));
+    assert.equal(isProviderSignatureEnvelopePlausible(timestamp, "a".repeat(64), now), true);
+    assert.equal(isProviderSignatureEnvelopePlausible(timestamp, "sha256=" + "A".repeat(64), now), true);
+    assert.equal(isProviderSignatureEnvelopePlausible(timestamp, "not-hex", now), false);
+    assert.equal(
+      isProviderSignatureEnvelopePlausible(String(Number(timestamp) - 301), "a".repeat(64), now),
+      false,
+    );
+
+    const { providerWebhookRoutes } = await import(
+      "../src/routes/provider-webhooks.js"
+    );
+    const routeApp = Fastify();
+    await routeApp.register(providerWebhookRoutes, { prefix: "/provider-webhooks" });
+    try {
+      const response = await routeApp.inject({
+        method: "POST",
+        url: "/provider-webhooks/10000000-0000-4000-8000-000000000001/resend",
+        headers: {
+          "x-filo-timestamp": timestamp,
+          "x-filo-signature": "not-hex",
+        },
+        payload: {
+          eventId: "evt-1",
+          deliveryId: "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac",
+          event: "bounced",
+          occurredAt: new Date(now).toISOString(),
+          metadata: {},
+        },
+      });
+      assert.equal(response.statusCode, 401);
+      assert.deepEqual(response.json(), { error: "INVALID_WEBHOOK_SIGNATURE" });
+    } finally {
+      await routeApp.close();
+    }
   });
 
   it("preserves the exact JSON body used by the provider signature", async () => {
