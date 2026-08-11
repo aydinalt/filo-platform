@@ -309,6 +309,7 @@ export const updateNotificationProviderHealthSettingsSchema=z.object({failureRat
 export type NotificationProviderHealthSettings=z.infer<typeof updateNotificationProviderHealthSettingsSchema>;
 export type NotificationProviderHealth={settings:NotificationProviderHealthSettings;providers:Array<{id:string;name:string;channel:"email"|"push";provider:string;status:"active"|"inactive";deliveryCount:number;failedCount:number;deliveredCount:number;lastDeliveredAt:string|null;oldestReadyAgeSeconds:number;failureRatePercent:number;health:"healthy"|"warning";issues:string[]}>};
 export const notificationProviderIncidentQuerySchema=z.object({status:z.enum(["open","acknowledged","resolved","all"]).default("all")});
+export const notificationProviderIncidentParamsSchema=z.object({id:z.string().uuid()});
 export const updateNotificationProviderIncidentSchema=z.object({status:z.enum(["acknowledged","resolved"]),resolutionNotes:z.string().trim().min(3).max(1000).nullable().default(null)}).superRefine((value,context)=>{if(value.status==="resolved"&&!value.resolutionNotes)context.addIssue({code:"custom",message:"Resolution notes are required",path:["resolutionNotes"]});});
 export const updateNotificationProviderIncidentScanSettingsSchema=z.object({enabled:z.boolean(),intervalMinutes:z.number().int().min(1).max(1440),recoveryConfirmationScans:z.number().int().min(1).max(12)});
 export const runNotificationProviderIncidentScanSchema=z.object({tenantId:z.string().uuid(),actorUserId:z.string().uuid(),scanKey:z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,119}$/)});

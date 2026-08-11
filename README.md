@@ -267,6 +267,11 @@ bozuk veya metin tabanlı rota kimlikleri sınırlı `400` yanıtıyla reddedili
 listesi RLS korumasına ek olarak açık tenant koşuluyla sorgulanır; yönetim API'si hiçbir
 provider liste okumasını yalnız örtük bağlantı bağlamına bırakmaz.
 
+Provider olay yönetimi de olay kimliğini veritabanına ulaşmadan UUID olarak doğrular.
+Olay listeleri, olay geçmişi, durum güncellemeleri ve ilişkili bildirim kapatma işlemleri
+RLS korumasına ek olarak açık tenant koşulları taşır; bozuk olay kimlikleri sınırlı `400`
+yanıtıyla reddedilir.
+
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.
 Logout yalnız mevcut oturumu sunucu tarafında iptal eder; kopyalanmış çerez yeniden

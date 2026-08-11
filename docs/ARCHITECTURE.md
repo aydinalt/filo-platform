@@ -54,3 +54,9 @@ Provider administration validates profile route identifiers as UUIDs before open
 tenant database transaction. Malformed identifiers therefore remain bounded client errors
 instead of reaching PostgreSQL casts. Provider list reads include an explicit tenant
 predicate in addition to forced RLS, preserving defense in depth for administrative views.
+
+Provider incident administration applies the same boundary to incident route identifiers.
+Incident lists, joined provider profiles, incident-event history, lifecycle updates and
+related notification updates all carry explicit tenant predicates in addition to forced
+RLS, preventing administrative incident operations from depending on implicit connection
+context alone.

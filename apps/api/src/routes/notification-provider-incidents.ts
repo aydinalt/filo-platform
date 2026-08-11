@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
-import { notificationProviderIncidentQuerySchema, updateNotificationProviderIncidentSchema, updateNotificationProviderIncidentScanSettingsSchema } from "@filo/contracts";
+import { notificationProviderIncidentParamsSchema, notificationProviderIncidentQuerySchema, updateNotificationProviderIncidentSchema, updateNotificationProviderIncidentScanSettingsSchema } from "@filo/contracts";
 import { withTenantTransaction } from "@filo/database";
 import { requireSession } from "../lib/auth.js";
 import { allow } from "../lib/permissions.js";
@@ -8,7 +8,7 @@ import { loadIncidentScanStatus, runNotificationProviderIncidentScan } from "../
 
 const guard = { preHandler: [requireSession, allow("owner", "admin", "operator")] };
 const writeGuard = { preHandler: [requireSession, allow("owner", "admin")] };
-const incidentSelect = `SELECT i.id,i.provider_profile_id AS "providerProfileId",p.name AS "providerName",p.channel,p.provider,i.issue_types AS "issueTypes",i.severity,i.status,i.occurrence_count AS "occurrenceCount",i.snapshot,i.opened_at AS "openedAt",i.last_detected_at AS "lastDetectedAt",i.last_checked_at AS "lastCheckedAt",i.healthy_scan_count AS "healthyScanCount",i.recovery_candidate_at AS "recoveryCandidateAt",i.acknowledged_at AS "acknowledgedAt",i.resolved_at AS "resolvedAt",i.resolution_notes AS "resolutionNotes" FROM notification_provider_incidents i JOIN notification_provider_profiles p ON p.id=i.provider_profile_id`;
+const incidentSelect = `SELECT i.id,i.provider_profile_id AS "providerProfileId",p.name AS "providerName",p.channel,p.provider,i.issue_types AS "issueTypes",i.severity,i.status,i.occurrence_count AS "occurrenceCount",i.snapshot,i.opened_at AS "openedAt",i.last_detected_at AS "lastDetectedAt",i.last_checked_at AS "lastCheckedAt",i.healthy_scan_count AS "healthyScanCount",i.recovery_candidate_at AS "recoveryCandidateAt",i.acknowledged_at AS "acknowledgedAt",i.resolved_at AS "resolvedAt",i.resolution_notes AS "resolutionNotes" FROM notification_provider_incidents i JOIN notification_provider_profiles p ON p.id=i.provider_profile_id AND p.tenant_id=i.tenant_id`;
 const shapeIncident = (row: Record<string, any>, events: Record<string, any>[] = []) => ({
   ...row,
   openedAt: row.openedAt.toISOString(),
@@ -26,11 +26,15 @@ export async function notificationProviderIncidentRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_PROVIDER_INCIDENT_QUERY" });
     const user = request.sessionUser;
     return withTenantTransaction(user.tenantId, user.id, async client => {
-      const where = parsed.data.status === "all" ? "" : "WHERE i.status=$1";
-      const values = parsed.data.status === "all" ? [] : [parsed.data.status];
+      const values: unknown[] = [user.tenantId];
+      let where = "WHERE i.tenant_id=$1";
+      if (parsed.data.status !== "all") {
+        values.push(parsed.data.status);
+        where += ` AND i.status=$${values.length}`;
+      }
       const rows = (await client.query(`${incidentSelect} ${where} ORDER BY CASE i.status WHEN 'open' THEN 0 WHEN 'acknowledged' THEN 1 ELSE 2 END,i.last_detected_at DESC LIMIT 250`, values)).rows;
       const ids = rows.map(row => row.id);
-      const events = ids.length ? (await client.query(`SELECT incident_id AS "incidentId",event_type AS "eventType",details,created_at AS "createdAt" FROM notification_provider_incident_events WHERE incident_id=ANY($1::uuid[]) ORDER BY created_at`, [ids])).rows : [];
+      const events = ids.length ? (await client.query(`SELECT incident_id AS "incidentId",event_type AS "eventType",details,created_at AS "createdAt" FROM notification_provider_incident_events WHERE tenant_id=$1 AND incident_id=ANY($2::uuid[]) ORDER BY created_at`, [user.tenantId, ids])).rows : [];
       return { incidents: rows.map(row => shapeIncident(row, events.filter(event => event.incidentId === row.id))), scanStatus: await loadIncidentScanStatus(client) };
     });
   });
@@ -55,15 +59,16 @@ export async function notificationProviderIncidentRoutes(app: FastifyInstance) {
   });
 
   app.patch("/:id", guard, async (request, reply) => {
+    const route = notificationProviderIncidentParamsSchema.safeParse(request.params);
     const parsed = updateNotificationProviderIncidentSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "INVALID_PROVIDER_INCIDENT_UPDATE" });
-    const { id } = request.params as { id: string };
+    if (!route.success || !parsed.success) return reply.code(400).send({ error: "INVALID_PROVIDER_INCIDENT_UPDATE" });
+    const id = route.data.id;
     const user = request.sessionUser, input = parsed.data;
     return withTenantTransaction(user.tenantId, user.id, async client => {
-      const result = await client.query(`UPDATE notification_provider_incidents SET status=$2,acknowledged_at=COALESCE(acknowledged_at,now()),acknowledged_by=COALESCE(acknowledged_by,$3),resolved_at=CASE WHEN $2='resolved' THEN now() ELSE resolved_at END,resolved_by=CASE WHEN $2='resolved' THEN $3 ELSE resolved_by END,resolution_notes=CASE WHEN $2='resolved' THEN $4 ELSE resolution_notes END,updated_at=now() WHERE id=$1 AND status<>$2 AND status<>'resolved' RETURNING id`, [id, input.status, user.id, input.resolutionNotes]);
+      const result = await client.query(`UPDATE notification_provider_incidents SET status=$3,acknowledged_at=COALESCE(acknowledged_at,now()),acknowledged_by=COALESCE(acknowledged_by,$4),resolved_at=CASE WHEN $3='resolved' THEN now() ELSE resolved_at END,resolved_by=CASE WHEN $3='resolved' THEN $4 ELSE resolved_by END,resolution_notes=CASE WHEN $3='resolved' THEN $5 ELSE resolution_notes END,updated_at=now() WHERE tenant_id=$1 AND id=$2 AND status<>$3 AND status<>'resolved' RETURNING id`, [user.tenantId, id, input.status, user.id, input.resolutionNotes]);
       if (!result.rowCount) return reply.code(404).send({ error: "ACTIVE_PROVIDER_INCIDENT_NOT_FOUND" });
       await client.query(`INSERT INTO notification_provider_incident_events(tenant_id,incident_id,event_type,actor_user_id,details) VALUES($1,$2,$3,$4,jsonb_build_object('resolutionNotes',$5::text))`, [user.tenantId, id, input.status, user.id, input.resolutionNotes]);
-      await client.query(`UPDATE in_app_notifications SET read_at=COALESCE(read_at,now()) WHERE source_type='provider_incident' AND source_id=$1 AND ($2='resolved' OR recipient_user_id=$3)`, [id, input.status, user.id]);
+      await client.query(`UPDATE in_app_notifications SET read_at=COALESCE(read_at,now()) WHERE tenant_id=$1 AND source_type='provider_incident' AND source_id=$2 AND ($3='resolved' OR recipient_user_id=$4)`, [user.tenantId, id, input.status, user.id]);
       await client.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'notification_provider_incident.status_changed','notification_provider_incident',$3,jsonb_build_object('status',$4))`, [user.tenantId, user.id, id, input.status]);
       return reply.code(204).send();
     });
