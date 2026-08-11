@@ -89,7 +89,11 @@ describe("provider webhook signatures", () => {
   });
 
   it("serializes callbacks and keeps terminal delivery states monotonic", async () => {
-    const { lockProviderDelivery, nextProviderDeliveryStatus } = await import(
+    const {
+      isProviderEventTimePlausible,
+      lockProviderDelivery,
+      nextProviderDeliveryStatus,
+    } = await import(
       "../src/routes/provider-webhooks.js"
     );
     const deliveryId = "1c65b9a9-405d-46d9-b8b4-a7c544b4fdac";
@@ -97,6 +101,7 @@ describe("provider webhook signatures", () => {
       async (sql, values) => {
         assert.match(sql, /WHERE id = \$1 AND provider_profile_id = \$2/u);
         assert.match(sql, /FOR UPDATE/u);
+        assert.match(sql, /created_at AS "createdAt"/u);
         assert.deepEqual(values, [deliveryId, "provider-profile-1"]);
         return {
           rows: [
@@ -104,6 +109,7 @@ describe("provider webhook signatures", () => {
               status: "complained",
               recipientUserId: "recipient-1",
               channel: "email",
+              createdAt: new Date("2026-08-11T08:00:00.000Z"),
             },
           ],
         };
@@ -118,6 +124,39 @@ describe("provider webhook signatures", () => {
     assert.equal(nextProviderDeliveryStatus("bounced", "complained"), "complained");
     assert.equal(nextProviderDeliveryStatus("complained", "delivered"), "complained");
     assert.equal(nextProviderDeliveryStatus("bounced", "delivered"), "bounced");
+    assert.equal(
+      isProviderEventTimePlausible(
+        "2026-08-11T08:00:00Z",
+        delivery.createdAt,
+        Date.parse("2026-08-11T09:00:00Z"),
+      ),
+      true,
+    );
+  });
+
+  it("rejects provider event times outside the delivery lifecycle", async () => {
+    const { isProviderEventTimePlausible } = await import(
+      "../src/routes/provider-webhooks.js"
+    );
+    const createdAt = "2026-08-11T08:00:00Z";
+    const receivedAt = Date.parse("2026-08-11T09:00:00Z");
+
+    assert.equal(
+      isProviderEventTimePlausible("2026-08-11T07:55:00Z", createdAt, receivedAt),
+      true,
+    );
+    assert.equal(
+      isProviderEventTimePlausible("2026-08-11T07:54:59Z", createdAt, receivedAt),
+      false,
+    );
+    assert.equal(
+      isProviderEventTimePlausible("2026-08-11T09:05:00Z", createdAt, receivedAt),
+      true,
+    );
+    assert.equal(
+      isProviderEventTimePlausible("2026-08-11T09:05:01Z", createdAt, receivedAt),
+      false,
+    );
   });
 
   it("accepts only an identical callback as an idempotent provider event", async () => {

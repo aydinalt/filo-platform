@@ -167,6 +167,10 @@ Aynı provider olay kimliği yalnız teslimat, olay türü, provider mesaj kimli
 olay zamanı da eşleşiyorsa güvenli tekrar kabul edilir. Aynı kimliğin farklı bir
 çekirdek olay için yeniden kullanılması sessizce yutulmaz; veri bütünlüğü
 çatışması olarak reddedilir ve mevcut teslimat kaydı değiştirilmez.
+Provider olay zamanı teslimatın yaşam döngüsüyle sınırlandırılır: teslimatın
+oluşturulmasından önceki veya kabul anının geleceğindeki zamanlara yalnız beş
+dakikalık saat farkı toleransı verilir. Bu pencerenin dışındaki imzalı callback
+teslimat durumunu, teslim zamanını veya analitik kayıtlarını değiştiremez.
 
 Her giriş tenant kapsamlı benzersiz bir aktif oturum kaydı oluşturur. Korumalı
 istekler imzalı belirtecin yanında bu kaydın süresini ve iptal durumunu da doğrular.

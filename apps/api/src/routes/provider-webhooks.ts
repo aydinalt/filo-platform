@@ -19,6 +19,7 @@ type ProviderDelivery = {
   status: string;
   recipientUserId: string;
   channel: string;
+  createdAt: Date | string;
 };
 
 type StoredProviderEvent = {
@@ -64,13 +65,31 @@ export async function lockProviderDelivery(
   const result = await query(
     `SELECT status,
             recipient_user_id AS "recipientUserId",
-            channel
+            channel,
+            created_at AS "createdAt"
      FROM notification_delivery_outbox
      WHERE id = $1 AND provider_profile_id = $2
      FOR UPDATE`,
     [deliveryId, profileId],
   );
   return result.rows[0];
+}
+
+const providerEventClockSkewMs = 5 * 60 * 1000;
+
+export function isProviderEventTimePlausible(
+  occurredAt: Date | string,
+  deliveryCreatedAt: Date | string,
+  receivedAt = Date.now(),
+) {
+  const eventTime = new Date(occurredAt).getTime();
+  const deliveryTime = new Date(deliveryCreatedAt).getTime();
+  return (
+    Number.isFinite(eventTime) &&
+    Number.isFinite(deliveryTime) &&
+    eventTime >= deliveryTime - providerEventClockSkewMs &&
+    eventTime <= receivedAt + providerEventClockSkewMs
+  );
 }
 
 const providerEventStatusRank: Record<ProviderEventType, number> = {
@@ -187,6 +206,9 @@ export async function providerWebhookRoutes(app: FastifyInstance) {
       }
 
       const event = parsed.data;
+      if (!isProviderEventTimePlausible(event.occurredAt, lockedDelivery.createdAt)) {
+        return reply.code(400).send({ error: "INVALID_PROVIDER_EVENT_TIME" });
+      }
       const inserted = await client.query(
         `INSERT INTO notification_provider_events (
            tenant_id, provider_profile_id, provider_event_id, delivery_id,
