@@ -1,13 +1,19 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import {
+  acknowledgeMobileDeviceCommandSchema,
   claimMobileEnrollmentSchema,
+  createMobileDeviceCommandSchema,
   createMobileEnrollmentSchema,
   mobileHeartbeatSchema,
   mobileLocationBatchSchema,
   mobileTrackingStateSchema,
+  updateMobilePilotPolicySchema,
+  type MobileDeviceCommand,
   type MobileDeviceStatus,
   type MobileEnrollment,
+  type MobilePilotPolicy,
   type MobilePrincipal,
 } from "@filo/contracts";
 import { pool, withTenantTransaction } from "@filo/database";
@@ -17,6 +23,10 @@ import { ingestLocationEvent } from "../lib/location-ingestion.js";
 import { requireMobileCredential } from "../lib/mobile-auth.js";
 import { createMobileSecret, hashMobileSecret, parseMobileToken } from "../lib/mobile-token.js";
 import { classifyMobileDeviceHealth } from "../lib/mobile-device-health.js";
+import {
+  DEFAULT_MOBILE_PILOT_POLICY,
+  requiredMobileAction,
+} from "../lib/mobile-pilot-policy.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -38,6 +48,41 @@ type MobileDeviceStatusRow = Omit<
   lastSyncAt: Date | null;
   lastLocationAt: Date | null;
 };
+
+type MobilePilotPolicyRow = {
+  trackingEnabled: boolean;
+  minimumAppVersion: string | null;
+  heartbeatIntervalSeconds: number;
+  updatedAt: Date;
+};
+
+type MobileDeviceCommandRow = Omit<MobileDeviceCommand, "createdAt" | "acknowledgedAt"> & {
+  createdAt: Date;
+  acknowledgedAt: Date | null;
+};
+
+function serializeCommand(row: MobileDeviceCommandRow): MobileDeviceCommand {
+  return {
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    acknowledgedAt: row.acknowledgedAt?.toISOString() ?? null,
+  };
+}
+
+async function readPilotPolicy(client: PoolClient, tenantId: string): Promise<MobilePilotPolicy> {
+  const result = await client.query<MobilePilotPolicyRow>(
+    `SELECT tracking_enabled AS "trackingEnabled",
+            minimum_app_version AS "minimumAppVersion",
+            heartbeat_interval_seconds AS "heartbeatIntervalSeconds",
+            updated_at AS "updatedAt"
+     FROM mobile_pilot_policies WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  const policy = result.rows[0];
+  return policy
+    ? { ...policy, updatedAt: policy.updatedAt.toISOString() }
+    : DEFAULT_MOBILE_PILOT_POLICY;
+}
 
 function serializeEnrollment(row: EnrollmentRow): MobileEnrollment {
   return {
@@ -66,7 +111,9 @@ export async function mobileRoutes(app: FastifyInstance) {
                 credential.last_error_code AS "lastErrorCode",
                 credential.last_heartbeat_at AS "lastHeartbeatAt",
                 credential.last_sync_at AS "lastSyncAt",
-                credential.last_location_at AS "lastLocationAt"
+                credential.last_location_at AS "lastLocationAt",
+                credential.pilot_tracking_allowed AS "pilotTrackingAllowed",
+                credential.pilot_control_reason AS "pilotControlReason"
          FROM mobile_access_credentials credential
          JOIN vehicle_driver_assignments assignment ON assignment.id = credential.assignment_id
            AND assignment.tenant_id = credential.tenant_id AND assignment.ended_at IS NULL
@@ -87,6 +134,125 @@ export async function mobileRoutes(app: FastifyInstance) {
       }));
       return { devices, serverTime: new Date().toISOString() };
     });
+  });
+
+  app.get("/pilot-policy", { preHandler: [requireSession, allow("owner", "admin", "operator")] }, async (request) => {
+    const user = request.sessionUser;
+    return withTenantTransaction(user.tenantId, user.id, async (client) => ({
+      policy: await readPilotPolicy(client, user.tenantId),
+    }));
+  });
+
+  app.patch("/pilot-policy", { preHandler: [requireSession, allow("owner", "admin")] }, async (request, reply) => {
+    const parsed = updateMobilePilotPolicySchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_MOBILE_PILOT_POLICY" });
+    const user = request.sessionUser;
+    const policy = await withTenantTransaction(user.tenantId, user.id, async (client) => {
+      await client.query(
+        `INSERT INTO mobile_pilot_policies(
+           tenant_id, tracking_enabled, minimum_app_version,
+           heartbeat_interval_seconds, updated_by
+         ) VALUES($1,$2,$3,$4,$5)
+         ON CONFLICT (tenant_id) DO UPDATE SET
+           tracking_enabled = EXCLUDED.tracking_enabled,
+           minimum_app_version = EXCLUDED.minimum_app_version,
+           heartbeat_interval_seconds = EXCLUDED.heartbeat_interval_seconds,
+           updated_by = EXCLUDED.updated_by, updated_at = now()`,
+        [
+          user.tenantId, parsed.data.trackingEnabled, parsed.data.minimumAppVersion,
+          parsed.data.heartbeatIntervalSeconds, user.id,
+        ],
+      );
+      await client.query(
+        `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+         VALUES($1,$2,'mobile.pilot_policy_updated','mobile_pilot_policy',$1,
+                jsonb_build_object('trackingEnabled',$3,'minimumAppVersion',$4,
+                                   'heartbeatIntervalSeconds',$5))`,
+        [
+          user.tenantId, user.id, parsed.data.trackingEnabled,
+          parsed.data.minimumAppVersion, parsed.data.heartbeatIntervalSeconds,
+        ],
+      );
+      return readPilotPolicy(client, user.tenantId);
+    });
+    return { policy };
+  });
+
+  app.get("/commands", { preHandler: [requireSession, allow("owner", "admin", "operator")] }, async (request) => {
+    const user = request.sessionUser;
+    return withTenantTransaction(user.tenantId, user.id, async (client) => {
+      const result = await client.query<MobileDeviceCommandRow>(
+        `SELECT command.id, command.credential_id AS "credentialId",
+                command.command_type AS type, command.status, command.reason,
+                command.result_code AS "resultCode", command.created_at AS "createdAt",
+                command.acknowledged_at AS "acknowledgedAt"
+         FROM mobile_device_commands command
+         WHERE command.tenant_id = $1
+         ORDER BY command.created_at DESC LIMIT 100`,
+        [user.tenantId],
+      );
+      return { commands: result.rows.map(serializeCommand) };
+    });
+  });
+
+  app.post("/devices/:id/commands", { preHandler: [requireSession, allow("owner", "admin", "operator")] }, async (request, reply) => {
+    const credentialId = (request.params as { id?: string }).id ?? "";
+    const parsed = createMobileDeviceCommandSchema.safeParse(request.body);
+    if (!UUID_PATTERN.test(credentialId) || !parsed.success) {
+      return reply.code(400).send({ error: "INVALID_MOBILE_DEVICE_COMMAND" });
+    }
+    const user = request.sessionUser;
+    const command = await withTenantTransaction(user.tenantId, user.id, async (client) => {
+      if (parsed.data.type === "pause_tracking" || parsed.data.type === "resume_tracking") {
+        await client.query(
+          `UPDATE mobile_device_commands
+           SET status = 'cancelled', result_code = 'SUPERSEDED', acknowledged_at = now()
+           WHERE tenant_id = $1 AND credential_id = $2 AND status = 'pending'
+             AND command_type IN ('pause_tracking', 'resume_tracking')
+             AND command_type <> $3`,
+          [user.tenantId, credentialId, parsed.data.type],
+        );
+      }
+      const result = await client.query<MobileDeviceCommandRow>(
+        `INSERT INTO mobile_device_commands(
+           tenant_id, credential_id, command_type, reason, created_by
+         )
+         SELECT $1, credential.id, $3, $4, $5
+         FROM mobile_access_credentials credential
+         WHERE credential.id = $2 AND credential.tenant_id = $1
+           AND credential.revoked_at IS NULL AND credential.expires_at > now()
+         ON CONFLICT (tenant_id, credential_id, command_type) WHERE status = 'pending'
+         DO NOTHING
+         RETURNING id, credential_id AS "credentialId", command_type AS type,
+                   status, reason, result_code AS "resultCode", created_at AS "createdAt",
+                   acknowledged_at AS "acknowledgedAt"`,
+        [user.tenantId, credentialId, parsed.data.type, parsed.data.reason, user.id],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      if (parsed.data.type === "pause_tracking" || parsed.data.type === "resume_tracking") {
+        await client.query(
+          `UPDATE mobile_access_credentials
+           SET pilot_tracking_allowed = $3, pilot_control_reason = $4,
+               pilot_control_updated_at = now()
+           WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL`,
+          [
+            user.tenantId, credentialId, parsed.data.type === "resume_tracking",
+            parsed.data.type === "pause_tracking" ? parsed.data.reason : null,
+          ],
+        );
+      }
+      await client.query(
+        `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+         VALUES($1,$2,'mobile.device_command_created','mobile_device_command',$3,
+                jsonb_build_object('credentialId',$4,'type',$5,'reason',$6))`,
+        [user.tenantId, user.id, row.id, credentialId, parsed.data.type, parsed.data.reason],
+      );
+      return serializeCommand(row);
+    });
+    return command
+      ? reply.code(201).send({ command })
+      : reply.code(409).send({ error: "DEVICE_NOT_FOUND_OR_COMMAND_PENDING" });
   });
 
   app.get("/enrollments", { preHandler: [requireSession, allow("owner", "admin", "operator")] }, async (request) => {
@@ -209,6 +375,71 @@ export async function mobileRoutes(app: FastifyInstance) {
     principal: request.mobilePrincipal,
   }));
 
+  app.get("/config", { preHandler: requireMobileCredential }, async (request) => {
+    const principal = request.mobilePrincipal;
+    return withTenantTransaction(principal.tenantId, principal.actorUserId, async (client) => {
+      const [policy, credential, commands] = await Promise.all([
+        readPilotPolicy(client, principal.tenantId),
+        client.query<{ appVersion: string | null; pilotTrackingAllowed: boolean }>(
+          `SELECT app_version AS "appVersion",
+                  pilot_tracking_allowed AS "pilotTrackingAllowed"
+           FROM mobile_access_credentials
+           WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL`,
+          [principal.tenantId, principal.credentialId],
+        ),
+        client.query<MobileDeviceCommandRow>(
+          `SELECT id, credential_id AS "credentialId", command_type AS type,
+                  status, reason, result_code AS "resultCode", created_at AS "createdAt",
+                  acknowledged_at AS "acknowledgedAt"
+           FROM mobile_device_commands
+           WHERE tenant_id = $1 AND credential_id = $2 AND status = 'pending'
+           ORDER BY created_at ASC LIMIT 10`,
+          [principal.tenantId, principal.credentialId],
+        ),
+      ]);
+      return {
+        policy,
+        requiredAction: credential.rows[0]?.pilotTrackingAllowed === false
+          ? "pause"
+          : requiredMobileAction(policy, credential.rows[0]?.appVersion ?? null),
+        commands: commands.rows.map(serializeCommand),
+      };
+    });
+  });
+
+  app.post("/commands/:id/ack", { preHandler: requireMobileCredential }, async (request, reply) => {
+    const id = (request.params as { id?: string }).id ?? "";
+    const parsed = acknowledgeMobileDeviceCommandSchema.safeParse(request.body);
+    if (!UUID_PATTERN.test(id) || !parsed.success) {
+      return reply.code(400).send({ error: "INVALID_MOBILE_COMMAND_ACK" });
+    }
+    const principal = request.mobilePrincipal;
+    const acknowledged = await withTenantTransaction(principal.tenantId, principal.actorUserId, async (client) => {
+      const result = await client.query<{ commandType: string }>(
+        `UPDATE mobile_device_commands
+         SET status = $4, result_code = $5, acknowledged_at = now()
+         WHERE id = $1 AND tenant_id = $2 AND credential_id = $3 AND status = 'pending'
+         RETURNING command_type AS "commandType"`,
+        [id, principal.tenantId, principal.credentialId, parsed.data.status, parsed.data.resultCode ?? null],
+      );
+      const command = result.rows[0];
+      if (!command) return false;
+      await client.query(
+        `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+         VALUES($1,$2,'mobile.device_command_acknowledged','mobile_device_command',$3,
+                jsonb_build_object('credentialId',$4,'type',$5,'status',$6,'resultCode',$7))`,
+        [
+          principal.tenantId, principal.actorUserId, id, principal.credentialId,
+          command.commandType, parsed.data.status, parsed.data.resultCode ?? null,
+        ],
+      );
+      return true;
+    });
+    return acknowledged
+      ? reply.code(204).send()
+      : reply.code(404).send({ error: "PENDING_MOBILE_COMMAND_NOT_FOUND" });
+  });
+
   app.post("/heartbeat", { preHandler: requireMobileCredential }, async (request, reply) => {
     const parsed = mobileHeartbeatSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_MOBILE_HEARTBEAT" });
@@ -238,12 +469,23 @@ export async function mobileRoutes(app: FastifyInstance) {
   app.post("/shift/start", { preHandler: requireMobileCredential }, async (request, reply) => {
     const principal = request.mobilePrincipal;
     const result = await withTenantTransaction(principal.tenantId, principal.actorUserId, async (client) => {
+      const policy = await readPilotPolicy(client, principal.tenantId);
+      const credential = await client.query<{ appVersion: string | null; pilotTrackingAllowed: boolean }>(
+        `SELECT app_version AS "appVersion", pilot_tracking_allowed AS "pilotTrackingAllowed"
+         FROM mobile_access_credentials
+         WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL`,
+        [principal.tenantId, principal.credentialId],
+      );
+      const requiredAction = credential.rows[0]?.pilotTrackingAllowed === false
+        ? "pause"
+        : requiredMobileAction(policy, credential.rows[0]?.appVersion ?? null);
+      if (requiredAction !== "none") return { id: "", existing: false, blocked: requiredAction };
       const existing = await client.query<{ id: string }>(
         `SELECT id FROM work_shifts
          WHERE tenant_id = $1 AND assignment_id = $2 AND status = 'active'`,
         [principal.tenantId, principal.assignmentId],
       );
-      if (existing.rows[0]) return { id: existing.rows[0].id, existing: true };
+      if (existing.rows[0]) return { id: existing.rows[0].id, existing: true, blocked: null };
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO work_shifts(tenant_id,assignment_id,started_by)
          VALUES($1,$2,$3) RETURNING id`,
@@ -254,8 +496,11 @@ export async function mobileRoutes(app: FastifyInstance) {
          VALUES($1,$2,'mobile.shift_started','shift',$3,jsonb_build_object('credentialId',$4))`,
         [principal.tenantId, principal.actorUserId, inserted.rows[0]!.id, principal.credentialId],
       );
-      return { id: inserted.rows[0]!.id, existing: false };
+      return { id: inserted.rows[0]!.id, existing: false, blocked: null };
     });
+    if (result.blocked) {
+      return reply.code(423).send({ error: result.blocked === "upgrade" ? "MOBILE_UPGRADE_REQUIRED" : "MOBILE_TRACKING_PAUSED" });
+    }
     return reply.code(result.existing ? 200 : 201).send({ shift: result });
   });
 
@@ -332,6 +577,17 @@ export async function mobileRoutes(app: FastifyInstance) {
     const principal = request.mobilePrincipal;
     const events = [...parsed.data.events].sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
     const summary = await withTenantTransaction(principal.tenantId, principal.actorUserId, async (client) => {
+      const policy = await readPilotPolicy(client, principal.tenantId);
+      const credential = await client.query<{ appVersion: string | null; pilotTrackingAllowed: boolean }>(
+        `SELECT app_version AS "appVersion", pilot_tracking_allowed AS "pilotTrackingAllowed"
+         FROM mobile_access_credentials
+         WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL`,
+        [principal.tenantId, principal.credentialId],
+      );
+      const requiredAction = credential.rows[0]?.pilotTrackingAllowed === false
+        ? "pause"
+        : requiredMobileAction(policy, credential.rows[0]?.appVersion ?? null);
+      if (requiredAction !== "none") return { blocked: requiredAction } as const;
       let created = 0;
       let duplicate = 0;
       for (const event of events) {
@@ -354,8 +610,11 @@ export async function mobileRoutes(app: FastifyInstance) {
          WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL`,
         [principal.tenantId, principal.credentialId, events.at(-1)!.recordedAt, events.length],
       );
-      return { accepted: events.length, created, duplicate };
+      return { accepted: events.length, created, duplicate, blocked: null };
     });
+    if (summary?.blocked) {
+      return reply.code(423).send({ error: summary.blocked === "upgrade" ? "MOBILE_UPGRADE_REQUIRED" : "MOBILE_TRACKING_PAUSED" });
+    }
     return summary
       ? reply.code(summary.created > 0 ? 201 : 200).send(summary)
       : reply.code(409).send({ error: "TRACKING_NOT_ACTIVE" });

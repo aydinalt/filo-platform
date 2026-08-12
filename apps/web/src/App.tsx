@@ -17,8 +17,10 @@ import type {
   MaintenancePlan,
   Member,
   MemberInvitation,
+  MobileDeviceCommand,
   MobileDeviceStatus,
   MobileEnrollment,
+  MobilePilotPolicy,
   NotificationItem,
   NotificationRule,
   OperationalAlert,
@@ -720,6 +722,14 @@ function Dashboard({
   const [mobileMessage, setMobileMessage] = useState("Takip kapalı");
   const [mobileEnrollments, setMobileEnrollments] = useState<MobileEnrollment[]>([]);
   const [mobileDeviceStatuses, setMobileDeviceStatuses] = useState<MobileDeviceStatus[]>([]);
+  const [mobileDeviceCommands, setMobileDeviceCommands] = useState<MobileDeviceCommand[]>([]);
+  const [mobilePilotPolicy, setMobilePilotPolicy] = useState<MobilePilotPolicy>({
+    trackingEnabled: true,
+    minimumAppVersion: null,
+    heartbeatIntervalSeconds: 60,
+    updatedAt: null,
+  });
+  const [minimumMobileVersion, setMinimumMobileVersion] = useState("");
   const [mobileEnrollmentToken, setMobileEnrollmentToken] = useState("");
   const watchId = useRef<number | null>(null);
 
@@ -834,6 +844,10 @@ function Dashboard({
       if (user.role !== "viewer") {
         setMobileEnrollments((await api.mobileEnrollments()).enrollments);
         setMobileDeviceStatuses((await api.mobileDeviceStatuses()).devices);
+        const policyResult = await api.mobilePilotPolicy();
+        setMobilePilotPolicy(policyResult.policy);
+        setMinimumMobileVersion(policyResult.policy.minimumAppVersion ?? "");
+        setMobileDeviceCommands((await api.mobileDeviceCommands()).commands);
         setNotificationAnalytics((await api.notificationAnalytics()).analytics);
         setNotificationProviderHealth(await api.notificationProviderHealth());
         const providerIncidentResult =
@@ -954,6 +968,41 @@ function Dashboard({
     setMobileEnrollments((await api.mobileEnrollments()).enrollments);
     setMobileEnrollmentToken("");
     setMobileMessage("Mobil kayıt ve bağlı erişim iptal edildi.");
+  }
+
+  async function saveMobilePilotPolicy(trackingEnabled = mobilePilotPolicy.trackingEnabled) {
+    try {
+      const result = await api.updateMobilePilotPolicy({
+        trackingEnabled,
+        minimumAppVersion: minimumMobileVersion.trim() || null,
+        heartbeatIntervalSeconds: mobilePilotPolicy.heartbeatIntervalSeconds,
+      });
+      setMobilePilotPolicy(result.policy);
+      setMobileMessage(trackingEnabled
+        ? "Mobil pilot politikası güncellendi."
+        : "Acil durdurma aktif; cihazlar bir sonraki kontrolde takibi kapatacak.");
+      setEvents((await api.auditEvents()).events);
+    } catch {
+      setMobileMessage("Pilot politikası güncellenemedi. Sürüm biçimi 0.94.0 gibi olmalıdır.");
+    }
+  }
+
+  async function sendMobileDeviceCommand(
+    credentialId: string,
+    type: "pause_tracking" | "resume_tracking" | "sync_now",
+  ) {
+    const reason = window.prompt(
+      type === "pause_tracking" ? "Takibi durdurma nedeni" : type === "resume_tracking" ? "Takibi yeniden açma nedeni" : "Eşitleme isteği nedeni",
+      type === "pause_tracking" ? "Pilot güvenlik müdahalesi" : type === "resume_tracking" ? "Pilot kontrolü tamamlandı" : "Pilot veri kontrolü",
+    )?.trim();
+    if (!reason) return;
+    try {
+      await api.createMobileDeviceCommand(credentialId, { type, reason });
+      setMobileDeviceCommands((await api.mobileDeviceCommands()).commands);
+      setMobileMessage("Cihaz komutu kuyruğa alındı; sonraki heartbeat sırasında uygulanacak.");
+    } catch {
+      setMobileMessage("Cihaz bulunamadı veya aynı türde bekleyen bir komut zaten var.");
+    }
   }
 
   async function changeStatus(vehicle: Vehicle, status: Vehicle["status"]) {
@@ -2100,6 +2149,76 @@ function Dashboard({
             <section className="table-card mobile-tracking">
               <div className="section-head">
                 <div>
+                  <p className="eyebrow">UZAKTAN PİLOT GÜVENLİĞİ</p>
+                  <h2>Firma mobil takip politikası</h2>
+                </div>
+                <span className="status">{mobilePilotPolicy.trackingEnabled ? "Takip açık" : "Acil durdurma aktif"}</span>
+              </div>
+              <p>
+                Acil durdurma tüm cihazların bir sonraki heartbeat’te takibi kapatmasını sağlar.
+                Minimum sürümün altındaki uygulamalar yeni vardiya veya konum gönderimi başlatamaz.
+              </p>
+              <div className="form-grid">
+                <label>
+                  Minimum mobil sürüm
+                  <input
+                    value={minimumMobileVersion}
+                    onChange={(event) => setMinimumMobileVersion(event.target.value)}
+                    placeholder="0.94.0"
+                    pattern="[0-9]+\.[0-9]+\.[0-9]+"
+                    disabled={!['owner', 'admin'].includes(user.role)}
+                  />
+                </label>
+                <label>
+                  Heartbeat aralığı
+                  <select
+                    value={mobilePilotPolicy.heartbeatIntervalSeconds}
+                    onChange={(event) => setMobilePilotPolicy((current) => ({
+                      ...current,
+                      heartbeatIntervalSeconds: Number(event.target.value),
+                    }))}
+                    disabled={!['owner', 'admin'].includes(user.role)}
+                  >
+                    <option value={30}>30 saniye</option>
+                    <option value={60}>60 saniye</option>
+                    <option value={120}>2 dakika</option>
+                    <option value={300}>5 dakika</option>
+                  </select>
+                </label>
+              </div>
+              {['owner', 'admin'].includes(user.role) && <div className="modal-actions">
+                <button onClick={() => void saveMobilePilotPolicy()}>Politikayı kaydet</button>
+                {mobilePilotPolicy.trackingEnabled
+                  ? <button className="danger" onClick={() => void saveMobilePilotPolicy(false)}>Tüm mobil takibi acil durdur</button>
+                  : <button className="secondary" onClick={() => void saveMobilePilotPolicy(true)}>Mobil takibi yeniden aç</button>}
+              </div>}
+            </section>
+
+            <section className="table-card mobile-tracking">
+              <div className="section-head"><div><p className="eyebrow">KOMUT KANITI</p><h2>Son uzaktan cihaz komutları</h2></div></div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Cihaz</th><th>Komut</th><th>Neden</th><th>Durum</th><th>Zaman</th></tr></thead>
+                  <tbody>
+                    {mobileDeviceCommands.length === 0 && <tr><td colSpan={5}>Henüz uzaktan komut gönderilmedi.</td></tr>}
+                    {mobileDeviceCommands.slice(0, 20).map((command) => {
+                      const device = mobileDeviceStatuses.find((item) => item.credentialId === command.credentialId);
+                      return <tr key={command.id}>
+                        <td>{device?.vehiclePlate ?? command.credentialId}<small>{device?.deviceName ?? "Kayıtlı cihaz"}</small></td>
+                        <td>{command.type === "pause_tracking" ? "Takibi durdur" : command.type === "resume_tracking" ? "Takibi yeniden aç" : "Şimdi eşitle"}</td>
+                        <td>{command.reason}</td>
+                        <td><span className="status">{command.status}</span>{command.resultCode && <small>{command.resultCode}</small>}</td>
+                        <td>{new Date(command.createdAt).toLocaleString("tr-TR")}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="table-card mobile-tracking">
+              <div className="section-head">
+                <div>
                   <p className="eyebrow">MOBİL PİLOT GÖZLEMİ</p>
                   <h2>Saha cihaz sağlığı</h2>
                 </div>
@@ -2116,9 +2235,9 @@ function Dashboard({
               </div>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Araç / sürücü</th><th>Cihaz</th><th>Sağlık</th><th>Bağlantı / pil</th><th>Kuyruk</th><th>Son sinyal</th></tr></thead>
+                  <thead><tr><th>Araç / sürücü</th><th>Cihaz</th><th>Sağlık</th><th>Bağlantı / pil</th><th>Kuyruk</th><th>Son sinyal</th><th>Komut</th></tr></thead>
                   <tbody>
-                    {mobileDeviceStatuses.length === 0 && <tr><td colSpan={6}>Aktif kayıtlı saha cihazı bulunmuyor.</td></tr>}
+                    {mobileDeviceStatuses.length === 0 && <tr><td colSpan={7}>Aktif kayıtlı saha cihazı bulunmuyor.</td></tr>}
                     {mobileDeviceStatuses.map((device) => <tr key={device.credentialId}>
                       <td>{device.vehiclePlate}<small>{device.driverName}</small></td>
                       <td>{device.deviceName}<small>{device.platform} · {device.appVersion ?? "sürüm bekleniyor"}</small></td>
@@ -2126,6 +2245,12 @@ function Dashboard({
                       <td>{device.networkType ?? "—"} · {device.batteryPercent === null ? "—" : `%${device.batteryPercent}`}{device.lowPowerMode && <small>Düşük güç modu</small>}</td>
                       <td>{device.pendingLocationCount}<small>{device.oldestQueuedAt ? `En eski: ${new Date(device.oldestQueuedAt).toLocaleTimeString("tr-TR")}` : "Bekleyen yok"}</small></td>
                       <td>{device.lastHeartbeatAt ? new Date(device.lastHeartbeatAt).toLocaleString("tr-TR") : "Henüz yok"}<small>{device.lastLocationAt ? `Konum: ${new Date(device.lastLocationAt).toLocaleTimeString("tr-TR")}` : "Konum bekleniyor"}</small></td>
+                      <td><div className="table-actions">
+                        <button className="secondary" onClick={() => void sendMobileDeviceCommand(device.credentialId, "sync_now")}>Eşitle</button>
+                        {device.pilotTrackingAllowed
+                          ? <button className="danger" onClick={() => void sendMobileDeviceCommand(device.credentialId, "pause_tracking")}>Durdur</button>
+                          : <button onClick={() => void sendMobileDeviceCommand(device.credentialId, "resume_tracking")}>Yeniden aç</button>}
+                      </div><small>{device.pilotControlReason ?? `${mobileDeviceCommands.filter((command) => command.credentialId === device.credentialId && command.status === "pending").length} bekleyen`}</small></td>
                     </tr>)}
                   </tbody>
                 </table>

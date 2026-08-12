@@ -257,11 +257,30 @@ export const mobileHeartbeatSchema = z.object({
   }
 });
 
+export const updateMobilePilotPolicySchema = z.object({
+  trackingEnabled: z.boolean(),
+  minimumAppVersion: z.string().trim().regex(/^\d+\.\d+\.\d+$/u).nullable(),
+  heartbeatIntervalSeconds: z.number().int().min(30).max(300),
+});
+
+export const createMobileDeviceCommandSchema = z.object({
+  type: z.enum(["pause_tracking", "resume_tracking", "sync_now"]),
+  reason: z.string().trim().min(3).max(240),
+});
+
+export const acknowledgeMobileDeviceCommandSchema = z.object({
+  status: z.enum(["acknowledged", "failed"]),
+  resultCode: z.string().trim().min(1).max(80).nullable().optional(),
+});
+
 export type CreateMobileEnrollmentInput = z.infer<typeof createMobileEnrollmentSchema>;
 export type ClaimMobileEnrollmentInput = z.infer<typeof claimMobileEnrollmentSchema>;
 export type MobileLocationBatchInput = z.infer<typeof mobileLocationBatchSchema>;
 export type MobileTrackingStateInput = z.infer<typeof mobileTrackingStateSchema>;
 export type MobileHeartbeatInput = z.infer<typeof mobileHeartbeatSchema>;
+export type UpdateMobilePilotPolicyInput = z.infer<typeof updateMobilePilotPolicySchema>;
+export type CreateMobileDeviceCommandInput = z.infer<typeof createMobileDeviceCommandSchema>;
+export type AcknowledgeMobileDeviceCommandInput = z.infer<typeof acknowledgeMobileDeviceCommandSchema>;
 
 export type MobileEnrollment = {
   id: string;
@@ -317,6 +336,32 @@ export type MobileDeviceStatus = {
   lastHeartbeatAt: string | null;
   lastSyncAt: string | null;
   lastLocationAt: string | null;
+  pilotTrackingAllowed: boolean;
+  pilotControlReason: string | null;
+};
+
+export type MobilePilotPolicy = {
+  trackingEnabled: boolean;
+  minimumAppVersion: string | null;
+  heartbeatIntervalSeconds: number;
+  updatedAt: string | null;
+};
+
+export type MobileDeviceCommand = {
+  id: string;
+  credentialId: string;
+  type: "pause_tracking" | "resume_tracking" | "sync_now";
+  status: "pending" | "acknowledged" | "failed" | "cancelled";
+  reason: string;
+  resultCode: string | null;
+  createdAt: string;
+  acknowledgedAt: string | null;
+};
+
+export type MobilePilotConfiguration = {
+  policy: MobilePilotPolicy;
+  requiredAction: "none" | "pause" | "upgrade";
+  commands: MobileDeviceCommand[];
 };
 
 export type LatestLocation = {

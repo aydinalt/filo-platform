@@ -157,3 +157,20 @@ last sync and last location time. The mobile runtime sends periodic and event-dr
 heartbeats and retries its idempotent queue when connectivity returns. Queue writes are
 serialized locally, and successful sync removes only acknowledged event identities so a
 location collected during an in-flight request cannot be overwritten by an older snapshot.
+
+## Mobile pilot remote safety controls
+
+Tenant mobile policy and device commands are separate forced-RLS records. Owners and admins
+can stop tracking tenant-wide, require an exact three-part minimum application version and
+bound the heartbeat interval. Operators can send a device-specific pause or queue-sync
+command; a later resume command clears the persistent device pilot lock. Opposing pending
+pause/resume commands are cancelled atomically so a device never receives contradictory
+control intent.
+
+The mobile runtime fetches policy and pending commands with its assignment-bound credential,
+stops the operating-system background task before acknowledging a pause, and returns only a
+bounded result code. A command remains visible as pending until the device acknowledges it.
+Server-side shift start and location ingestion independently recheck the tenant policy,
+minimum version and persistent device pilot lock. The mobile client therefore cannot bypass
+an emergency stop by ignoring its local instruction. Every policy, command and acknowledgement
+transition creates tenant-scoped audit evidence.

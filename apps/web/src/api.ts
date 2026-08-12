@@ -2,7 +2,7 @@ import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, No
 import type { FleetReport } from "@filo/contracts";
 import type { NotificationAnalytics, NotificationArchiveAttempt, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention, NotificationRetentionSettings } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
-import type { AcceptMemberInvitationInput, AccountSession, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileEnrollmentInput, MemberInvitation, MobileDeviceStatus, MobileEnrollment, RegisterTenantInput, RequestPasswordResetInput } from "@filo/contracts";
+import type { AcceptMemberInvitationInput, AccountSession, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileDeviceCommandInput, CreateMobileEnrollmentInput, MemberInvitation, MobileDeviceCommand, MobileDeviceStatus, MobileEnrollment, MobilePilotPolicy, RegisterTenantInput, RequestPasswordResetInput, UpdateMobilePilotPolicyInput } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -29,6 +29,18 @@ export const api = {
     request<{ enrollments: MobileEnrollment[] }>("/api/mobile/enrollments"),
   mobileDeviceStatuses: () =>
     request<{ devices: MobileDeviceStatus[]; serverTime: string }>("/api/mobile/devices/status"),
+  mobilePilotPolicy: () =>
+    request<{ policy: MobilePilotPolicy }>("/api/mobile/pilot-policy"),
+  updateMobilePilotPolicy: (input: UpdateMobilePilotPolicyInput) =>
+    request<{ policy: MobilePilotPolicy }>("/api/mobile/pilot-policy", {
+      method: "PATCH", body: JSON.stringify(input)
+    }),
+  mobileDeviceCommands: () =>
+    request<{ commands: MobileDeviceCommand[] }>("/api/mobile/commands"),
+  createMobileDeviceCommand: (credentialId: string, input: CreateMobileDeviceCommandInput) =>
+    request<{ command: MobileDeviceCommand }>(`/api/mobile/devices/${credentialId}/commands`, {
+      method: "POST", body: JSON.stringify(input)
+    }),
   createMobileEnrollment: (input: CreateMobileEnrollmentInput) =>
     request<{ enrollment: { id: string; assignmentId: string; label: string; expiresAt: string }; token: string }>("/api/mobile/enrollments", {
       method: "POST", body: JSON.stringify(input)

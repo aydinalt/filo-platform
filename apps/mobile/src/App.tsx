@@ -6,6 +6,7 @@ import type { MobilePrincipal } from "@filo/contracts";
 import { mobileApi } from "./api";
 import { flushLocationQueue, startBackgroundTracking, stopBackgroundTracking } from "./background-location";
 import { sendMobileHeartbeat } from "./diagnostics";
+import { decidePilotControl } from "./pilot-control";
 import { credentialStore, readQueue } from "./storage";
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
   const [status, setStatus] = useState("Hazır");
   const [busy, setBusy] = useState(false);
   const [queued, setQueued] = useState(0);
+  const [heartbeatIntervalSeconds, setHeartbeatIntervalSeconds] = useState(60);
 
   useEffect(() => {
     void credentialStore.read().then(async (stored) => {
@@ -34,12 +36,41 @@ export default function App() {
   useEffect(() => {
     if (!credential) return undefined;
     const reconcile = async () => {
-      const result = await flushLocationQueue();
-      setQueued(result.queued);
-      await sendMobileHeartbeat();
+      await sendMobileHeartbeat(null, heartbeatIntervalSeconds * 1_000);
+      try {
+        const configuration = await mobileApi.config(credential);
+        setHeartbeatIntervalSeconds(configuration.policy.heartbeatIntervalSeconds);
+        const decision = decidePilotControl(configuration);
+        if (decision.stopTracking) {
+          await stopBackgroundTracking();
+          await mobileApi.tracking(credential, { permission: "granted_always", state: "paused" }).catch(() => undefined);
+          for (const command of configuration.commands.filter((item) => item.type === "pause_tracking")) {
+            await mobileApi.acknowledgeCommand(credential, command.id, { status: "acknowledged" });
+          }
+          if (decision.message) setStatus(decision.message);
+          setQueued((await readQueue()).length);
+          return;
+        }
+        const result = await flushLocationQueue();
+        setQueued(result.queued);
+        for (const command of configuration.commands.filter((item) => item.type === "sync_now")) {
+          await mobileApi.acknowledgeCommand(credential, command.id, {
+            status: "acknowledged",
+            resultCode: result.queued === 0 ? "QUEUE_FLUSHED" : "QUEUE_REMAINS",
+          });
+        }
+        for (const command of configuration.commands.filter((item) => item.type === "resume_tracking")) {
+          await mobileApi.acknowledgeCommand(credential, command.id, {
+            status: "acknowledged", resultCode: "PILOT_ACCESS_RESTORED",
+          });
+        }
+        if (decision.message) setStatus(`${decision.message} ${result.sent} konum gönderildi.`);
+      } catch {
+        setQueued((await readQueue()).length);
+      }
     };
     void reconcile();
-    const timer = setInterval(() => { void reconcile(); }, 60_000);
+    const timer = setInterval(() => { void reconcile(); }, heartbeatIntervalSeconds * 1_000);
     const unsubscribe = NetInfo.addEventListener((state) => {
       if (state.isConnected) void reconcile();
     });
@@ -47,7 +78,7 @@ export default function App() {
       clearInterval(timer);
       unsubscribe();
     };
-  }, [credential]);
+  }, [credential, heartbeatIntervalSeconds]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -73,6 +104,10 @@ export default function App() {
 
   async function start() {
     if (!credential) return;
+    await sendMobileHeartbeat(null, 0);
+    const configuration = await mobileApi.config(credential);
+    const decision = decidePilotControl(configuration);
+    if (decision.stopTracking) throw new Error(decision.message ?? "MOBILE_TRACKING_PAUSED");
     await mobileApi.startShift(credential);
     await startBackgroundTracking();
     await mobileApi.tracking(credential, { permission: "granted_always", state: "tracking" });

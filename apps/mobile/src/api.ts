@@ -1,6 +1,7 @@
 import type {
   ClaimMobileEnrollmentInput,
   MobileHeartbeatInput,
+  MobilePilotConfiguration,
   MobileLocationBatchInput,
   MobilePrincipal,
   MobileTrackingStateInput,
@@ -31,6 +32,15 @@ export const mobileApi = {
     request<{ accepted: true; serverTime: string }>("/api/mobile/heartbeat", {
       method: "POST", body: JSON.stringify(input),
     }, credential),
+  config: (credential: string) =>
+    request<MobilePilotConfiguration>("/api/mobile/config", {}, credential),
+  acknowledgeCommand: (
+    credential: string,
+    commandId: string,
+    input: { status: "acknowledged" | "failed"; resultCode?: string | null },
+  ) => request<void>(`/api/mobile/commands/${commandId}/ack`, {
+    method: "POST", body: JSON.stringify(input),
+  }, credential),
   startShift: (credential: string) =>
     request<{ shift: { id: string; existing: boolean } }>("/api/mobile/shift/start", { method: "POST" }, credential),
   endShift: (credential: string) =>

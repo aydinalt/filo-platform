@@ -1,4 +1,4 @@
-# Filo Platform V1 — mobil pilot güvenilirliği v0.93
+# Filo Platform V1 — uzaktan mobil pilot güvenliği v0.94
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -32,6 +32,13 @@ heartbeat, izin, batarya, ağ, takip ve çevrimdışı kuyruk durumunu güvenli 
 kimliğiyle bildirir. Panel aktif cihazları sağlıklı, gecikmeli, çevrimdışı veya
 müdahale gerektiren durumda gösterir; bağlantı geri geldiğinde uygulama kuyruğu
 otomatik eşitleyip güncel sağlık sinyali gönderir.
+
+v0.94, firma genelinde acil takip durdurma, minimum mobil uygulama sürümü,
+cihaz bazlı takibi durdurma/yeniden açma ve şimdi eşitle komutlarını ekler.
+Komutlar tenant kapsamında kalır, cihaz tarafından alındığında sonuç kanıtıyla
+onaylanır ve audit geçmişine yazılır. Mobil uygulama komutları heartbeat döngüsünde
+uygular; API de kapalı politika, cihaz pilot kilidi veya eski sürüm durumunda yeni
+vardiya ve konum kabulünü bağımsız olarak engeller.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.

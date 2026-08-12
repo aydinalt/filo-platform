@@ -113,6 +113,12 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 10. `Telefon Takibi > Saha cihaz sağlığı` tablosunda heartbeat, izin, pil, ağ ve kuyruk değerlerini doğrulayın.
 11. Uygulamayı 10 dakikadan uzun süre ağsız bırakıp cihazın `Çevrimdışı`; en eski kuyruk noktası 5 dakikayı aşınca `Kuyruk gecikiyor` durumuna geçtiğini doğrulayın.
 12. Bağlantıyı geri açın; otomatik eşitleme sonrası kuyruk sayısının sıfıra ve cihazın sağlıklı duruma döndüğünü doğrulayın.
+13. Firma politikasında minimum sürümü mevcut uygulamanın üstüne çıkarın; yeni vardiya ve konum paketinin `423` ile reddedildiğini doğrulayın.
+14. Minimum sürümü yeniden uygun değere alın; cihazın yeni politika kontrolünden sonra vardiya başlatabildiğini doğrulayın.
+15. Cihaza `Şimdi eşitle` komutu gönderin; komutun panelde `acknowledged` ve `QUEUE_FLUSHED` ya da `QUEUE_REMAINS` kanıtıyla kapandığını doğrulayın.
+16. Cihaza `Takibi durdur` komutu gönderin; işletim sistemi arka plan görevinin kapanmasını, cihaz pilot kilidinin kalıcı olmasını ve yeni konumun reddedilmesini doğrulayın.
+17. `Takibi yeniden aç` komutunu gönderin; önceki bekleyen durdurma komutunun `SUPERSEDED` olarak kapanmasını ve sürücünün takibi yeniden başlatabildiğini doğrulayın.
+18. Firma genelinde acil durdurmayı etkinleştirin; tüm pilot cihazların belirlenen heartbeat aralığında durduğunu ve API'nin istemci davranışından bağımsız olarak veri kabul etmediğini doğrulayın.
 
 ## 8. Pilot açılış kapıları
 
@@ -127,5 +133,6 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 - iOS ve en az iki Android/OEM cihazda 60 dakikalık arka plan rota pilotu tamamlanmış.
 - Uçak modu kuyruğu, yeniden bağlantı eşitlemesi, credential rotasyonu ve uzaktan iptal kanıtlanmış.
 - Heartbeat, çevrimdışı cihaz, izin kaybı, düşük güç modu ve geciken kuyruk sinyalleri panelde kanıtlanmış.
+- Firma acil durdurma, minimum sürüm kapısı, cihaz durdurma/yeniden açma ve komut onayı fiziksel cihazlarda kanıtlanmış.
 
 Bu kapılar tamamlanmadan gerçek kullanıcı veya sürekli saha verisi açılmaz.

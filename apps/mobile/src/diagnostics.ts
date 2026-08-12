@@ -42,9 +42,12 @@ export async function collectMobileHeartbeat(lastErrorCode: string | null = null
   };
 }
 
-export async function sendMobileHeartbeat(lastErrorCode: string | null = null) {
+export async function sendMobileHeartbeat(
+  lastErrorCode: string | null = null,
+  minimumIntervalMs = 60_000,
+) {
   const now = Date.now();
-  if (!lastErrorCode && now - lastHeartbeatAttemptAt < 60_000) return true;
+  if (!lastErrorCode && now - lastHeartbeatAttemptAt < minimumIntervalMs) return true;
   lastHeartbeatAttemptAt = now;
   const credential = await credentialStore.read();
   if (!credential) return false;

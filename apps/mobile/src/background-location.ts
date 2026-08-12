@@ -4,6 +4,7 @@ import * as TaskManager from "expo-task-manager";
 import { mobileApi } from "./api";
 import { BACKGROUND_LOCATION_TASK } from "./constants";
 import { sendMobileHeartbeat } from "./diagnostics";
+import { decidePilotControl } from "./pilot-control";
 import { credentialStore, enqueueLocations, peekBatch, readQueue, removeQueuedEvents } from "./storage";
 
 export { BACKGROUND_LOCATION_TASK } from "./constants";
@@ -41,8 +42,34 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
       ? location.coords.heading % 360
       : null,
   })));
-  await flushLocationQueue();
   await sendMobileHeartbeat();
+  const credential = await credentialStore.read();
+  if (!credential) return;
+  try {
+    const configuration = await mobileApi.config(credential);
+    const decision = decidePilotControl(configuration);
+    if (decision.stopTracking) {
+      await stopBackgroundTracking();
+      for (const command of configuration.commands.filter((item) => item.type === "pause_tracking")) {
+        await mobileApi.acknowledgeCommand(credential, command.id, { status: "acknowledged" });
+      }
+      return;
+    }
+    const result = await flushLocationQueue();
+    for (const command of configuration.commands.filter((item) => item.type === "sync_now")) {
+      await mobileApi.acknowledgeCommand(credential, command.id, {
+        status: "acknowledged",
+        resultCode: result.queued === 0 ? "QUEUE_FLUSHED" : "QUEUE_REMAINS",
+      });
+    }
+    for (const command of configuration.commands.filter((item) => item.type === "resume_tracking")) {
+      await mobileApi.acknowledgeCommand(credential, command.id, {
+        status: "acknowledged", resultCode: "PILOT_ACCESS_RESTORED",
+      });
+    }
+  } catch {
+    // The queue remains intact and will be retried after connectivity returns.
+  }
 });
 
 export async function startBackgroundTracking() {
