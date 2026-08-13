@@ -149,6 +149,12 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 46. Bir operasyonel kanıtı yeniden açın; GO kararının engellendiğini, NO-GO kararının gerekçeyle kaydedilebildiğini doğrulayın.
 47. Yeni bir incelemede tüm otomatik kapılar ve 6/6 kanıt tamamlandıktan sonra owner GO kararı verin; karar snapshot'ı ve audit kaydını karşılaştırın.
 48. Karar verilmiş incelemenin kanıtını veya karar alanlarını değiştirme girişiminin veritabanı tarafından reddedildiğini doğrulayın.
+49. v1.0 GO kararından sonra `ACTIVATE_PRODUCTION` doğrulamasıyla üretimi aktive edin; aktivasyon anında canlı kapıların yeniden okunduğunu doğrulayın.
+50. Sertifika JSON'unu indirin; GO snapshot'ı, aktivasyon notu, tarih ve ekrandaki SHA-256 özetinin veritabanı kaydıyla eşleştiğini doğrulayın.
+51. Pilot onayını geri çekip veya yeni aktif yayın olayı oluşturup askıdaki üretime dönmeyi deneyin; `409` canlı kapı reddini doğrulayın.
+52. Owner olarak üretimi acil askıya alın; olay ve audit kaydındaki aktör, neden ve zamanın eşleştiğini doğrulayın.
+53. Kapıları düzelttikten sonra `RESUME_PRODUCTION` doğrulamasıyla üretime dönün; başka aktif sürüm varken dönüşün engellendiğini doğrulayın.
+54. Sertifika alanlarını değiştirme girişiminin veritabanı trigger'ı tarafından reddedildiğini ve olay geçmişinin yalnız eklenebilir kaldığını doğrulayın.
 
 ## 8. Pilot açılış kapıları
 
@@ -169,5 +175,6 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 - Owner kontrollü %10→%25→%50→%100 rollout, sağlık eşiği, duraklatma ve geri alma provası tamamlanmış.
 - Worker otomatik duraklatma/geri alma, idempotent guard ve owner olay çözüm provası tamamlanmış.
 - v0.99 canlıya geçiş incelemesinde üç otomatik kapı ve 6/6 operasyonel kanıt tamamlanmış; owner GO snapshot'ı arşivlenmiş.
+- v1.0 üretim aktivasyonu canlı kapıları yeniden doğrulamış; SHA-256 sertifika, acil askı ve kontrollü dönüş provası arşivlenmiş.
 
 Bu kapılar tamamlanmadan gerçek kullanıcı veya sürekli saha verisi açılmaz.

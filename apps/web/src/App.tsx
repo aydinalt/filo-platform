@@ -31,6 +31,7 @@ import type {
   MobileReleaseIncident,
   MobileReleaseRollout,
   MobileReleaseRolloutActionInput,
+  ProductionLaunch,
   NotificationItem,
   NotificationRule,
   OperationalAlert,
@@ -103,8 +104,8 @@ const mobilePilotEvidenceLabels: Record<MobilePilotEvidenceType, string> = {
   remote_control: "Uzaktan komut kanıtı",
 };
 
-const MOBILE_RELEASE_TARGET = "0.99.0";
-const MOBILE_PREVIOUS_STABLE = "0.98.0";
+const MOBILE_RELEASE_TARGET = "1.0.0";
+const MOBILE_PREVIOUS_STABLE = "0.99.0";
 
 const launchEvidenceLabels: Record<LaunchReadinessEvidenceType, string> = {
   privacy_legal: "Hukuk ve KVKK onayı",
@@ -776,6 +777,7 @@ function Dashboard({
     checks: [],
   });
   const [launchReadinessReviews, setLaunchReadinessReviews] = useState<LaunchReadinessReview[]>([]);
+  const [productionLaunches, setProductionLaunches] = useState<ProductionLaunch[]>([]);
   const [mobilePilotPolicy, setMobilePilotPolicy] = useState<MobilePilotPolicy>({
     trackingEnabled: true,
     minimumAppVersion: null,
@@ -910,6 +912,7 @@ function Dashboard({
         const launchResult = await api.launchReadiness(MOBILE_RELEASE_TARGET);
         setLaunchReadinessAssessment(launchResult.assessment);
         setLaunchReadinessReviews(launchResult.reviews);
+        setProductionLaunches((await api.productionLaunches()).launches);
         setNotificationAnalytics((await api.notificationAnalytics()).analytics);
         setNotificationProviderHealth(await api.notificationProviderHealth());
         const providerIncidentResult =
@@ -1263,6 +1266,56 @@ function Dashboard({
     }
   }
 
+  async function activateProductionLaunch(review: LaunchReadinessReview) {
+    const confirmation = window.prompt("Üretim aktivasyonu için ACTIVATE_PRODUCTION yazın")?.trim();
+    if (confirmation !== "ACTIVATE_PRODUCTION") {
+      setMobileMessage("Üretim aktivasyonu iptal edildi; doğrulama metni eşleşmedi.");
+      return;
+    }
+    const notes = window.prompt(
+      "Üretim aktivasyon notu",
+      "GO snapshot'ı ve canlı kapılar yeniden doğrulandı; v1.0 üretim aktivasyonu onaylandı.",
+    )?.trim();
+    if (!notes) return;
+    try {
+      await api.activateProductionLaunch({ readinessReviewId: review.id, confirmation, notes });
+      setProductionLaunches((await api.productionLaunches()).launches);
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage("v1.0 üretim aktivasyonu sertifika özetiyle kaydedildi.");
+    } catch (caught) {
+      setMobileMessage(caught instanceof Error && caught.message === "PRODUCTION_LIVE_GATE_FAILED"
+        ? "Üretim aktive edilemez; canlı pilot, rollout veya olay kapısı artık geçerli değil."
+        : "Üretim aktivasyonu mevcut aktif sürüm veya sertifika nedeniyle uygulanamadı.");
+    }
+  }
+
+  async function actOnProductionLaunch(launch: ProductionLaunch, action: "suspend" | "resume") {
+    const confirmation = action === "resume"
+      ? window.prompt("Üretime dönüş için RESUME_PRODUCTION yazın")?.trim()
+      : undefined;
+    if (action === "resume" && confirmation !== "RESUME_PRODUCTION") {
+      setMobileMessage("Üretime dönüş iptal edildi; doğrulama metni eşleşmedi.");
+      return;
+    }
+    const reason = window.prompt(
+      action === "suspend" ? "Acil askıya alma nedeni" : "Üretime dönüş doğrulama notu",
+      action === "suspend" ? "Operasyonel güvenlik incelemesi için üretim askıya alındı." : "Canlı kapılar yeniden doğrulandı; üretime dönüş onaylandı.",
+    )?.trim();
+    if (!reason) return;
+    try {
+      await api.actOnProductionLaunch(launch.id, action === "suspend"
+        ? { action, reason }
+        : { action, confirmation: "RESUME_PRODUCTION", reason });
+      setProductionLaunches((await api.productionLaunches()).launches);
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage(action === "suspend" ? "Üretim acil olarak askıya alındı." : "Canlı kapılar yeniden doğrulanarak üretime dönüldü.");
+    } catch (caught) {
+      setMobileMessage(caught instanceof Error && caught.message === "PRODUCTION_LIVE_GATE_FAILED"
+        ? "Üretime dönülemez; canlı güvenlik kapılarından en az biri geçmiyor."
+        : "Üretim durum geçişi uygulanamadı.");
+    }
+  }
+
   async function changeStatus(vehicle: Vehicle, status: Vehicle["status"]) {
     setError("");
     try {
@@ -1330,6 +1383,7 @@ function Dashboard({
   const draftLaunchReview = launchReadinessReviews.find((review) => review.status === "draft");
   const currentLaunchReview = draftLaunchReview ?? launchReadinessReviews[0];
   const launchEvidenceReady = currentLaunchReview?.evidence.every((item) => item.status === "passed") ?? false;
+  const currentProductionLaunch = productionLaunches.find((launch) => launch.targetVersion === MOBILE_RELEASE_TARGET);
   async function addDriver() {
     const fullName = window.prompt("Sürücü adı soyadı");
     if (!fullName) return;
@@ -2457,6 +2511,47 @@ function Dashboard({
                   ? <button className="danger" onClick={() => void saveMobilePilotPolicy(false)}>Tüm mobil takibi acil durdur</button>
                   : <button className="secondary" onClick={() => void saveMobilePilotPolicy(true)}>Mobil takibi yeniden aç</button>}
               </div>}
+            </section>
+
+            <section className="table-card mobile-tracking">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">V1.0 ÜRETİM AKTİVASYONU</p>
+                  <h2>Canlı sistem durumu ve sertifika</h2>
+                </div>
+                <span className="status">{currentProductionLaunch
+                  ? currentProductionLaunch.status === "active" ? "ÜRETİM AKTİF" : "ACİL ASKIDA"
+                  : "Aktivasyon bekleniyor"}</span>
+              </div>
+              <p>
+                Yalnız değiştirilemez GO kararı ve güncel canlı güvenlik kapılarıyla üretim
+                aktive edilir. Aktivasyon sertifikası SHA-256 özetiyle korunur. Acil askıya
+                alma her zaman mümkündür; dönüşte canlı kapılar yeniden değerlendirilir.
+              </p>
+              {!currentProductionLaunch && currentLaunchReview?.status === "go" && user.role === "owner" && <div className="modal-actions">
+                <button onClick={() => void activateProductionLaunch(currentLaunchReview)}>v1.0 üretimi aktive et</button>
+              </div>}
+              {currentProductionLaunch && <>
+                <div className="stats-grid">
+                  <article><small>SÜRÜM</small><strong>{currentProductionLaunch.targetVersion}</strong></article>
+                  <article><small>DURUM</small><strong>{currentProductionLaunch.status === "active" ? "AKTİF" : "ASKIDA"}</strong></article>
+                  <article><small>AKTİVASYON</small><strong>{new Date(currentProductionLaunch.activatedAt).toLocaleDateString("tr-TR")}</strong></article>
+                  <article><small>SERTİFİKA</small><strong>SHA-256</strong></article>
+                </div>
+                <div className="approval-banner">
+                  <strong>Sertifika özeti: {currentProductionLaunch.certificateSha256.slice(0, 16)}…</strong>
+                  <span>{currentProductionLaunch.statusReason} · {new Date(currentProductionLaunch.statusUpdatedAt).toLocaleString("tr-TR")}</span>
+                </div>
+                <div className="modal-actions">
+                  <button className="secondary" onClick={() => window.open(api.productionLaunchCertificateUrl(currentProductionLaunch.id), "_blank", "noopener,noreferrer")}>Sertifikayı indir</button>
+                  {user.role === "owner" && currentProductionLaunch.status === "active" && <button className="danger" onClick={() => void actOnProductionLaunch(currentProductionLaunch, "suspend")}>Üretimi acil askıya al</button>}
+                  {user.role === "owner" && currentProductionLaunch.status === "suspended" && <button onClick={() => void actOnProductionLaunch(currentProductionLaunch, "resume")}>Kapıları doğrula ve üretime dön</button>}
+                </div>
+                {currentProductionLaunch.events[0] && <div className="approval-banner">
+                  <strong>Son üretim olayı: {currentProductionLaunch.events[0].action}</strong>
+                  <span>{new Date(currentProductionLaunch.events[0].createdAt).toLocaleString("tr-TR")} · {currentProductionLaunch.events[0].reason}</span>
+                </div>}
+              </>}
             </section>
 
             <section className="table-card mobile-tracking">

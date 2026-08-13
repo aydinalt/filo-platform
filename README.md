@@ -1,4 +1,4 @@
-# Filo Platform V1 — kanıtlı canlıya geçiş kapısı v0.99
+# Filo Platform V1 — kanıtlı üretim aktivasyonu v1.0
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -69,6 +69,12 @@ fiziksel pilot onayı, sağlık kapılarıyla tamamlanmış %100 rollout ve sıf
 olayı otomatik doğrulanır. Hukuk/KVKK, yedek geri yükleme, worker sürekliliği, izleme,
 destek ve rollback tatbikatı ayrı kanıtlarla tamamlanır. Owner yalnız tüm kapılar
 geçtiğinde GO verebilir; GO veya NO-GO kararı değiştirilemez snapshot ve audit kaydıdır.
+
+v1.0, hazır GO kararını kontrollü üretim aktivasyonuna dönüştürür. Aktivasyon ve
+askıdan dönüş sırasında pilot onayı, tamamlanmış %100 rollout ve sıfır aktif yayın
+olayı sunucuda yeniden doğrulanır. Canlılık sertifikası GO kanıtlarını, aktivasyon
+notunu ve SHA-256 özetini değiştirilemez biçimde saklar. Owner üretimi her zaman
+acil askıya alabilir; üretime dönüş yeniden canlı güvenlik kapılarına bağlıdır.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.

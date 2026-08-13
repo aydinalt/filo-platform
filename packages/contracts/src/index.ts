@@ -350,6 +350,24 @@ export const decideLaunchReadinessSchema = z.object({
   notes: z.string().trim().min(3).max(1000),
 });
 
+export const activateProductionLaunchSchema = z.object({
+  readinessReviewId: z.string().uuid(),
+  confirmation: z.literal("ACTIVATE_PRODUCTION"),
+  notes: z.string().trim().min(3).max(1000),
+});
+
+export const productionLaunchActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("suspend"),
+    reason: z.string().trim().min(3).max(1000),
+  }),
+  z.object({
+    action: z.literal("resume"),
+    confirmation: z.literal("RESUME_PRODUCTION"),
+    reason: z.string().trim().min(3).max(1000),
+  }),
+]);
+
 export type CreateMobileEnrollmentInput = z.infer<typeof createMobileEnrollmentSchema>;
 export type ClaimMobileEnrollmentInput = z.infer<typeof claimMobileEnrollmentSchema>;
 export type MobileLocationBatchInput = z.infer<typeof mobileLocationBatchSchema>;
@@ -370,6 +388,8 @@ export type LaunchReadinessEvidenceType = z.infer<typeof launchReadinessEvidence
 export type CreateLaunchReadinessReviewInput = z.infer<typeof createLaunchReadinessReviewSchema>;
 export type UpdateLaunchReadinessEvidenceInput = z.infer<typeof updateLaunchReadinessEvidenceSchema>;
 export type DecideLaunchReadinessInput = z.infer<typeof decideLaunchReadinessSchema>;
+export type ActivateProductionLaunchInput = z.infer<typeof activateProductionLaunchSchema>;
+export type ProductionLaunchActionInput = z.infer<typeof productionLaunchActionSchema>;
 
 export type MobileEnrollment = {
   id: string;
@@ -634,6 +654,37 @@ export type LaunchReadinessReview = {
   decisionSnapshot: LaunchReadinessSnapshot | null;
   createdAt: string;
   decidedAt: string | null;
+};
+
+export type ProductionLaunchCertificate = {
+  reviewId: string;
+  targetVersion: string;
+  readinessDecisionNotes: string;
+  readinessDecidedAt: string;
+  readinessSnapshot: LaunchReadinessSnapshot;
+  activationNotes: string;
+  activatedAt: string;
+};
+
+export type ProductionLaunchEvent = {
+  id: string;
+  action: "activated" | "suspended" | "resumed";
+  reason: string;
+  createdAt: string;
+};
+
+export type ProductionLaunch = {
+  id: string;
+  readinessReviewId: string;
+  targetVersion: string;
+  status: "active" | "suspended";
+  certificate: ProductionLaunchCertificate;
+  certificateSha256: string;
+  notes: string;
+  statusReason: string;
+  activatedAt: string;
+  statusUpdatedAt: string;
+  events: ProductionLaunchEvent[];
 };
 
 export type LatestLocation = {

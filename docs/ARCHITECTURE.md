@@ -264,3 +264,21 @@ The decision transaction locks the review, recomputes live automatic readiness, 
 evidence, and stores one JSON snapshot. Database triggers make decided reviews and their
 evidence immutable. Review and evidence tables use forced RLS, explicit tenant predicates,
 bounded inputs and tenant audit events.
+
+## Certified production activation
+
+A ready GO review does not activate production by itself. Owner activation takes a tenant
+advisory lock, row-locks the exact GO decision and recomputes the live physical approval,
+completed 100 percent rollout and zero-active-incident gates. This prevents a stale GO
+snapshot from bypassing a later approval revocation or release incident.
+
+Activation stores the original GO decision snapshot, decision notes, activation notes and
+timestamps as one JSON certificate. PostgreSQL computes a SHA-256 digest from the canonical
+JSONB text. A database trigger protects the review link, version, certificate, digest,
+activation actor and time from later mutation. One tenant can have only one active production
+version, and one GO review can produce only one certificate.
+
+Owner may always suspend an active launch with a reason. Resume requires explicit confirmation,
+the same tenant advisory lock, no other active production version and a fresh live-gate check.
+Activation, suspension and resume are retained in a forced-RLS append-only event stream and
+the normal tenant audit ledger. The certificate is downloadable without exposing credentials.

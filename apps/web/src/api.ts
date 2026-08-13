@@ -2,7 +2,7 @@ import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, No
 import type { FleetReport } from "@filo/contracts";
 import type { NotificationAnalytics, NotificationArchiveAttempt, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention, NotificationRetentionSettings } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
-import type { AcceptMemberInvitationInput, AccountSession, ApproveMobilePilotReleaseInput, ChangePasswordInput, CompletePasswordResetInput, CreateLaunchReadinessReviewInput, CreateMemberInvitationInput, CreateMobileDeviceCommandInput, CreateMobileEnrollmentInput, CreateMobilePilotRunInput, CreateMobileReleaseRolloutInput, DecideLaunchReadinessInput, DecideMobilePilotRunInput, LaunchReadinessAssessment, LaunchReadinessEvidenceType, LaunchReadinessReview, MemberInvitation, MobileDeviceCommand, MobileDeviceStatus, MobileEnrollment, MobilePilotCohortReadiness, MobilePilotEvidenceType, MobilePilotPolicy, MobilePilotReleaseApproval, MobilePilotRun, MobileReleaseIncident, MobileReleaseRollout, MobileReleaseRolloutActionInput, RegisterTenantInput, RequestPasswordResetInput, RevokeMobilePilotReleaseInput, UpdateLaunchReadinessEvidenceInput, UpdateMobilePilotPolicyInput, UpdateMobileReleaseIncidentInput } from "@filo/contracts";
+import type { AcceptMemberInvitationInput, AccountSession, ActivateProductionLaunchInput, ApproveMobilePilotReleaseInput, ChangePasswordInput, CompletePasswordResetInput, CreateLaunchReadinessReviewInput, CreateMemberInvitationInput, CreateMobileDeviceCommandInput, CreateMobileEnrollmentInput, CreateMobilePilotRunInput, CreateMobileReleaseRolloutInput, DecideLaunchReadinessInput, DecideMobilePilotRunInput, LaunchReadinessAssessment, LaunchReadinessEvidenceType, LaunchReadinessReview, MemberInvitation, MobileDeviceCommand, MobileDeviceStatus, MobileEnrollment, MobilePilotCohortReadiness, MobilePilotEvidenceType, MobilePilotPolicy, MobilePilotReleaseApproval, MobilePilotRun, MobileReleaseIncident, MobileReleaseRollout, MobileReleaseRolloutActionInput, ProductionLaunch, ProductionLaunchActionInput, RegisterTenantInput, RequestPasswordResetInput, RevokeMobilePilotReleaseInput, UpdateLaunchReadinessEvidenceInput, UpdateMobilePilotPolicyInput, UpdateMobileReleaseIncidentInput } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -89,6 +89,18 @@ export const api = {
     request<void>(`/api/mobile/launch-readiness/reviews/${reviewId}/decision`, {
       method: "POST", body: JSON.stringify(input)
     }),
+  productionLaunches: () =>
+    request<{ launches: ProductionLaunch[] }>("/api/mobile/production-launches"),
+  activateProductionLaunch: (input: ActivateProductionLaunchInput) =>
+    request<{ launchId: string }>("/api/mobile/production-launches/activate", {
+      method: "POST", body: JSON.stringify(input)
+    }),
+  actOnProductionLaunch: (launchId: string, input: ProductionLaunchActionInput) =>
+    request<void>(`/api/mobile/production-launches/${launchId}/actions`, {
+      method: "POST", body: JSON.stringify(input)
+    }),
+  productionLaunchCertificateUrl: (launchId: string) =>
+    `${API_URL}/api/mobile/production-launches/${launchId}/certificate.json`,
   createMobileDeviceCommand: (credentialId: string, input: CreateMobileDeviceCommandInput) =>
     request<{ command: MobileDeviceCommand }>(`/api/mobile/devices/${credentialId}/commands`, {
       method: "POST", body: JSON.stringify(input)

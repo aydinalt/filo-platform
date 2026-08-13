@@ -2,7 +2,7 @@
   "expo": {
     "name": "Filo Sürücü",
     "slug": "filo-surucu",
-    "version": "0.99.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "filosurucu",
     "userInterfaceStyle": "light",
