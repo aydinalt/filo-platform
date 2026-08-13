@@ -2,7 +2,7 @@ import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, No
 import type { FleetReport } from "@filo/contracts";
 import type { NotificationAnalytics, NotificationArchiveAttempt, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention, NotificationRetentionSettings } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
-import type { AcceptMemberInvitationInput, AccountSession, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileDeviceCommandInput, CreateMobileEnrollmentInput, MemberInvitation, MobileDeviceCommand, MobileDeviceStatus, MobileEnrollment, MobilePilotPolicy, RegisterTenantInput, RequestPasswordResetInput, UpdateMobilePilotPolicyInput } from "@filo/contracts";
+import type { AcceptMemberInvitationInput, AccountSession, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileDeviceCommandInput, CreateMobileEnrollmentInput, CreateMobilePilotRunInput, DecideMobilePilotRunInput, MemberInvitation, MobileDeviceCommand, MobileDeviceStatus, MobileEnrollment, MobilePilotEvidenceType, MobilePilotPolicy, MobilePilotRun, RegisterTenantInput, RequestPasswordResetInput, UpdateMobilePilotPolicyInput } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -37,6 +37,17 @@ export const api = {
     }),
   mobileDeviceCommands: () =>
     request<{ commands: MobileDeviceCommand[] }>("/api/mobile/commands"),
+  mobilePilotRuns: () =>
+    request<{ runs: MobilePilotRun[]; requiredEvidence: MobilePilotEvidenceType[] }>("/api/mobile/pilot-runs"),
+  startMobilePilotRun: (credentialId: string, input: CreateMobilePilotRunInput) =>
+    request<{ run: MobilePilotRun }>(`/api/mobile/devices/${credentialId}/pilot-runs`, {
+      method: "POST", body: JSON.stringify(input)
+    }),
+  decideMobilePilotRun: (runId: string, input: DecideMobilePilotRunInput) =>
+    request<{ run: MobilePilotRun }>(`/api/mobile/pilot-runs/${runId}/decision`, {
+      method: "PATCH", body: JSON.stringify(input)
+    }),
+  mobilePilotReportUrl: (runId: string) => `${API_URL}/api/mobile/pilot-runs/${runId}/report.csv`,
   createMobileDeviceCommand: (credentialId: string, input: CreateMobileDeviceCommandInput) =>
     request<{ command: MobileDeviceCommand }>(`/api/mobile/devices/${credentialId}/commands`, {
       method: "POST", body: JSON.stringify(input)

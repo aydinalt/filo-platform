@@ -1,4 +1,4 @@
-# Filo Platform V1 — uzaktan mobil pilot güvenliği v0.94
+# Filo Platform V1 — fiziksel cihaz pilot kanıtı v0.95
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -39,6 +39,12 @@ Komutlar tenant kapsamında kalır, cihaz tarafından alındığında sonuç kan
 onaylanır ve audit geçmişine yazılır. Mobil uygulama komutları heartbeat döngüsünde
 uygular; API de kapalı politika, cihaz pilot kilidi veya eski sürüm durumunda yeni
 vardiya ve konum kabulünü bağımsız olarak engeller.
+
+v0.95, her fiziksel cihaz için ayrı ve tenant kapsamlı pilot oturumu açar. Arka
+plan izni, canlı heartbeat, arka plan konumu, çevrimdışı kuyruk, yeniden bağlantı
+eşitlemesi ve uzaktan komut sonucu yalnız kimliği doğrulanmış mobil çalışma zamanı
+üzerinden kanıt olarak toplanır. Altı kanıt tamamlanmadan pilot “Geçti” olarak
+kapatılamaz; kararlar audit geçmişine yazılır ve CSV özeti indirilebilir.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.

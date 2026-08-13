@@ -39,3 +39,5 @@ aside nav button small{font-size:10px}
 button.danger{background:#b42318;color:#fff}.table-actions{display:flex;gap:6px}.table-actions button{margin:0;padding:7px 9px;font-size:11px}
 .mobile-tracking>.form-grid{padding:0 24px}.mobile-tracking>.form-grid label{display:grid;gap:7px;font-size:12px;font-weight:700;color:#526174}.mobile-tracking>.form-grid input,.mobile-tracking>.form-grid select{border:1px solid #d5dce7;border-radius:9px;padding:11px;background:#fff}.mobile-tracking>.modal-actions{padding:0 24px 22px}
 @media(max-width:760px){.table-actions{flex-direction:column}.table-actions button{width:100%}}
+/* v0.95 physical-device pilot evidence */
+.mobile-tracking td small{display:block;margin-top:6px;color:#738096;line-height:1.45}.mobile-tracking td strong{font-family:Manrope;font-size:16px}.mobile-tracking .table-actions button:disabled{background:#cfd7df;color:#6b7789;cursor:not-allowed}

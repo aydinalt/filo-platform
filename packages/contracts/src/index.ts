@@ -273,6 +273,15 @@ export const acknowledgeMobileDeviceCommandSchema = z.object({
   resultCode: z.string().trim().min(1).max(80).nullable().optional(),
 });
 
+export const createMobilePilotRunSchema = z.object({
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+
+export const decideMobilePilotRunSchema = z.object({
+  decision: z.enum(["passed", "failed", "cancelled"]),
+  notes: z.string().trim().min(3).max(1000),
+});
+
 export type CreateMobileEnrollmentInput = z.infer<typeof createMobileEnrollmentSchema>;
 export type ClaimMobileEnrollmentInput = z.infer<typeof claimMobileEnrollmentSchema>;
 export type MobileLocationBatchInput = z.infer<typeof mobileLocationBatchSchema>;
@@ -281,6 +290,8 @@ export type MobileHeartbeatInput = z.infer<typeof mobileHeartbeatSchema>;
 export type UpdateMobilePilotPolicyInput = z.infer<typeof updateMobilePilotPolicySchema>;
 export type CreateMobileDeviceCommandInput = z.infer<typeof createMobileDeviceCommandSchema>;
 export type AcknowledgeMobileDeviceCommandInput = z.infer<typeof acknowledgeMobileDeviceCommandSchema>;
+export type CreateMobilePilotRunInput = z.infer<typeof createMobilePilotRunSchema>;
+export type DecideMobilePilotRunInput = z.infer<typeof decideMobilePilotRunSchema>;
 
 export type MobileEnrollment = {
   id: string;
@@ -362,6 +373,42 @@ export type MobilePilotConfiguration = {
   policy: MobilePilotPolicy;
   requiredAction: "none" | "pause" | "upgrade";
   commands: MobileDeviceCommand[];
+};
+
+export type MobilePilotEvidenceType =
+  | "permission_always"
+  | "heartbeat_online"
+  | "background_location"
+  | "offline_queue"
+  | "queue_recovered"
+  | "remote_control";
+
+export type MobilePilotEvidence = {
+  type: MobilePilotEvidenceType;
+  firstObservedAt: string;
+  lastObservedAt: string;
+  observationCount: number;
+  details: Record<string, unknown>;
+};
+
+export type MobilePilotRun = {
+  id: string;
+  credentialId: string;
+  vehiclePlate: string;
+  driverName: string;
+  deviceName: string;
+  platform: "android" | "ios";
+  status: "running" | "passed" | "failed" | "cancelled";
+  notes: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  evidence: MobilePilotEvidence[];
+  readiness: {
+    passedCount: number;
+    requiredCount: number;
+    missing: MobilePilotEvidenceType[];
+    ready: boolean;
+  };
 };
 
 export type LatestLocation = {

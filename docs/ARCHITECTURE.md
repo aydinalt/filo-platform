@@ -174,3 +174,19 @@ Server-side shift start and location ingestion independently recheck the tenant 
 minimum version and persistent device pilot lock. The mobile client therefore cannot bypass
 an emergency stop by ignoring its local instruction. Every policy, command and acknowledgement
 transition creates tenant-scoped audit evidence.
+
+## Physical-device pilot evidence gate
+
+Pilot qualification is a first-class tenant record bound to one active mobile
+credential. A partial unique index permits only one running pilot per device. Evidence
+is written only inside the already resolved tenant transaction and is deduplicated by
+run plus evidence type while retaining first/last observation and a bounded source
+summary. The API never accepts an operator-supplied “evidence complete” boolean.
+
+The six mandatory categories are always-location permission, error-free online
+heartbeat, authenticated background location ingestion, observed offline queue,
+successful queue recovery and acknowledged remote control. Completion re-reads these
+records in the same tenant boundary; a pass is rejected until all six exist. Failure
+and cancellation do not bypass or alter collected evidence. Start and decision events
+are auditable, and the CSV report is generated from the same server-side records shown
+in the operational panel.

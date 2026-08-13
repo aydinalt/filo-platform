@@ -27,6 +27,7 @@ import {
   DEFAULT_MOBILE_PILOT_POLICY,
   requiredMobileAction,
 } from "../lib/mobile-pilot-policy.js";
+import { recordMobilePilotEvidence } from "../lib/mobile-pilot-evidence.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -433,6 +434,15 @@ export async function mobileRoutes(app: FastifyInstance) {
           command.commandType, parsed.data.status, parsed.data.resultCode ?? null,
         ],
       );
+      if (parsed.data.status === "acknowledged") {
+        await recordMobilePilotEvidence(
+          client,
+          principal.tenantId,
+          principal.credentialId,
+          "remote_control",
+          { commandType: command.commandType, resultCode: parsed.data.resultCode ?? null },
+        );
+      }
       return true;
     });
     return acknowledged
@@ -462,6 +472,23 @@ export async function mobileRoutes(app: FastifyInstance) {
           parsed.data.lastErrorCode, heartbeatAt,
         ],
       );
+      if (parsed.data.permission === "granted_always") {
+        await recordMobilePilotEvidence(client, principal.tenantId, principal.credentialId, "permission_always", {
+          trackingState: parsed.data.trackingState,
+        });
+      }
+      if (parsed.data.networkType !== "none" && parsed.data.lastErrorCode === null) {
+        await recordMobilePilotEvidence(client, principal.tenantId, principal.credentialId, "heartbeat_online", {
+          networkType: parsed.data.networkType,
+          batteryPercent: parsed.data.batteryPercent,
+        });
+      }
+      if (parsed.data.pendingLocationCount > 0) {
+        await recordMobilePilotEvidence(client, principal.tenantId, principal.credentialId, "offline_queue", {
+          pendingLocationCount: parsed.data.pendingLocationCount,
+          oldestQueuedAt: parsed.data.oldestQueuedAt,
+        });
+      }
     });
     return reply.code(202).send({ accepted: true, serverTime: heartbeatAt.toISOString() });
   });
@@ -578,8 +605,13 @@ export async function mobileRoutes(app: FastifyInstance) {
     const events = [...parsed.data.events].sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
     const summary = await withTenantTransaction(principal.tenantId, principal.actorUserId, async (client) => {
       const policy = await readPilotPolicy(client, principal.tenantId);
-      const credential = await client.query<{ appVersion: string | null; pilotTrackingAllowed: boolean }>(
-        `SELECT app_version AS "appVersion", pilot_tracking_allowed AS "pilotTrackingAllowed"
+      const credential = await client.query<{
+        appVersion: string | null;
+        pilotTrackingAllowed: boolean;
+        pendingLocationCount: number;
+      }>(
+        `SELECT app_version AS "appVersion", pilot_tracking_allowed AS "pilotTrackingAllowed",
+                pending_location_count AS "pendingLocationCount"
          FROM mobile_access_credentials
          WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL`,
         [principal.tenantId, principal.credentialId],
@@ -610,6 +642,16 @@ export async function mobileRoutes(app: FastifyInstance) {
          WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL`,
         [principal.tenantId, principal.credentialId, events.at(-1)!.recordedAt, events.length],
       );
+      await recordMobilePilotEvidence(client, principal.tenantId, principal.credentialId, "background_location", {
+        accepted: events.length,
+        recordedAt: events.at(-1)!.recordedAt,
+      });
+      if ((credential.rows[0]?.pendingLocationCount ?? 0) > 0
+          && (credential.rows[0]?.pendingLocationCount ?? 0) <= events.length) {
+        await recordMobilePilotEvidence(client, principal.tenantId, principal.credentialId, "queue_recovered", {
+          accepted: events.length,
+        });
+      }
       return { accepted: events.length, created, duplicate, blocked: null };
     });
     if (summary?.blocked) {

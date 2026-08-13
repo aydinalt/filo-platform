@@ -20,7 +20,9 @@ import type {
   MobileDeviceCommand,
   MobileDeviceStatus,
   MobileEnrollment,
+  MobilePilotEvidenceType,
   MobilePilotPolicy,
+  MobilePilotRun,
   NotificationItem,
   NotificationRule,
   OperationalAlert,
@@ -82,6 +84,15 @@ const mobileHealthLabels: Record<MobileDeviceStatus["health"], string> = {
   permission_issue: "İzin sorunu",
   tracking_error: "Takip hatası",
   never_seen: "Heartbeat bekleniyor",
+};
+
+const mobilePilotEvidenceLabels: Record<MobilePilotEvidenceType, string> = {
+  permission_always: "Arka plan izni",
+  heartbeat_online: "Çevrimiçi heartbeat",
+  background_location: "Arka plan konumu",
+  offline_queue: "Çevrimdışı kuyruk",
+  queue_recovered: "Bağlantı sonrası eşitleme",
+  remote_control: "Uzaktan komut kanıtı",
 };
 
 function InviteAcceptance({ token, onLogin }: { token: string; onLogin: (user: SessionUser) => void }) {
@@ -723,6 +734,7 @@ function Dashboard({
   const [mobileEnrollments, setMobileEnrollments] = useState<MobileEnrollment[]>([]);
   const [mobileDeviceStatuses, setMobileDeviceStatuses] = useState<MobileDeviceStatus[]>([]);
   const [mobileDeviceCommands, setMobileDeviceCommands] = useState<MobileDeviceCommand[]>([]);
+  const [mobilePilotRuns, setMobilePilotRuns] = useState<MobilePilotRun[]>([]);
   const [mobilePilotPolicy, setMobilePilotPolicy] = useState<MobilePilotPolicy>({
     trackingEnabled: true,
     minimumAppVersion: null,
@@ -848,6 +860,7 @@ function Dashboard({
         setMobilePilotPolicy(policyResult.policy);
         setMinimumMobileVersion(policyResult.policy.minimumAppVersion ?? "");
         setMobileDeviceCommands((await api.mobileDeviceCommands()).commands);
+        setMobilePilotRuns((await api.mobilePilotRuns()).runs);
         setNotificationAnalytics((await api.notificationAnalytics()).analytics);
         setNotificationProviderHealth(await api.notificationProviderHealth());
         const providerIncidentResult =
@@ -1002,6 +1015,42 @@ function Dashboard({
       setMobileMessage("Cihaz komutu kuyruğa alındı; sonraki heartbeat sırasında uygulanacak.");
     } catch {
       setMobileMessage("Cihaz bulunamadı veya aynı türde bekleyen bir komut zaten var.");
+    }
+  }
+
+  async function startMobilePilotRun(credentialId: string) {
+    const notes = window.prompt(
+      "Pilot notu (opsiyonel)",
+      "Fiziksel cihaz arka plan ve çevrimdışı saha testi",
+    )?.trim();
+    if (notes === undefined) return;
+    try {
+      await api.startMobilePilotRun(credentialId, { notes: notes || null });
+      setMobilePilotRuns((await api.mobilePilotRuns()).runs);
+      setMobileMessage("Fiziksel cihaz pilotu başladı; kanıtlar otomatik toplanacak.");
+    } catch {
+      setMobileMessage("Cihaz bulunamadı veya bu cihazda zaten aktif bir pilot var.");
+    }
+  }
+
+  async function decideMobilePilotRun(
+    run: MobilePilotRun,
+    decision: "passed" | "failed" | "cancelled",
+  ) {
+    const notes = window.prompt(
+      decision === "passed" ? "Geçme kararı notu" : decision === "failed" ? "Kalma nedeni" : "İptal nedeni",
+      decision === "passed" ? "Zorunlu saha kanıtlarının tamamı doğrulandı." : "Fiziksel cihaz pilotu tamamlanamadı.",
+    )?.trim();
+    if (!notes) return;
+    try {
+      await api.decideMobilePilotRun(run.id, { decision, notes });
+      setMobilePilotRuns((await api.mobilePilotRuns()).runs);
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage(decision === "passed" ? "Pilot geçme kararı kaydedildi." : "Pilot kararı kaydedildi.");
+    } catch (caught) {
+      setMobileMessage(caught instanceof Error && caught.message === "PILOT_EVIDENCE_INCOMPLETE"
+        ? `Pilot henüz geçemez; ${run.readiness.missing.length} zorunlu kanıt eksik.`
+        : "Pilot kararı kaydedilemedi.");
     }
   }
 
@@ -2195,6 +2244,49 @@ function Dashboard({
             </section>
 
             <section className="table-card mobile-tracking">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">FİZİKSEL CİHAZ YAYIN KAPISI</p>
+                  <h2>Pilot kanıtı ve karar kaydı</h2>
+                </div>
+                <span className="status">6 zorunlu kanıt</span>
+              </div>
+              <p>
+                Arka plan izni, canlı heartbeat, arka plan konumu, çevrimdışı kuyruk,
+                bağlantı sonrası eşitleme ve uzaktan komut kanıtı sunucu tarafından otomatik toplanır.
+                Eksik kanıtla “Geçti” kararı verilemez.
+              </p>
+              <div className="stats-grid">
+                <article><small>AKTİF PİLOT</small><strong>{mobilePilotRuns.filter((run) => run.status === "running").length}</strong></article>
+                <article><small>GEÇEN</small><strong>{mobilePilotRuns.filter((run) => run.status === "passed").length}</strong></article>
+                <article><small>KANITI TAM</small><strong>{mobilePilotRuns.filter((run) => run.readiness.ready).length}</strong></article>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Araç / cihaz</th><th>Durum</th><th>Kanıt</th><th>Eksik</th><th>Başlangıç</th><th>İşlem</th></tr></thead>
+                  <tbody>
+                    {mobilePilotRuns.length === 0 && <tr><td colSpan={6}>Henüz fiziksel cihaz pilotu başlatılmadı.</td></tr>}
+                    {mobilePilotRuns.map((run) => <tr key={run.id}>
+                      <td>{run.vehiclePlate}<small>{run.driverName} · {run.deviceName} · {run.platform}</small></td>
+                      <td><span className="status">{run.status === "running" ? "Devam ediyor" : run.status === "passed" ? "Geçti" : run.status === "failed" ? "Kaldı" : "İptal"}</span></td>
+                      <td><strong>{run.readiness.passedCount}/{run.readiness.requiredCount}</strong><small>{run.evidence.map((item) => mobilePilotEvidenceLabels[item.type]).join(" · ") || "Kanıt bekleniyor"}</small></td>
+                      <td>{run.readiness.missing.length === 0 ? "Yok" : run.readiness.missing.map((type) => mobilePilotEvidenceLabels[type]).join(", ")}</td>
+                      <td>{new Date(run.startedAt).toLocaleString("tr-TR")}</td>
+                      <td><div className="table-actions">
+                        <button className="secondary" onClick={() => window.open(api.mobilePilotReportUrl(run.id), "_blank", "noopener,noreferrer")}>CSV</button>
+                        {run.status === "running" && ['owner', 'admin'].includes(user.role) && <>
+                          <button disabled={!run.readiness.ready} onClick={() => void decideMobilePilotRun(run, "passed")}>Geçti</button>
+                          <button className="danger" onClick={() => void decideMobilePilotRun(run, "failed")}>Kaldı</button>
+                          <button className="secondary" onClick={() => void decideMobilePilotRun(run, "cancelled")}>İptal</button>
+                        </>}
+                      </div></td>
+                    </tr>)}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="table-card mobile-tracking">
               <div className="section-head"><div><p className="eyebrow">KOMUT KANITI</p><h2>Son uzaktan cihaz komutları</h2></div></div>
               <div className="table-wrap">
                 <table>
@@ -2246,6 +2338,7 @@ function Dashboard({
                       <td>{device.pendingLocationCount}<small>{device.oldestQueuedAt ? `En eski: ${new Date(device.oldestQueuedAt).toLocaleTimeString("tr-TR")}` : "Bekleyen yok"}</small></td>
                       <td>{device.lastHeartbeatAt ? new Date(device.lastHeartbeatAt).toLocaleString("tr-TR") : "Henüz yok"}<small>{device.lastLocationAt ? `Konum: ${new Date(device.lastLocationAt).toLocaleTimeString("tr-TR")}` : "Konum bekleniyor"}</small></td>
                       <td><div className="table-actions">
+                        {!mobilePilotRuns.some((run) => run.credentialId === device.credentialId && run.status === "running") && <button onClick={() => void startMobilePilotRun(device.credentialId)}>Pilot</button>}
                         <button className="secondary" onClick={() => void sendMobileDeviceCommand(device.credentialId, "sync_now")}>Eşitle</button>
                         {device.pilotTrackingAllowed
                           ? <button className="danger" onClick={() => void sendMobileDeviceCommand(device.credentialId, "pause_tracking")}>Durdur</button>

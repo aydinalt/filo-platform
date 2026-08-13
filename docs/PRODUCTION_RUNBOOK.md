@@ -119,6 +119,12 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 16. Cihaza `Takibi durdur` komutu gönderin; işletim sistemi arka plan görevinin kapanmasını, cihaz pilot kilidinin kalıcı olmasını ve yeni konumun reddedilmesini doğrulayın.
 17. `Takibi yeniden aç` komutunu gönderin; önceki bekleyen durdurma komutunun `SUPERSEDED` olarak kapanmasını ve sürücünün takibi yeniden başlatabildiğini doğrulayın.
 18. Firma genelinde acil durdurmayı etkinleştirin; tüm pilot cihazların belirlenen heartbeat aralığında durduğunu ve API'nin istemci davranışından bağımsız olarak veri kabul etmediğini doğrulayın.
+19. Saha cihaz sağlığı tablosundan cihaz için yeni pilot başlatın; aynı cihazda ikinci aktif pilotun `409` ile engellendiğini doğrulayın.
+20. Arka plan izni verip vardiyayı başlatın; `Arka plan izni`, `Çevrimiçi heartbeat` ve `Arka plan konumu` kanıtlarının otomatik oluştuğunu doğrulayın.
+21. Uçak modunda konum biriktirip heartbeat gönderebilecek bağlantıya dönün; `Çevrimdışı kuyruk` kanıtının oluştuğunu doğrulayın.
+22. Kuyruğu tamamen eşitleyin; `Bağlantı sonrası eşitleme` kanıtı ve sıfır bekleyen konum durumunu doğrulayın.
+23. `Şimdi eşitle` veya güvenli durdurma komutunu cihazda uygulayın; `Uzaktan komut kanıtı` tamamlandıktan sonra sayacın 6/6 olduğunu doğrulayın.
+24. Eksik kanıtlı pilotta `Geçti` kararının engellendiğini, 6/6 pilotta owner/admin kararının audit kaydı ve indirilen CSV ile eşleştiğini doğrulayın.
 
 ## 8. Pilot açılış kapıları
 
@@ -134,5 +140,6 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 - Uçak modu kuyruğu, yeniden bağlantı eşitlemesi, credential rotasyonu ve uzaktan iptal kanıtlanmış.
 - Heartbeat, çevrimdışı cihaz, izin kaybı, düşük güç modu ve geciken kuyruk sinyalleri panelde kanıtlanmış.
 - Firma acil durdurma, minimum sürüm kapısı, cihaz durdurma/yeniden açma ve komut onayı fiziksel cihazlarda kanıtlanmış.
+- Her pilot cihaz için 6/6 sunucu kanıtlı pilot kaydı, owner/admin kararı ve CSV özeti arşivlenmiş.
 
 Bu kapılar tamamlanmadan gerçek kullanıcı veya sürekli saha verisi açılmaz.
