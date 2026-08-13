@@ -125,6 +125,11 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 22. Kuyruğu tamamen eşitleyin; `Bağlantı sonrası eşitleme` kanıtı ve sıfır bekleyen konum durumunu doğrulayın.
 23. `Şimdi eşitle` veya güvenli durdurma komutunu cihazda uygulayın; `Uzaktan komut kanıtı` tamamlandıktan sonra sayacın 6/6 olduğunu doğrulayın.
 24. Eksik kanıtlı pilotta `Geçti` kararının engellendiğini, 6/6 pilotta owner/admin kararının audit kaydı ve indirilen CSV ile eşleştiğini doğrulayın.
+25. v0.96 uygulamasını bir iPhone ve iki farklı Android/OEM modeline kaydedin; üretici/model alanlarının otomatik ve doğru geldiğini doğrulayın.
+26. Üç cihazda da yeni v0.96 pilotu açıp 6/6 kanıtla `Geçti` kararı verin; eski sürüm veya aynı Android modelinin matrisi tamamlamadığını doğrulayın.
+27. Owner hesabında üretim onayının yalnız `1/1 iPhone`, `2/2 Android` ve `2/2 farklı Android/OEM` ile açıldığını doğrulayın.
+28. Onay CSV’sini indirin; sürüm, cihaz matrisi ve pilot kimliklerinin ekrandaki snapshot ile eşleştiğini doğrulayın.
+29. Onayı gerekçeyle geri çekin; durumun audit kaydına geçtiğini ve aynı sürüm için yeni owner onayı gerektiğini doğrulayın.
 
 ## 8. Pilot açılış kapıları
 
@@ -141,5 +146,6 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 - Heartbeat, çevrimdışı cihaz, izin kaybı, düşük güç modu ve geciken kuyruk sinyalleri panelde kanıtlanmış.
 - Firma acil durdurma, minimum sürüm kapısı, cihaz durdurma/yeniden açma ve komut onayı fiziksel cihazlarda kanıtlanmış.
 - Her pilot cihaz için 6/6 sunucu kanıtlı pilot kaydı, owner/admin kararı ve CSV özeti arşivlenmiş.
+- Aynı sürümde 1 iPhone + 2 farklı Android/OEM pilot matrisi tamamlanmış ve owner üretim onayı arşivlenmiş.
 
 Bu kapılar tamamlanmadan gerçek kullanıcı veya sürekli saha verisi açılmaz.

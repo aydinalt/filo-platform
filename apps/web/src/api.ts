@@ -2,7 +2,7 @@ import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, No
 import type { FleetReport } from "@filo/contracts";
 import type { NotificationAnalytics, NotificationArchiveAttempt, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention, NotificationRetentionSettings } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
-import type { AcceptMemberInvitationInput, AccountSession, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileDeviceCommandInput, CreateMobileEnrollmentInput, CreateMobilePilotRunInput, DecideMobilePilotRunInput, MemberInvitation, MobileDeviceCommand, MobileDeviceStatus, MobileEnrollment, MobilePilotEvidenceType, MobilePilotPolicy, MobilePilotRun, RegisterTenantInput, RequestPasswordResetInput, UpdateMobilePilotPolicyInput } from "@filo/contracts";
+import type { AcceptMemberInvitationInput, AccountSession, ApproveMobilePilotReleaseInput, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileDeviceCommandInput, CreateMobileEnrollmentInput, CreateMobilePilotRunInput, DecideMobilePilotRunInput, MemberInvitation, MobileDeviceCommand, MobileDeviceStatus, MobileEnrollment, MobilePilotCohortReadiness, MobilePilotEvidenceType, MobilePilotPolicy, MobilePilotReleaseApproval, MobilePilotRun, RegisterTenantInput, RequestPasswordResetInput, RevokeMobilePilotReleaseInput, UpdateMobilePilotPolicyInput } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -48,6 +48,17 @@ export const api = {
       method: "PATCH", body: JSON.stringify(input)
     }),
   mobilePilotReportUrl: (runId: string) => `${API_URL}/api/mobile/pilot-runs/${runId}/report.csv`,
+  mobilePilotRelease: (version: string) =>
+    request<{ readiness: MobilePilotCohortReadiness; approvals: MobilePilotReleaseApproval[] }>(`/api/mobile/pilot-release?version=${encodeURIComponent(version)}`),
+  approveMobilePilotRelease: (input: ApproveMobilePilotReleaseInput) =>
+    request<{ readiness: MobilePilotCohortReadiness; approval: MobilePilotReleaseApproval }>("/api/mobile/pilot-release/approve", {
+      method: "POST", body: JSON.stringify(input)
+    }),
+  revokeMobilePilotRelease: (approvalId: string, input: RevokeMobilePilotReleaseInput) =>
+    request<void>(`/api/mobile/pilot-release/${approvalId}/revoke`, {
+      method: "POST", body: JSON.stringify(input)
+    }),
+  mobilePilotReleaseReportUrl: (approvalId: string) => `${API_URL}/api/mobile/pilot-release/${approvalId}/report.csv`,
   createMobileDeviceCommand: (credentialId: string, input: CreateMobileDeviceCommandInput) =>
     request<{ command: MobileDeviceCommand }>(`/api/mobile/devices/${credentialId}/commands`, {
       method: "POST", body: JSON.stringify(input)

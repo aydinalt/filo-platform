@@ -103,6 +103,8 @@ export async function mobileRoutes(app: FastifyInstance) {
         `SELECT credential.id AS "credentialId", credential.assignment_id AS "assignmentId",
                 vehicle.plate AS "vehiclePlate", driver.full_name AS "driverName",
                 credential.device_name AS "deviceName", credential.platform,
+                credential.device_manufacturer AS "deviceManufacturer",
+                credential.device_model AS "deviceModel",
                 credential.app_version AS "appVersion", credential.os_version AS "osVersion",
                 credential.battery_percent AS "batteryPercent", credential.low_power_mode AS "lowPowerMode",
                 credential.network_type AS "networkType", credential.permission_state AS permission,
@@ -357,11 +359,13 @@ export async function mobileRoutes(app: FastifyInstance) {
       `SELECT credential_id AS "credentialId", tenant_id AS "tenantId",
               actor_user_id AS "actorUserId", assignment_id AS "assignmentId",
               vehicle_plate AS "vehiclePlate", driver_name AS "driverName",
-              device_name AS "deviceName", platform, expires_at AS "expiresAt"
-       FROM claim_mobile_enrollment($1,$2,$3,$4,$5,$6)`,
+              device_name AS "deviceName", device_manufacturer AS "deviceManufacturer",
+              device_model AS "deviceModel", platform, expires_at AS "expiresAt"
+       FROM claim_mobile_enrollment($1,$2,$3,$4,$5,$6,$7,$8)`,
       [
         enrollment.id, hashMobileSecret(enrollment.secret), credentialId,
         hashMobileSecret(credentialSecret), parsed.data.platform, parsed.data.deviceName,
+        parsed.data.deviceManufacturer, parsed.data.deviceModel,
       ],
     );
     const principal = result.rows[0];

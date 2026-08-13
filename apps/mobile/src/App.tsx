@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import NetInfo from "@react-native-community/netinfo";
+import * as Device from "expo-device";
 import { Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Pressable } from "react-native";
 import type { MobilePrincipal } from "@filo/contracts";
@@ -13,7 +14,7 @@ export default function App() {
   const [credential, setCredential] = useState<string | null>(null);
   const [principal, setPrincipal] = useState<MobilePrincipal | null>(null);
   const [enrollmentToken, setEnrollmentToken] = useState("");
-  const [deviceName, setDeviceName] = useState(`${Platform.OS} telefon`);
+  const [deviceName, setDeviceName] = useState(Device.modelName ?? `${Platform.OS} telefon`);
   const [status, setStatus] = useState("Hazır");
   const [busy, setBusy] = useState(false);
   const [queued, setQueued] = useState(0);
@@ -94,6 +95,8 @@ export default function App() {
       token: enrollmentToken.trim(),
       platform: Platform.OS === "ios" ? "ios" : "android",
       deviceName: deviceName.trim(),
+      deviceManufacturer: Device.manufacturer ?? (Platform.OS === "ios" ? "Apple" : "unknown"),
+      deviceModel: Device.modelName ?? Device.deviceName ?? "unknown",
     });
     await credentialStore.write(result.credential);
     setCredential(result.credential);

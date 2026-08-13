@@ -190,3 +190,19 @@ records in the same tenant boundary; a pass is rejected until all six exist. Fai
 and cancellation do not bypass or alter collected evidence. Start and decision events
 are auditable, and the CSV report is generated from the same server-side records shown
 in the operational panel.
+
+## Multi-device pilot cohort and production approval
+
+Enrollment records a bounded manufacturer/model label reported by the native device
+runtime. A successful pilot decision copies the current application version and device
+identity into the pilot run, so later application upgrades or credential changes cannot
+rewrite qualification history. Older passed runs without this decision-time snapshot do
+not count toward a production cohort.
+
+The release assessor filters passed runs by the exact target version and requires one
+iOS result, two Android results and two distinct normalized Android manufacturer/model
+fingerprints. The same pure assessment is used by the read view and owner approval
+transaction. Approval takes a tenant/version advisory lock, recomputes readiness and
+stores the full eligible device matrix as JSON. A database trigger makes the version,
+notes, approver, approval time and snapshot immutable; only an explicit owner revocation
+can close it. The unique partial index permits one active approval per tenant/version.

@@ -20,8 +20,10 @@ import type {
   MobileDeviceCommand,
   MobileDeviceStatus,
   MobileEnrollment,
+  MobilePilotCohortReadiness,
   MobilePilotEvidenceType,
   MobilePilotPolicy,
+  MobilePilotReleaseApproval,
   MobilePilotRun,
   NotificationItem,
   NotificationRule,
@@ -94,6 +96,8 @@ const mobilePilotEvidenceLabels: Record<MobilePilotEvidenceType, string> = {
   queue_recovered: "Bağlantı sonrası eşitleme",
   remote_control: "Uzaktan komut kanıtı",
 };
+
+const MOBILE_RELEASE_TARGET = "0.96.0";
 
 function InviteAcceptance({ token, onLogin }: { token: string; onLogin: (user: SessionUser) => void }) {
   const [preview, setPreview] = useState<{ tenantName: string; email: string; role: string; expiresAt: string } | null>(null);
@@ -735,6 +739,19 @@ function Dashboard({
   const [mobileDeviceStatuses, setMobileDeviceStatuses] = useState<MobileDeviceStatus[]>([]);
   const [mobileDeviceCommands, setMobileDeviceCommands] = useState<MobileDeviceCommand[]>([]);
   const [mobilePilotRuns, setMobilePilotRuns] = useState<MobilePilotRun[]>([]);
+  const [mobilePilotCohort, setMobilePilotCohort] = useState<MobilePilotCohortReadiness>({
+    targetVersion: MOBILE_RELEASE_TARGET,
+    iosPassed: 0,
+    androidPassed: 0,
+    distinctAndroidModels: 0,
+    requiredIos: 1,
+    requiredAndroid: 2,
+    requiredDistinctAndroidModels: 2,
+    ready: false,
+    missing: [],
+    devices: [],
+  });
+  const [mobilePilotApprovals, setMobilePilotApprovals] = useState<MobilePilotReleaseApproval[]>([]);
   const [mobilePilotPolicy, setMobilePilotPolicy] = useState<MobilePilotPolicy>({
     trackingEnabled: true,
     minimumAppVersion: null,
@@ -861,6 +878,9 @@ function Dashboard({
         setMinimumMobileVersion(policyResult.policy.minimumAppVersion ?? "");
         setMobileDeviceCommands((await api.mobileDeviceCommands()).commands);
         setMobilePilotRuns((await api.mobilePilotRuns()).runs);
+        const releaseResult = await api.mobilePilotRelease(MOBILE_RELEASE_TARGET);
+        setMobilePilotCohort(releaseResult.readiness);
+        setMobilePilotApprovals(releaseResult.approvals);
         setNotificationAnalytics((await api.notificationAnalytics()).analytics);
         setNotificationProviderHealth(await api.notificationProviderHealth());
         const providerIncidentResult =
@@ -1054,6 +1074,41 @@ function Dashboard({
     }
   }
 
+  async function approveMobilePilotRelease() {
+    const notes = window.prompt(
+      `${MOBILE_RELEASE_TARGET} üretim onayı notu`,
+      "1 iPhone ve 2 farklı Android/OEM modeli saha pilotunu geçti.",
+    )?.trim();
+    if (!notes) return;
+    try {
+      await api.approveMobilePilotRelease({ targetVersion: MOBILE_RELEASE_TARGET, notes });
+      const result = await api.mobilePilotRelease(MOBILE_RELEASE_TARGET);
+      setMobilePilotCohort(result.readiness);
+      setMobilePilotApprovals(result.approvals);
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage(`${MOBILE_RELEASE_TARGET} üretim onayı kaydedildi.`);
+    } catch (caught) {
+      setMobileMessage(caught instanceof Error && caught.message === "MOBILE_PILOT_COHORT_INCOMPLETE"
+        ? "Üretim onayı verilemez; çoklu cihaz pilot matrisi eksik."
+        : "Bu sürüm zaten onaylı veya onay kaydedilemedi.");
+    }
+  }
+
+  async function revokeMobilePilotRelease(approval: MobilePilotReleaseApproval) {
+    const reason = window.prompt("Üretim onayını geri çekme nedeni")?.trim();
+    if (!reason) return;
+    try {
+      await api.revokeMobilePilotRelease(approval.id, { reason });
+      const result = await api.mobilePilotRelease(MOBILE_RELEASE_TARGET);
+      setMobilePilotCohort(result.readiness);
+      setMobilePilotApprovals(result.approvals);
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage("Üretim onayı geri çekildi; yeniden onay verilene kadar yayın kapalıdır.");
+    } catch {
+      setMobileMessage("Aktif üretim onayı bulunamadı veya geri çekilemedi.");
+    }
+  }
+
   async function changeStatus(vehicle: Vehicle, status: Vehicle["status"]) {
     setError("");
     try {
@@ -1114,6 +1169,9 @@ function Dashboard({
   }
 
   const active = vehicles.filter((v) => v.status === "active").length;
+  const activeMobileReleaseApproval = mobilePilotApprovals.find((approval) =>
+    approval.targetVersion === MOBILE_RELEASE_TARGET && approval.status === "approved",
+  );
   async function addDriver() {
     const fullName = window.prompt("Sürücü adı soyadı");
     if (!fullName) return;
@@ -2246,6 +2304,56 @@ function Dashboard({
             <section className="table-card mobile-tracking">
               <div className="section-head">
                 <div>
+                  <p className="eyebrow">ÇOKLU CİHAZ ÜRETİM KAPISI</p>
+                  <h2>{MOBILE_RELEASE_TARGET} pilot grubu</h2>
+                </div>
+                <span className="status">{activeMobileReleaseApproval ? "Üretim onaylı" : mobilePilotCohort.ready ? "Onaya hazır" : "Pilot eksik"}</span>
+              </div>
+              <p>
+                Üretim onayı için aynı sürümde 6/6 kanıtla geçmiş en az bir iPhone ve
+                iki farklı Android/OEM modeli gerekir. Onay, cihaz matrisinin değiştirilemez
+                anlık görüntüsünü saklar.
+              </p>
+              <div className="stats-grid">
+                <article><small>IPHONE</small><strong>{mobilePilotCohort.iosPassed}/{mobilePilotCohort.requiredIos}</strong></article>
+                <article><small>ANDROID</small><strong>{mobilePilotCohort.androidPassed}/{mobilePilotCohort.requiredAndroid}</strong></article>
+                <article><small>FARKLI ANDROID/OEM</small><strong>{mobilePilotCohort.distinctAndroidModels}/{mobilePilotCohort.requiredDistinctAndroidModels}</strong></article>
+              </div>
+              {mobilePilotCohort.missing.length > 0 && <div className="pilot-missing">
+                <strong>Eksik pilot matrisi</strong>
+                <span>{mobilePilotCohort.missing.join(" · ")}</span>
+              </div>}
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Platform</th><th>Üretici / model</th><th>Sürüm</th><th>Pilot tamamlandı</th></tr></thead>
+                  <tbody>
+                    {mobilePilotCohort.devices.length === 0 && <tr><td colSpan={4}>Bu sürüm için geçmiş fiziksel cihaz pilotu yok.</td></tr>}
+                    {mobilePilotCohort.devices.map((device) => <tr key={device.runId}>
+                      <td>{device.platform === "ios" ? "iPhone" : "Android"}</td>
+                      <td>{device.deviceManufacturer}<small>{device.deviceModel}</small></td>
+                      <td>{device.appVersion}</td>
+                      <td>{new Date(device.completedAt).toLocaleString("tr-TR")}</td>
+                    </tr>)}
+                  </tbody>
+                </table>
+              </div>
+              {user.role === "owner" && <div className="modal-actions">
+                {!activeMobileReleaseApproval
+                  ? <button disabled={!mobilePilotCohort.ready} onClick={() => void approveMobilePilotRelease()}>Üretim için onayla</button>
+                  : <>
+                    <button className="secondary" onClick={() => window.open(api.mobilePilotReleaseReportUrl(activeMobileReleaseApproval.id), "_blank", "noopener,noreferrer")}>Onay CSV’si</button>
+                    <button className="danger" onClick={() => void revokeMobilePilotRelease(activeMobileReleaseApproval)}>Onayı geri çek</button>
+                  </>}
+              </div>}
+              {activeMobileReleaseApproval && <div className="approval-banner">
+                <strong>{activeMobileReleaseApproval.targetVersion} onaylandı</strong>
+                <span>{new Date(activeMobileReleaseApproval.approvedAt).toLocaleString("tr-TR")} · {activeMobileReleaseApproval.notes}</span>
+              </div>}
+            </section>
+
+            <section className="table-card mobile-tracking">
+              <div className="section-head">
+                <div>
                   <p className="eyebrow">FİZİKSEL CİHAZ YAYIN KAPISI</p>
                   <h2>Pilot kanıtı ve karar kaydı</h2>
                 </div>
@@ -2267,7 +2375,7 @@ function Dashboard({
                   <tbody>
                     {mobilePilotRuns.length === 0 && <tr><td colSpan={6}>Henüz fiziksel cihaz pilotu başlatılmadı.</td></tr>}
                     {mobilePilotRuns.map((run) => <tr key={run.id}>
-                      <td>{run.vehiclePlate}<small>{run.driverName} · {run.deviceName} · {run.platform}</small></td>
+                      <td>{run.vehiclePlate}<small>{run.driverName} · {run.deviceName} · {run.deviceManufacturer} {run.deviceModel} · {run.platform}</small></td>
                       <td><span className="status">{run.status === "running" ? "Devam ediyor" : run.status === "passed" ? "Geçti" : run.status === "failed" ? "Kaldı" : "İptal"}</span></td>
                       <td><strong>{run.readiness.passedCount}/{run.readiness.requiredCount}</strong><small>{run.evidence.map((item) => mobilePilotEvidenceLabels[item.type]).join(" · ") || "Kanıt bekleniyor"}</small></td>
                       <td>{run.readiness.missing.length === 0 ? "Yok" : run.readiness.missing.map((type) => mobilePilotEvidenceLabels[type]).join(", ")}</td>

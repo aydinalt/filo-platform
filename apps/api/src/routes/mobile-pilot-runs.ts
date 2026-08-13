@@ -48,7 +48,11 @@ async function readRuns(tenantId: string, actorUserId: string) {
       client.query<RunRow>(
         `SELECT run.id, run.credential_id AS "credentialId",
                 vehicle.plate AS "vehiclePlate", driver.full_name AS "driverName",
-                credential.device_name AS "deviceName", credential.platform,
+                credential.device_name AS "deviceName",
+                COALESCE(run.qualified_device_manufacturer, credential.device_manufacturer) AS "deviceManufacturer",
+                COALESCE(run.qualified_device_model, credential.device_model) AS "deviceModel",
+                COALESCE(run.qualified_app_version, credential.app_version) AS "appVersion",
+                credential.platform,
                 run.status, run.notes, run.started_at AS "startedAt",
                 run.completed_at AS "completedAt"
          FROM mobile_pilot_runs run
@@ -134,13 +138,25 @@ export async function mobilePilotRunRoutes(app: FastifyInstance) {
     }
     const user = request.sessionUser;
     const result = await withTenantTransaction(user.tenantId, user.id, async (client) => {
-      const current = await client.query<{ status: string }>(
-        `SELECT status FROM mobile_pilot_runs
-         WHERE tenant_id = $1 AND id = $2
+      const current = await client.query<{
+        status: string;
+        appVersion: string | null;
+        deviceManufacturer: string;
+        deviceModel: string;
+      }>(
+        `SELECT run.status, credential.app_version AS "appVersion",
+                credential.device_manufacturer AS "deviceManufacturer",
+                credential.device_model AS "deviceModel"
+         FROM mobile_pilot_runs run
+         JOIN mobile_access_credentials credential
+           ON credential.id = run.credential_id AND credential.tenant_id = run.tenant_id
+         WHERE run.tenant_id = $1 AND run.id = $2
          FOR UPDATE`,
         [user.tenantId, runId],
       );
-      if (current.rows[0]?.status !== "running") return { updated: false, missing: null };
+      if (current.rows[0]?.status !== "running") {
+        return { updated: false, missing: null, metadataIncomplete: false };
+      }
       const evidence = await client.query<{ type: MobilePilotEvidenceType }>(
         `SELECT evidence_type AS type FROM mobile_pilot_evidence
          WHERE tenant_id = $1 AND run_id = $2`,
@@ -148,26 +164,45 @@ export async function mobilePilotRunRoutes(app: FastifyInstance) {
       );
       const readiness = assessMobilePilotEvidence(evidence.rows.map((item) => item.type));
       if (parsed.data.decision === "passed" && !readiness.ready) {
-        return { updated: false, missing: readiness.missing };
+        return { updated: false, missing: readiness.missing, metadataIncomplete: false };
+      }
+      const device = current.rows[0]!;
+      const metadataIncomplete = parsed.data.decision === "passed" && (
+        !device.appVersion?.match(/^\d+\.\d+\.\d+$/u)
+        || device.deviceManufacturer.toLocaleLowerCase("en-US") === "unknown"
+        || device.deviceModel.toLocaleLowerCase("en-US") === "unknown"
+      );
+      if (metadataIncomplete) {
+        return { updated: false, missing: null, metadataIncomplete: true };
       }
       const updated = await client.query(
         `UPDATE mobile_pilot_runs
-         SET status = $3, notes = $4, completed_by = $5, completed_at = now()
+         SET status = $3, notes = $4, completed_by = $5, completed_at = now(),
+             qualified_app_version = CASE WHEN $3 = 'passed' THEN $6 ELSE qualified_app_version END,
+             qualified_device_manufacturer = CASE WHEN $3 = 'passed' THEN $7 ELSE qualified_device_manufacturer END,
+             qualified_device_model = CASE WHEN $3 = 'passed' THEN $8 ELSE qualified_device_model END
          WHERE tenant_id = $1 AND id = $2 AND status = 'running'`,
-        [user.tenantId, runId, parsed.data.decision, parsed.data.notes, user.id],
+        [
+          user.tenantId, runId, parsed.data.decision, parsed.data.notes, user.id,
+          device.appVersion, device.deviceManufacturer, device.deviceModel,
+        ],
       );
-      if (!updated.rowCount) return { updated: false, missing: null };
+      if (!updated.rowCount) return { updated: false, missing: null, metadataIncomplete: false };
       await client.query(
         `INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
          VALUES($1,$2,'mobile.pilot_run_decided','mobile_pilot_run',$3,
                 jsonb_build_object('decision',$4,'notes',$5,'evidenceCount',$6))`,
         [user.tenantId, user.id, runId, parsed.data.decision, parsed.data.notes, readiness.passedCount],
       );
-      return { updated: true, missing: null };
+      return { updated: true, missing: null, metadataIncomplete: false };
     });
     if (!result.updated) {
-      return reply.code(result.missing ? 409 : 404).send({
-        error: result.missing ? "PILOT_EVIDENCE_INCOMPLETE" : "RUNNING_PILOT_NOT_FOUND",
+      return reply.code(result.missing || result.metadataIncomplete ? 409 : 404).send({
+        error: result.missing
+          ? "PILOT_EVIDENCE_INCOMPLETE"
+          : result.metadataIncomplete
+            ? "PILOT_DEVICE_METADATA_INCOMPLETE"
+            : "RUNNING_PILOT_NOT_FOUND",
         missing: result.missing ?? undefined,
       });
     }

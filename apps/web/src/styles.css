@@ -41,3 +41,6 @@ button.danger{background:#b42318;color:#fff}.table-actions{display:flex;gap:6px}
 @media(max-width:760px){.table-actions{flex-direction:column}.table-actions button{width:100%}}
 /* v0.95 physical-device pilot evidence */
 .mobile-tracking td small{display:block;margin-top:6px;color:#738096;line-height:1.45}.mobile-tracking td strong{font-family:Manrope;font-size:16px}.mobile-tracking .table-actions button:disabled{background:#cfd7df;color:#6b7789;cursor:not-allowed}
+/* v0.96 multi-device pilot cohort approval */
+.pilot-missing,.approval-banner{display:flex;justify-content:space-between;gap:18px;padding:14px 24px;border-bottom:1px solid #f0d6a5;background:#fff8ea;color:#76531a;font-size:13px}.approval-banner{border-color:#b9dfd6;background:#edf9f5;color:#195f51}.approval-banner span,.pilot-missing span{text-align:right}.mobile-tracking>.approval-banner{border-top:1px solid #b9dfd6;border-bottom:0}
+@media(max-width:760px){.pilot-missing,.approval-banner{flex-direction:column}.approval-banner span,.pilot-missing span{text-align:left}}

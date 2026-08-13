@@ -12,9 +12,10 @@ export async function requireMobileCredential(request: FastifyRequest, reply: Fa
 
   const result = await pool.query<PrincipalRow>(
     `SELECT credential_id AS "credentialId", tenant_id AS "tenantId",
-            actor_user_id AS "actorUserId", assignment_id AS "assignmentId",
-            vehicle_plate AS "vehiclePlate", driver_name AS "driverName",
-            device_name AS "deviceName", platform, expires_at AS "expiresAt"
+         actor_user_id AS "actorUserId", assignment_id AS "assignmentId",
+         vehicle_plate AS "vehiclePlate", driver_name AS "driverName",
+         device_name AS "deviceName", device_manufacturer AS "deviceManufacturer",
+         device_model AS "deviceModel", platform, expires_at AS "expiresAt"
      FROM authenticate_mobile_credential($1,$2)`,
     [parsed.id, hashMobileSecret(parsed.secret)],
   );

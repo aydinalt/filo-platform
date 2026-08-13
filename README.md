@@ -1,4 +1,4 @@
-# Filo Platform V1 — fiziksel cihaz pilot kanıtı v0.95
+# Filo Platform V1 — çoklu cihaz üretim onayı v0.96
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -45,6 +45,12 @@ plan izni, canlı heartbeat, arka plan konumu, çevrimdışı kuyruk, yeniden ba
 eşitlemesi ve uzaktan komut sonucu yalnız kimliği doğrulanmış mobil çalışma zamanı
 üzerinden kanıt olarak toplanır. Altı kanıt tamamlanmadan pilot “Geçti” olarak
 kapatılamaz; kararlar audit geçmişine yazılır ve CSV özeti indirilebilir.
+
+v0.96, mobil kayıt sırasında cihaz üretici/model bilgisini otomatik ekler ve
+geçmiş pilotu tamamlandığı uygulama sürümüyle sabitler. Üretim onayı aynı sürümde
+6/6 kanıtla geçmiş en az bir iPhone, iki Android ve iki farklı Android/OEM modeli
+gerektirir. Yalnız owner onay verebilir veya geri çekebilir; onay matrisi
+değiştirilemez snapshot, audit kaydı ve CSV raporu olarak saklanır.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.

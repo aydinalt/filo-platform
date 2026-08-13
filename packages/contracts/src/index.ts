@@ -218,6 +218,8 @@ export const claimMobileEnrollmentSchema = z.object({
   token: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[A-Za-z0-9_-]{43}$/iu),
   platform: z.enum(["android", "ios"]),
   deviceName: z.string().trim().min(2).max(100),
+  deviceManufacturer: z.string().trim().min(1).max(80).default("unknown"),
+  deviceModel: z.string().trim().min(1).max(120).default("unknown"),
 });
 
 export const mobileLocationBatchSchema = z.object({
@@ -282,6 +284,15 @@ export const decideMobilePilotRunSchema = z.object({
   notes: z.string().trim().min(3).max(1000),
 });
 
+export const approveMobilePilotReleaseSchema = z.object({
+  targetVersion: z.string().trim().regex(/^\d+\.\d+\.\d+$/u),
+  notes: z.string().trim().min(3).max(1000),
+});
+
+export const revokeMobilePilotReleaseSchema = z.object({
+  reason: z.string().trim().min(3).max(1000),
+});
+
 export type CreateMobileEnrollmentInput = z.infer<typeof createMobileEnrollmentSchema>;
 export type ClaimMobileEnrollmentInput = z.infer<typeof claimMobileEnrollmentSchema>;
 export type MobileLocationBatchInput = z.infer<typeof mobileLocationBatchSchema>;
@@ -292,6 +303,8 @@ export type CreateMobileDeviceCommandInput = z.infer<typeof createMobileDeviceCo
 export type AcknowledgeMobileDeviceCommandInput = z.infer<typeof acknowledgeMobileDeviceCommandSchema>;
 export type CreateMobilePilotRunInput = z.infer<typeof createMobilePilotRunSchema>;
 export type DecideMobilePilotRunInput = z.infer<typeof decideMobilePilotRunSchema>;
+export type ApproveMobilePilotReleaseInput = z.infer<typeof approveMobilePilotReleaseSchema>;
+export type RevokeMobilePilotReleaseInput = z.infer<typeof revokeMobilePilotReleaseSchema>;
 
 export type MobileEnrollment = {
   id: string;
@@ -313,6 +326,8 @@ export type MobilePrincipal = {
   vehiclePlate: string;
   driverName: string;
   deviceName: string;
+  deviceManufacturer: string;
+  deviceModel: string;
   platform: "android" | "ios";
   expiresAt: string;
 };
@@ -332,6 +347,8 @@ export type MobileDeviceStatus = {
   vehiclePlate: string;
   driverName: string;
   deviceName: string;
+  deviceManufacturer: string;
+  deviceModel: string;
   platform: "android" | "ios";
   health: MobileDeviceHealth;
   appVersion: string | null;
@@ -397,6 +414,9 @@ export type MobilePilotRun = {
   vehiclePlate: string;
   driverName: string;
   deviceName: string;
+  deviceManufacturer: string;
+  deviceModel: string;
+  appVersion: string | null;
   platform: "android" | "ios";
   status: "running" | "passed" | "failed" | "cancelled";
   notes: string | null;
@@ -409,6 +429,39 @@ export type MobilePilotRun = {
     missing: MobilePilotEvidenceType[];
     ready: boolean;
   };
+};
+
+export type MobilePilotCohortDevice = {
+  runId: string;
+  platform: "android" | "ios";
+  deviceManufacturer: string;
+  deviceModel: string;
+  appVersion: string;
+  completedAt: string;
+};
+
+export type MobilePilotCohortReadiness = {
+  targetVersion: string;
+  iosPassed: number;
+  androidPassed: number;
+  distinctAndroidModels: number;
+  requiredIos: number;
+  requiredAndroid: number;
+  requiredDistinctAndroidModels: number;
+  ready: boolean;
+  missing: string[];
+  devices: MobilePilotCohortDevice[];
+};
+
+export type MobilePilotReleaseApproval = {
+  id: string;
+  targetVersion: string;
+  status: "approved" | "revoked";
+  notes: string;
+  snapshot: MobilePilotCohortReadiness;
+  approvedAt: string;
+  revokedAt: string | null;
+  revokeReason: string | null;
 };
 
 export type LatestLocation = {
