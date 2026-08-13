@@ -206,3 +206,23 @@ transaction. Approval takes a tenant/version advisory lock, recomputes readiness
 stores the full eligible device matrix as JSON. A database trigger makes the version,
 notes, approver, approval time and snapshot immutable; only an explicit owner revocation
 can close it. The unique partial index permits one active approval per tenant/version.
+
+## Staged mobile release rollout
+
+A rollout can be created only for an active owner-approved physical pilot release.
+One tenant/version pair has one rollout record. Active mobile credentials are ranked by
+a SHA-256-derived stable bucket and credential identity; the first stage still selects at
+least one device in a small fleet. Expanding from 10 to 25, 50 and 100 percent preserves
+the earlier cohort instead of reshuffling devices.
+
+The server assesses only selected devices reporting the exact target version. Healthy and
+idle runtimes are operational; offline, delayed, permission and tracking failures count
+against the bounded unhealthy percentage. Advancement is sequential and rejected unless
+every selected device has a target-version heartbeat and the unhealthy rate is at or below
+the rollout threshold. Completion applies the same gate at 100 percent.
+
+Owner transitions lock the rollout row, recheck the active production approval and append
+the observed health snapshot to a separate forced-RLS event table. Start, advance, pause,
+resume, completion and rollback are tenant-audited. Rollback closes the plan while retaining
+its stable-device assignments and full decision history; it never deletes qualification or
+production approval evidence.

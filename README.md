@@ -1,4 +1,4 @@
-# Filo Platform V1 — çoklu cihaz üretim onayı v0.96
+# Filo Platform V1 — kontrollü mobil dağıtım v0.97
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -51,6 +51,12 @@ geçmiş pilotu tamamlandığı uygulama sürümüyle sabitler. Üretim onayı a
 6/6 kanıtla geçmiş en az bir iPhone, iki Android ve iki farklı Android/OEM modeli
 gerektirir. Yalnız owner onay verebilir veya geri çekebilir; onay matrisi
 değiştirilemez snapshot, audit kaydı ve CSV raporu olarak saklanır.
+
+v0.97, owner onaylı mobil sürümü doğrudan tüm filoya açmak yerine kararlı cihaz
+gruplarıyla %10, %25, %50 ve %100 aşamalarında dağıtır. Her büyütme seçili cihazların
+hedef sürüm heartbeat’i ve tenant tarafından belirlenen sağlık eşiğiyle korunur.
+Dağıtım duraklatılabilir, devam ettirilebilir veya önceki kararlı sürüme geri alınabilir;
+her karar anlık sağlık kanıtıyla değiştirilemez olay geçmişine yazılır.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.

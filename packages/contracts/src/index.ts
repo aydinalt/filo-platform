@@ -293,6 +293,26 @@ export const revokeMobilePilotReleaseSchema = z.object({
   reason: z.string().trim().min(3).max(1000),
 });
 
+export const createMobileReleaseRolloutSchema = z.object({
+  targetVersion: z.string().trim().regex(/^\d+\.\d+\.\d+$/u),
+  previousStableVersion: z.string().trim().regex(/^\d+\.\d+\.\d+$/u),
+  maxUnhealthyPercent: z.number().int().min(0).max(50).default(10),
+  notes: z.string().trim().min(3).max(1000),
+}).refine((value) => value.targetVersion !== value.previousStableVersion, {
+  message: "Target and stable versions must differ",
+  path: ["previousStableVersion"],
+});
+
+export const mobileReleaseRolloutActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("start"), reason: z.string().trim().min(3).max(1000) }),
+  z.object({
+    action: z.literal("advance"),
+    targetPercentage: z.union([z.literal(25), z.literal(50), z.literal(100)]),
+    reason: z.string().trim().min(3).max(1000),
+  }),
+  z.object({ action: z.enum(["pause", "resume", "complete", "rollback"]), reason: z.string().trim().min(3).max(1000) }),
+]);
+
 export type CreateMobileEnrollmentInput = z.infer<typeof createMobileEnrollmentSchema>;
 export type ClaimMobileEnrollmentInput = z.infer<typeof claimMobileEnrollmentSchema>;
 export type MobileLocationBatchInput = z.infer<typeof mobileLocationBatchSchema>;
@@ -305,6 +325,8 @@ export type CreateMobilePilotRunInput = z.infer<typeof createMobilePilotRunSchem
 export type DecideMobilePilotRunInput = z.infer<typeof decideMobilePilotRunSchema>;
 export type ApproveMobilePilotReleaseInput = z.infer<typeof approveMobilePilotReleaseSchema>;
 export type RevokeMobilePilotReleaseInput = z.infer<typeof revokeMobilePilotReleaseSchema>;
+export type CreateMobileReleaseRolloutInput = z.infer<typeof createMobileReleaseRolloutSchema>;
+export type MobileReleaseRolloutActionInput = z.infer<typeof mobileReleaseRolloutActionSchema>;
 
 export type MobileEnrollment = {
   id: string;
@@ -462,6 +484,56 @@ export type MobilePilotReleaseApproval = {
   approvedAt: string;
   revokedAt: string | null;
   revokeReason: string | null;
+};
+
+export type MobileReleaseRolloutDevice = {
+  credentialId: string;
+  deviceName: string;
+  platform: "android" | "ios";
+  deviceManufacturer: string;
+  deviceModel: string;
+  appVersion: string | null;
+  health: MobileDeviceHealth;
+  rolloutBucket: number;
+  eligible: boolean;
+};
+
+export type MobileReleaseRolloutHealth = {
+  eligibleDeviceCount: number;
+  observedTargetDevices: number;
+  healthyTargetDevices: number;
+  unhealthyTargetDevices: number;
+  unhealthyPercent: number;
+  maxUnhealthyPercent: number;
+  readyToAdvance: boolean;
+  missing: string[];
+};
+
+export type MobileReleaseRolloutEvent = {
+  id: string;
+  action: "created" | "started" | "advanced" | "paused" | "resumed" | "completed" | "rolled_back";
+  fromPercentage: number | null;
+  toPercentage: number | null;
+  reason: string;
+  healthSnapshot: MobileReleaseRolloutHealth;
+  createdAt: string;
+};
+
+export type MobileReleaseRollout = {
+  id: string;
+  approvalId: string;
+  targetVersion: string;
+  previousStableVersion: string;
+  status: "draft" | "active" | "paused" | "completed" | "rolled_back";
+  targetPercentage: 10 | 25 | 50 | 100;
+  maxUnhealthyPercent: number;
+  notes: string;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  health: MobileReleaseRolloutHealth;
+  devices: MobileReleaseRolloutDevice[];
+  events: MobileReleaseRolloutEvent[];
 };
 
 export type LatestLocation = {

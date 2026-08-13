@@ -130,6 +130,13 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 27. Owner hesabında üretim onayının yalnız `1/1 iPhone`, `2/2 Android` ve `2/2 farklı Android/OEM` ile açıldığını doğrulayın.
 28. Onay CSV’sini indirin; sürüm, cihaz matrisi ve pilot kimliklerinin ekrandaki snapshot ile eşleştiğini doğrulayın.
 29. Onayı gerekçeyle geri çekin; durumun audit kaydına geçtiğini ve aynı sürüm için yeni owner onayı gerektiğini doğrulayın.
+30. v0.97 üretim onayından sonra owner hesabıyla rollout planı oluşturun; onaysız veya aynı sürüm için ikinci planın `409` aldığını doğrulayın.
+31. Taslak planı başlatın; küçük filoda en az bir cihazın, daha büyük filoda kararlı hash sırasının ilk %10'unun seçildiğini doğrulayın.
+32. Seçili cihazlardan hedef sürüm heartbeat’i gelmeden %25 aşamasına ilerlemenin engellendiğini doğrulayın.
+33. Seçili cihazda izin/takip hatası oluşturup sağlıksız oranını eşik üstüne çıkarın; ilerlemenin sağlık snapshot'ıyla reddedildiğini doğrulayın.
+34. Sağlık kapısını düzelttikten sonra sırasıyla %25, %50 ve %100'e ilerleyin; aşama atlamanın engellendiğini doğrulayın.
+35. Rollout'u duraklatıp devam ettirin; her owner kararının gerekçesi, yüzdesi ve anlık sağlık ölçümünün olay/audit kayıtlarında eşleştiğini doğrulayın.
+36. Geri alma işlemini uygulayın; planın `rolled_back` kapandığını, önceki kararlı sürümün kayıtlı kaldığını ve pilot/onay kanıtlarının silinmediğini doğrulayın.
 
 ## 8. Pilot açılış kapıları
 
@@ -147,5 +154,6 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 - Firma acil durdurma, minimum sürüm kapısı, cihaz durdurma/yeniden açma ve komut onayı fiziksel cihazlarda kanıtlanmış.
 - Her pilot cihaz için 6/6 sunucu kanıtlı pilot kaydı, owner/admin kararı ve CSV özeti arşivlenmiş.
 - Aynı sürümde 1 iPhone + 2 farklı Android/OEM pilot matrisi tamamlanmış ve owner üretim onayı arşivlenmiş.
+- Owner kontrollü %10→%25→%50→%100 rollout, sağlık eşiği, duraklatma ve geri alma provası tamamlanmış.
 
 Bu kapılar tamamlanmadan gerçek kullanıcı veya sürekli saha verisi açılmaz.

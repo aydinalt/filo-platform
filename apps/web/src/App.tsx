@@ -25,6 +25,8 @@ import type {
   MobilePilotPolicy,
   MobilePilotReleaseApproval,
   MobilePilotRun,
+  MobileReleaseRollout,
+  MobileReleaseRolloutActionInput,
   NotificationItem,
   NotificationRule,
   OperationalAlert,
@@ -97,7 +99,8 @@ const mobilePilotEvidenceLabels: Record<MobilePilotEvidenceType, string> = {
   remote_control: "Uzaktan komut kanıtı",
 };
 
-const MOBILE_RELEASE_TARGET = "0.96.0";
+const MOBILE_RELEASE_TARGET = "0.97.0";
+const MOBILE_PREVIOUS_STABLE = "0.96.0";
 
 function InviteAcceptance({ token, onLogin }: { token: string; onLogin: (user: SessionUser) => void }) {
   const [preview, setPreview] = useState<{ tenantName: string; email: string; role: string; expiresAt: string } | null>(null);
@@ -752,6 +755,7 @@ function Dashboard({
     devices: [],
   });
   const [mobilePilotApprovals, setMobilePilotApprovals] = useState<MobilePilotReleaseApproval[]>([]);
+  const [mobileReleaseRollouts, setMobileReleaseRollouts] = useState<MobileReleaseRollout[]>([]);
   const [mobilePilotPolicy, setMobilePilotPolicy] = useState<MobilePilotPolicy>({
     trackingEnabled: true,
     minimumAppVersion: null,
@@ -881,6 +885,7 @@ function Dashboard({
         const releaseResult = await api.mobilePilotRelease(MOBILE_RELEASE_TARGET);
         setMobilePilotCohort(releaseResult.readiness);
         setMobilePilotApprovals(releaseResult.approvals);
+        setMobileReleaseRollouts((await api.mobileReleaseRollouts()).rollouts);
         setNotificationAnalytics((await api.notificationAnalytics()).analytics);
         setNotificationProviderHealth(await api.notificationProviderHealth());
         const providerIncidentResult =
@@ -1109,6 +1114,52 @@ function Dashboard({
     }
   }
 
+  async function createMobileReleaseRollout() {
+    const notes = window.prompt(
+      `${MOBILE_RELEASE_TARGET} rollout planı notu`,
+      `%10 başlangıç grubu; sağlıksız cihaz oranı en fazla %10.`,
+    )?.trim();
+    if (!notes) return;
+    try {
+      await api.createMobileReleaseRollout({
+        targetVersion: MOBILE_RELEASE_TARGET,
+        previousStableVersion: MOBILE_PREVIOUS_STABLE,
+        maxUnhealthyPercent: 10,
+        notes,
+      });
+      setMobileReleaseRollouts((await api.mobileReleaseRollouts()).rollouts);
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage("Kontrollü rollout planı oluşturuldu; owner başlatana kadar taslakta kalacak.");
+    } catch {
+      setMobileMessage("Rollout planı için aktif üretim onayı gerekir veya bu sürümün planı zaten vardır.");
+    }
+  }
+
+  async function actOnMobileReleaseRollout(
+    rollout: MobileReleaseRollout,
+    action: MobileReleaseRolloutActionInput["action"],
+  ) {
+    const reason = window.prompt("Rollout karar nedeni", "Cihaz sağlık kapısı ve saha sinyalleri kontrol edildi.")?.trim();
+    if (!reason) return;
+    let input: MobileReleaseRolloutActionInput;
+    if (action === "advance") {
+      const next = rollout.targetPercentage === 10 ? 25 : rollout.targetPercentage === 25 ? 50 : 100;
+      input = { action, targetPercentage: next, reason };
+    } else {
+      input = { action, reason };
+    }
+    try {
+      await api.actOnMobileReleaseRollout(rollout.id, input);
+      setMobileReleaseRollouts((await api.mobileReleaseRollouts()).rollouts);
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage(action === "rollback" ? "Rollout geri alındı ve karar kanıtı saklandı." : "Rollout durumu güncellendi.");
+    } catch (caught) {
+      setMobileMessage(caught instanceof Error && caught.message === "MOBILE_RELEASE_ROLLOUT_HEALTH_GATE_FAILED"
+        ? "Aşama ilerletilemedi; hedef sürüm cihaz sağlık kapısı henüz geçmiyor."
+        : "Rollout geçişi mevcut durum, sıra veya üretim onayı nedeniyle uygulanamadı.");
+    }
+  }
+
   async function changeStatus(vehicle: Vehicle, status: Vehicle["status"]) {
     setError("");
     try {
@@ -1172,6 +1223,7 @@ function Dashboard({
   const activeMobileReleaseApproval = mobilePilotApprovals.find((approval) =>
     approval.targetVersion === MOBILE_RELEASE_TARGET && approval.status === "approved",
   );
+  const currentMobileRollout = mobileReleaseRollouts.find((rollout) => rollout.targetVersion === MOBILE_RELEASE_TARGET);
   async function addDriver() {
     const fullName = window.prompt("Sürücü adı soyadı");
     if (!fullName) return;
@@ -2299,6 +2351,66 @@ function Dashboard({
                   ? <button className="danger" onClick={() => void saveMobilePilotPolicy(false)}>Tüm mobil takibi acil durdur</button>
                   : <button className="secondary" onClick={() => void saveMobilePilotPolicy(true)}>Mobil takibi yeniden aç</button>}
               </div>}
+            </section>
+
+            <section className="table-card mobile-tracking">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">KONTROLLÜ MOBİL DAĞITIM</p>
+                  <h2>{MOBILE_RELEASE_TARGET} kademeli rollout</h2>
+                </div>
+                <span className="status">{currentMobileRollout
+                  ? `${currentMobileRollout.status} · %${currentMobileRollout.targetPercentage}`
+                  : "Plan bekleniyor"}</span>
+              </div>
+              <p>
+                Üretim onayından sonra cihazlar kararlı bir hash sırasıyla %10, %25, %50 ve %100
+                gruplarına açılır. Her büyütme hedef sürüm heartbeat’i ve sağlık eşiğiyle engellenebilir;
+                owner dağıtımı durdurabilir veya önceki kararlı sürüme geri alma kaydı oluşturabilir.
+              </p>
+              {!currentMobileRollout && user.role === "owner" && <div className="modal-actions">
+                <button disabled={!activeMobileReleaseApproval} onClick={() => void createMobileReleaseRollout()}>
+                  Rollout planı oluştur
+                </button>
+              </div>}
+              {currentMobileRollout && <>
+                <div className="stats-grid">
+                  <article><small>HEDEF GRUP</small><strong>%{currentMobileRollout.targetPercentage}</strong></article>
+                  <article><small>UYGUN CİHAZ</small><strong>{currentMobileRollout.health.eligibleDeviceCount}</strong></article>
+                  <article><small>HEDEF SÜRÜM</small><strong>{currentMobileRollout.health.observedTargetDevices}</strong></article>
+                  <article><small>SAĞLIKSIZ</small><strong>%{currentMobileRollout.health.unhealthyPercent}</strong></article>
+                </div>
+                {currentMobileRollout.health.missing.length > 0 && <div className="pilot-missing">
+                  <strong>Aşama sağlık kapısı</strong>
+                  <span>{currentMobileRollout.health.missing.join(" · ")}</span>
+                </div>}
+                <div className="table-wrap">
+                  <table>
+                    <thead><tr><th>Cihaz</th><th>Grup</th><th>Sürüm</th><th>Sağlık</th></tr></thead>
+                    <tbody>
+                      {currentMobileRollout.devices.length === 0 && <tr><td colSpan={4}>Aktif mobil cihaz bulunamadı.</td></tr>}
+                      {currentMobileRollout.devices.map((device) => <tr key={device.credentialId}>
+                        <td>{device.deviceName}<small>{device.deviceManufacturer} {device.deviceModel} · {device.platform}</small></td>
+                        <td>{device.eligible ? `Seçili · #${device.rolloutBucket}` : `Bekliyor · #${device.rolloutBucket}`}</td>
+                        <td>{device.appVersion ?? "Heartbeat yok"}</td>
+                        <td>{mobileHealthLabels[device.health]}</td>
+                      </tr>)}
+                    </tbody>
+                  </table>
+                </div>
+                {user.role === "owner" && <div className="modal-actions">
+                  {currentMobileRollout.status === "draft" && <button onClick={() => void actOnMobileReleaseRollout(currentMobileRollout, "start")}>%10 rollout’u başlat</button>}
+                  {currentMobileRollout.status === "active" && currentMobileRollout.targetPercentage < 100 && <button disabled={!currentMobileRollout.health.readyToAdvance} onClick={() => void actOnMobileReleaseRollout(currentMobileRollout, "advance")}>Sonraki gruba ilerlet</button>}
+                  {currentMobileRollout.status === "active" && currentMobileRollout.targetPercentage === 100 && <button disabled={!currentMobileRollout.health.readyToAdvance} onClick={() => void actOnMobileReleaseRollout(currentMobileRollout, "complete")}>Rollout’u tamamla</button>}
+                  {currentMobileRollout.status === "active" && <button className="secondary" onClick={() => void actOnMobileReleaseRollout(currentMobileRollout, "pause")}>Dağıtımı duraklat</button>}
+                  {currentMobileRollout.status === "paused" && <button onClick={() => void actOnMobileReleaseRollout(currentMobileRollout, "resume")}>Dağıtıma devam et</button>}
+                  {["active", "paused", "completed"].includes(currentMobileRollout.status) && <button className="danger" onClick={() => void actOnMobileReleaseRollout(currentMobileRollout, "rollback")}>{MOBILE_PREVIOUS_STABLE} sürümüne geri al</button>}
+                </div>}
+                {currentMobileRollout.events[0] && <div className="approval-banner">
+                  <strong>Son karar: {currentMobileRollout.events[0].action}</strong>
+                  <span>{new Date(currentMobileRollout.events[0].createdAt).toLocaleString("tr-TR")} · {currentMobileRollout.events[0].reason}</span>
+                </div>}
+              </>}
             </section>
 
             <section className="table-card mobile-tracking">
