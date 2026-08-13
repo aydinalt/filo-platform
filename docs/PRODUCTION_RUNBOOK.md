@@ -143,6 +143,12 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 40. İhlali üç ardışık benzersiz guard çalışmasına taşıyın; olayın `critical`, rollout'un `rolled_back` olduğunu ve otomatik karar audit kaydını doğrulayın.
 41. Açık yayın olayını owner olarak kabul edin; kök nedeni giderip çözüm notuyla kapatın ve zaman/aktör kanıtlarını doğrulayın.
 42. Sağlık eşik içine döndüğünde sayaç sıfırlansa da otomatik devam edilmediğini; yeniden başlatmanın owner kararı gerektirdiğini doğrulayın.
+43. v0.99 için owner hesabında canlıya geçiş incelemesi açın; aynı tenant/sürüm için ikinci taslağın `409` ile engellendiğini doğrulayın.
+44. Pilot onayı veya tamamlanmış %100 rollout eksikken otomatik kapıların beklemede olduğunu ve GO düğmesinin kapalı kaldığını doğrulayın.
+45. Hukuk/KVKK, yedek geri yükleme, worker sürekliliği, izleme/alarm, destek/nöbet ve rollback tatbikatı kanıtlarını sorumlu ve sonuç notlarıyla tamamlayın.
+46. Bir operasyonel kanıtı yeniden açın; GO kararının engellendiğini, NO-GO kararının gerekçeyle kaydedilebildiğini doğrulayın.
+47. Yeni bir incelemede tüm otomatik kapılar ve 6/6 kanıt tamamlandıktan sonra owner GO kararı verin; karar snapshot'ı ve audit kaydını karşılaştırın.
+48. Karar verilmiş incelemenin kanıtını veya karar alanlarını değiştirme girişiminin veritabanı tarafından reddedildiğini doğrulayın.
 
 ## 8. Pilot açılış kapıları
 
@@ -162,5 +168,6 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 - Aynı sürümde 1 iPhone + 2 farklı Android/OEM pilot matrisi tamamlanmış ve owner üretim onayı arşivlenmiş.
 - Owner kontrollü %10→%25→%50→%100 rollout, sağlık eşiği, duraklatma ve geri alma provası tamamlanmış.
 - Worker otomatik duraklatma/geri alma, idempotent guard ve owner olay çözüm provası tamamlanmış.
+- v0.99 canlıya geçiş incelemesinde üç otomatik kapı ve 6/6 operasyonel kanıt tamamlanmış; owner GO snapshot'ı arşivlenmiş.
 
 Bu kapılar tamamlanmadan gerçek kullanıcı veya sürekli saha verisi açılmaz.

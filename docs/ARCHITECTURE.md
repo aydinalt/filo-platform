@@ -246,3 +246,21 @@ to critical at rollback threshold and retains the latest bounded health snapshot
 acknowledge an open incident or resolve an open/acknowledged incident with mandatory notes.
 Incident, rollout and scheduler-run tables use forced RLS; automatic transitions and owner
 handling also create tenant audit events.
+
+## Evidence-backed production launch decision
+
+Launch readiness is a separate owner decision boundary after physical qualification and
+staged deployment. The server recomputes three automatic checks for the exact target version:
+an active physical-pilot approval, a health-gated rollout completed at 100 percent, and zero
+open or acknowledged release incidents. Client state cannot override these checks.
+
+Every draft review also contains six fixed evidence records: privacy/legal approval, backup
+restore proof, always-on worker continuity, monitoring and alert verification, support/on-call
+coverage, and a rollback drill. Owner or admin may attach bounded evidence notes while the
+review is a draft; only the owner may decide. GO is rejected unless every automatic and manual
+gate passes. NO-GO can be recorded earlier to preserve the blocker and corrective intent.
+
+The decision transaction locks the review, recomputes live automatic readiness, reloads all
+evidence, and stores one JSON snapshot. Database triggers make decided reviews and their
+evidence immutable. Review and evidence tables use forced RLS, explicit tenant predicates,
+bounded inputs and tenant audit events.

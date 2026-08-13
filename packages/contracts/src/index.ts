@@ -326,6 +326,30 @@ export const updateMobileReleaseIncidentSchema = z.object({
   notes: z.string().trim().min(3).max(1000),
 });
 
+export const launchReadinessEvidenceTypeSchema = z.enum([
+  "privacy_legal",
+  "backup_restore",
+  "worker_continuity",
+  "monitoring_alerts",
+  "support_oncall",
+  "rollback_drill",
+]);
+
+export const createLaunchReadinessReviewSchema = z.object({
+  targetVersion: z.string().trim().regex(/^\d+\.\d+\.\d+$/u),
+  notes: z.string().trim().min(3).max(1000),
+});
+
+export const updateLaunchReadinessEvidenceSchema = z.object({
+  status: z.enum(["pending", "passed"]),
+  notes: z.string().trim().min(3).max(1000),
+});
+
+export const decideLaunchReadinessSchema = z.object({
+  decision: z.enum(["go", "no_go"]),
+  notes: z.string().trim().min(3).max(1000),
+});
+
 export type CreateMobileEnrollmentInput = z.infer<typeof createMobileEnrollmentSchema>;
 export type ClaimMobileEnrollmentInput = z.infer<typeof claimMobileEnrollmentSchema>;
 export type MobileLocationBatchInput = z.infer<typeof mobileLocationBatchSchema>;
@@ -342,6 +366,10 @@ export type CreateMobileReleaseRolloutInput = z.infer<typeof createMobileRelease
 export type MobileReleaseRolloutActionInput = z.infer<typeof mobileReleaseRolloutActionSchema>;
 export type RunMobileReleaseGuardInput = z.infer<typeof runMobileReleaseGuardSchema>;
 export type UpdateMobileReleaseIncidentInput = z.infer<typeof updateMobileReleaseIncidentSchema>;
+export type LaunchReadinessEvidenceType = z.infer<typeof launchReadinessEvidenceTypeSchema>;
+export type CreateLaunchReadinessReviewInput = z.infer<typeof createLaunchReadinessReviewSchema>;
+export type UpdateLaunchReadinessEvidenceInput = z.infer<typeof updateLaunchReadinessEvidenceSchema>;
+export type DecideLaunchReadinessInput = z.infer<typeof decideLaunchReadinessSchema>;
 
 export type MobileEnrollment = {
   id: string;
@@ -569,6 +597,43 @@ export type MobileReleaseIncident = {
   acknowledgedAt: string | null;
   resolvedAt: string | null;
   resolutionNotes: string | null;
+};
+
+export type LaunchReadinessAutomaticCheck = {
+  key: "pilot_approval" | "completed_rollout" | "no_active_incidents";
+  passed: boolean;
+  detail: string;
+};
+
+export type LaunchReadinessAssessment = {
+  targetVersion: string;
+  ready: boolean;
+  checks: LaunchReadinessAutomaticCheck[];
+};
+
+export type LaunchReadinessEvidence = {
+  type: LaunchReadinessEvidenceType;
+  status: "pending" | "passed";
+  notes: string | null;
+  updatedAt: string | null;
+};
+
+export type LaunchReadinessSnapshot = {
+  automated: LaunchReadinessAssessment;
+  evidence: LaunchReadinessEvidence[];
+  ready: boolean;
+};
+
+export type LaunchReadinessReview = {
+  id: string;
+  targetVersion: string;
+  status: "draft" | "go" | "no_go";
+  notes: string;
+  evidence: LaunchReadinessEvidence[];
+  decisionNotes: string | null;
+  decisionSnapshot: LaunchReadinessSnapshot | null;
+  createdAt: string;
+  decidedAt: string | null;
 };
 
 export type LatestLocation = {

@@ -1,4 +1,4 @@
-# Filo Platform V1 — otomatik rollout koruması v0.98
+# Filo Platform V1 — kanıtlı canlıya geçiş kapısı v0.99
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -63,6 +63,12 @@ ilk ihlalde dağıtımı otomatik duraklatır; üç ardışık ihlal sürerse ö
 sürüme otomatik geri alma uygular. İhlaller tek tenant izole yayın olayında birleştirilir,
 owner tarafından kabul edilir ve çözüm kanıtıyla kapatılır. Zamanlanmış çalışmalar
 idempotent anahtar ve audit geçmişiyle tekrar güvenlidir.
+
+v0.99, v1.0 öncesi canlıya geçiş kararını tek bir kanıt merkezinde toplar. Aktif
+fiziksel pilot onayı, sağlık kapılarıyla tamamlanmış %100 rollout ve sıfır açık yayın
+olayı otomatik doğrulanır. Hukuk/KVKK, yedek geri yükleme, worker sürekliliği, izleme,
+destek ve rollback tatbikatı ayrı kanıtlarla tamamlanır. Owner yalnız tüm kapılar
+geçtiğinde GO verebilir; GO veya NO-GO kararı değiştirilemez snapshot ve audit kaydıdır.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.

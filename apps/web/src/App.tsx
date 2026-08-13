@@ -17,6 +17,9 @@ import type {
   MaintenancePlan,
   Member,
   MemberInvitation,
+  LaunchReadinessAssessment,
+  LaunchReadinessEvidenceType,
+  LaunchReadinessReview,
   MobileDeviceCommand,
   MobileDeviceStatus,
   MobileEnrollment,
@@ -100,8 +103,17 @@ const mobilePilotEvidenceLabels: Record<MobilePilotEvidenceType, string> = {
   remote_control: "Uzaktan komut kanıtı",
 };
 
-const MOBILE_RELEASE_TARGET = "0.98.0";
-const MOBILE_PREVIOUS_STABLE = "0.97.0";
+const MOBILE_RELEASE_TARGET = "0.99.0";
+const MOBILE_PREVIOUS_STABLE = "0.98.0";
+
+const launchEvidenceLabels: Record<LaunchReadinessEvidenceType, string> = {
+  privacy_legal: "Hukuk ve KVKK onayı",
+  backup_restore: "Yedek geri yükleme kanıtı",
+  worker_continuity: "Kesintisiz worker doğrulaması",
+  monitoring_alerts: "İzleme ve alarm testi",
+  support_oncall: "Canlı destek ve nöbet planı",
+  rollback_drill: "Geri alma tatbikatı",
+};
 
 function InviteAcceptance({ token, onLogin }: { token: string; onLogin: (user: SessionUser) => void }) {
   const [preview, setPreview] = useState<{ tenantName: string; email: string; role: string; expiresAt: string } | null>(null);
@@ -758,6 +770,12 @@ function Dashboard({
   const [mobilePilotApprovals, setMobilePilotApprovals] = useState<MobilePilotReleaseApproval[]>([]);
   const [mobileReleaseRollouts, setMobileReleaseRollouts] = useState<MobileReleaseRollout[]>([]);
   const [mobileReleaseIncidents, setMobileReleaseIncidents] = useState<MobileReleaseIncident[]>([]);
+  const [launchReadinessAssessment, setLaunchReadinessAssessment] = useState<LaunchReadinessAssessment>({
+    targetVersion: MOBILE_RELEASE_TARGET,
+    ready: false,
+    checks: [],
+  });
+  const [launchReadinessReviews, setLaunchReadinessReviews] = useState<LaunchReadinessReview[]>([]);
   const [mobilePilotPolicy, setMobilePilotPolicy] = useState<MobilePilotPolicy>({
     trackingEnabled: true,
     minimumAppVersion: null,
@@ -889,6 +907,9 @@ function Dashboard({
         setMobilePilotApprovals(releaseResult.approvals);
         setMobileReleaseRollouts((await api.mobileReleaseRollouts()).rollouts);
         setMobileReleaseIncidents((await api.mobileReleaseIncidents()).incidents);
+        const launchResult = await api.launchReadiness(MOBILE_RELEASE_TARGET);
+        setLaunchReadinessAssessment(launchResult.assessment);
+        setLaunchReadinessReviews(launchResult.reviews);
         setNotificationAnalytics((await api.notificationAnalytics()).analytics);
         setNotificationProviderHealth(await api.notificationProviderHealth());
         const providerIncidentResult =
@@ -1184,6 +1205,64 @@ function Dashboard({
     }
   }
 
+  async function refreshLaunchReadiness() {
+    const result = await api.launchReadiness(MOBILE_RELEASE_TARGET);
+    setLaunchReadinessAssessment(result.assessment);
+    setLaunchReadinessReviews(result.reviews);
+  }
+
+  async function createLaunchReadinessReview() {
+    const notes = window.prompt(
+      "Canlıya geçiş inceleme notu",
+      "v1.0 öncesi teknik, hukuki ve operasyonel kanıtlar toplanacak.",
+    )?.trim();
+    if (!notes) return;
+    try {
+      await api.createLaunchReadinessReview({ targetVersion: MOBILE_RELEASE_TARGET, notes });
+      await refreshLaunchReadiness();
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage("Canlıya geçiş incelemesi açıldı; altı kanıt tamamlanmayı bekliyor.");
+    } catch {
+      setMobileMessage("Bu sürüm için zaten açık bir canlıya geçiş incelemesi var.");
+    }
+  }
+
+  async function updateLaunchEvidence(review: LaunchReadinessReview, type: LaunchReadinessEvidenceType) {
+    const current = review.evidence.find((item) => item.type === type);
+    const status = current?.status === "passed" ? "pending" : "passed";
+    const notes = window.prompt(
+      `${launchEvidenceLabels[type]} kanıt notu`,
+      status === "passed" ? "Kontrol uygulandı; tarih, sorumlu ve sonuç doğrulandı." : "Kanıt yeniden doğrulanacak.",
+    )?.trim();
+    if (!notes) return;
+    try {
+      await api.updateLaunchReadinessEvidence(review.id, type, { status, notes });
+      await refreshLaunchReadiness();
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage(`${launchEvidenceLabels[type]} güncellendi.`);
+    } catch {
+      setMobileMessage("Kararı verilmiş incelemenin kanıtları değiştirilemez.");
+    }
+  }
+
+  async function decideLaunchReadiness(review: LaunchReadinessReview, decision: "go" | "no_go") {
+    const notes = window.prompt(
+      decision === "go" ? "GO kararı ve kapsamı" : "NO-GO gerekçesi ve düzeltme planı",
+      decision === "go" ? "Tüm kapılar ve kanıtlar doğrulandı; kontrollü canlı geçiş onaylandı." : "Eksik kapılar tamamlanmadan canlıya geçilmeyecek.",
+    )?.trim();
+    if (!notes) return;
+    try {
+      await api.decideLaunchReadiness(review.id, { decision, notes });
+      await refreshLaunchReadiness();
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage(decision === "go" ? "GO kararı değiştirilemez kanıt görüntüsüyle kaydedildi." : "NO-GO kararı ve gerekçesi kaydedildi.");
+    } catch (caught) {
+      setMobileMessage(caught instanceof Error && caught.message === "LAUNCH_READINESS_GATE_FAILED"
+        ? "GO kararı verilemez; otomatik veya operasyonel kapılardan en az biri eksik."
+        : "Canlıya geçiş kararı kaydedilemedi.");
+    }
+  }
+
   async function changeStatus(vehicle: Vehicle, status: Vehicle["status"]) {
     setError("");
     try {
@@ -1248,6 +1327,9 @@ function Dashboard({
     approval.targetVersion === MOBILE_RELEASE_TARGET && approval.status === "approved",
   );
   const currentMobileRollout = mobileReleaseRollouts.find((rollout) => rollout.targetVersion === MOBILE_RELEASE_TARGET);
+  const draftLaunchReview = launchReadinessReviews.find((review) => review.status === "draft");
+  const currentLaunchReview = draftLaunchReview ?? launchReadinessReviews[0];
+  const launchEvidenceReady = currentLaunchReview?.evidence.every((item) => item.status === "passed") ?? false;
   async function addDriver() {
     const fullName = window.prompt("Sürücü adı soyadı");
     if (!fullName) return;
@@ -2375,6 +2457,70 @@ function Dashboard({
                   ? <button className="danger" onClick={() => void saveMobilePilotPolicy(false)}>Tüm mobil takibi acil durdur</button>
                   : <button className="secondary" onClick={() => void saveMobilePilotPolicy(true)}>Mobil takibi yeniden aç</button>}
               </div>}
+            </section>
+
+            <section className="table-card mobile-tracking">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">V1.0 CANLIYA GEÇİŞ KAPISI</p>
+                  <h2>{MOBILE_RELEASE_TARGET} GO / NO-GO merkezi</h2>
+                </div>
+                <span className="status">{currentLaunchReview?.status === "go"
+                  ? "GO onaylandı"
+                  : currentLaunchReview?.status === "no_go"
+                    ? "NO-GO"
+                    : launchReadinessAssessment.ready && launchEvidenceReady
+                      ? "Karara hazır"
+                      : "Kanıt bekleniyor"}</span>
+              </div>
+              <p>
+                Fiziksel pilot onayı, tamamlanmış %100 rollout ve kapatılmış yayın olayları
+                otomatik doğrulanır. Hukuk, geri yükleme, worker, izleme, destek ve rollback
+                kanıtlarının tamamı geçmeden owner GO kararı veremez.
+              </p>
+              <div className="stats-grid">
+                {launchReadinessAssessment.checks.map((check) => <article key={check.key}>
+                  <small>{check.key === "pilot_approval" ? "PİLOT ONAYI" : check.key === "completed_rollout" ? "%100 ROLLOUT" : "AKTİF OLAY"}</small>
+                  <strong>{check.passed ? "GEÇTİ" : "BEKLİYOR"}</strong>
+                </article>)}
+                <article><small>OPERASYONEL KANIT</small><strong>{currentLaunchReview?.evidence.filter((item) => item.status === "passed").length ?? 0}/6</strong></article>
+              </div>
+              {launchReadinessAssessment.checks.some((check) => !check.passed) && <div className="pilot-missing">
+                <strong>Otomatik kapı eksikleri</strong>
+                <span>{launchReadinessAssessment.checks.filter((check) => !check.passed).map((check) => check.detail).join(" · ")}</span>
+              </div>}
+              {!draftLaunchReview && currentLaunchReview?.status !== "go" && user.role === "owner" && <div className="modal-actions">
+                <button onClick={() => void createLaunchReadinessReview()}>{currentLaunchReview ? "Yeni inceleme aç" : "Canlıya geçiş incelemesini aç"}</button>
+              </div>}
+              {currentLaunchReview && <>
+                <div className="table-wrap">
+                  <table>
+                    <thead><tr><th>Operasyonel kapı</th><th>Durum</th><th>Kanıt notu</th><th>İşlem</th></tr></thead>
+                    <tbody>
+                      {currentLaunchReview.evidence.map((evidence) => <tr key={evidence.type}>
+                        <td>{launchEvidenceLabels[evidence.type]}</td>
+                        <td>{evidence.status === "passed" ? "Geçti" : "Bekliyor"}</td>
+                        <td>{evidence.notes ?? "Kanıt girilmedi"}<small>{evidence.updatedAt ? new Date(evidence.updatedAt).toLocaleString("tr-TR") : ""}</small></td>
+                        <td>{currentLaunchReview.status === "draft" && ["owner", "admin"].includes(user.role) && <button
+                          className={evidence.status === "passed" ? "secondary" : undefined}
+                          onClick={() => void updateLaunchEvidence(currentLaunchReview, evidence.type)}
+                        >{evidence.status === "passed" ? "Yeniden aç" : "Kanıtla"}</button>}</td>
+                      </tr>)}
+                    </tbody>
+                  </table>
+                </div>
+                {currentLaunchReview.status === "draft" && user.role === "owner" && <div className="modal-actions">
+                  <button
+                    disabled={!launchReadinessAssessment.ready || !launchEvidenceReady}
+                    onClick={() => void decideLaunchReadiness(currentLaunchReview, "go")}
+                  >GO kararı ver</button>
+                  <button className="danger" onClick={() => void decideLaunchReadiness(currentLaunchReview, "no_go")}>NO-GO kararı ver</button>
+                </div>}
+                {currentLaunchReview.status !== "draft" && <div className="approval-banner">
+                  <strong>{currentLaunchReview.status === "go" ? "GO" : "NO-GO"} · değiştirilemez karar</strong>
+                  <span>{currentLaunchReview.decidedAt ? new Date(currentLaunchReview.decidedAt).toLocaleString("tr-TR") : ""} · {currentLaunchReview.decisionNotes}</span>
+                </div>}
+              </>}
             </section>
 
             <section className="table-card mobile-tracking">
