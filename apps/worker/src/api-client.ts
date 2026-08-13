@@ -72,6 +72,7 @@ export class WorkerApiClient {
       ["/api/internal/notification-retention/reconcile-attempts", { ...scope, reconciliationKey: `reconcile:${bucket}` }],
       ["/api/internal/notification-retention/notify-overdue-reconciliations", { ...scope, runKey: `reminders:${bucket}` }],
       ["/api/internal/notification-retention/reconcile-interrupted-reminder-runs", { ...scope, maintenanceKey: `maintenance:${bucket}` }],
+      ["/api/internal/mobile-release-guard/run", { ...scope, runKey: `mobile-release-guard:${bucket}` }],
     ];
     let completed = 0;
     let failed = 0;

@@ -137,6 +137,12 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 34. Sağlık kapısını düzelttikten sonra sırasıyla %25, %50 ve %100'e ilerleyin; aşama atlamanın engellendiğini doğrulayın.
 35. Rollout'u duraklatıp devam ettirin; her owner kararının gerekçesi, yüzdesi ve anlık sağlık ölçümünün olay/audit kayıtlarında eşleştiğini doğrulayın.
 36. Geri alma işlemini uygulayın; planın `rolled_back` kapandığını, önceki kararlı sürümün kayıtlı kaldığını ve pilot/onay kanıtlarının silinmediğini doğrulayın.
+37. v0.98 rollout'unu `auto_rollback` ve üç ardışık ihlal eşiğiyle oluşturup worker zamanlayıcısının guard çalışmasını doğrulayın.
+38. Seçili cihazda hedef sürüm heartbeat'ini kesin veya takip hatası üretin; ilk guard çalışmasında rollout'un otomatik `paused` olduğunu doğrulayın.
+39. Aynı scheduler anahtarını tekrar gönderin; ikinci bir değerlendirme/olay oluşmadığını ve idempotent yanıt döndüğünü doğrulayın.
+40. İhlali üç ardışık benzersiz guard çalışmasına taşıyın; olayın `critical`, rollout'un `rolled_back` olduğunu ve otomatik karar audit kaydını doğrulayın.
+41. Açık yayın olayını owner olarak kabul edin; kök nedeni giderip çözüm notuyla kapatın ve zaman/aktör kanıtlarını doğrulayın.
+42. Sağlık eşik içine döndüğünde sayaç sıfırlansa da otomatik devam edilmediğini; yeniden başlatmanın owner kararı gerektirdiğini doğrulayın.
 
 ## 8. Pilot açılış kapıları
 
@@ -155,5 +161,6 @@ kaydı açılmamalıdır. v0.93 kabul kanıtını saklar; hukuki metnin kendisin
 - Her pilot cihaz için 6/6 sunucu kanıtlı pilot kaydı, owner/admin kararı ve CSV özeti arşivlenmiş.
 - Aynı sürümde 1 iPhone + 2 farklı Android/OEM pilot matrisi tamamlanmış ve owner üretim onayı arşivlenmiş.
 - Owner kontrollü %10→%25→%50→%100 rollout, sağlık eşiği, duraklatma ve geri alma provası tamamlanmış.
+- Worker otomatik duraklatma/geri alma, idempotent guard ve owner olay çözüm provası tamamlanmış.
 
 Bu kapılar tamamlanmadan gerçek kullanıcı veya sürekli saha verisi açılmaz.

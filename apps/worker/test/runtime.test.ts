@@ -41,7 +41,7 @@ describe("notification runtime scheduling", () => {
   it("keeps a partially failed maintenance scope observable", async () => {
     const client = {
       scopes: async () => [{ tenantId: "10000000-0000-4000-8000-000000000001", actorUserId: "20000000-0000-4000-8000-000000000001" }],
-      runScheduledMaintenance: async () => ({ completed: 4, failed: 1 }),
+      runScheduledMaintenance: async () => ({ completed: 5, failed: 1 }),
     } as unknown as WorkerApiClient;
     const result = await runSchedulerCycle(client, logger, new Date("2026-08-11T18:34:59.000Z"));
     assert.equal(result.completed, 1);

@@ -19,10 +19,12 @@ import {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const STAGES = [10, 25, 50, 100] as const;
 
-type RolloutRow = Omit<MobileReleaseRollout, "createdAt" | "startedAt" | "completedAt" | "health" | "devices" | "events"> & {
+type RolloutRow = Omit<MobileReleaseRollout, "createdAt" | "startedAt" | "completedAt" | "lastGuardAt" | "guardPausedAt" | "health" | "devices" | "events"> & {
   createdAt: Date;
   startedAt: Date | null;
   completedAt: Date | null;
+  lastGuardAt: Date | null;
+  guardPausedAt: Date | null;
 };
 
 type EventRow = Omit<MobileReleaseRolloutEvent, "createdAt"> & { rolloutId: string; createdAt: Date };
@@ -64,7 +66,10 @@ async function readRollouts(client: PoolClient, tenantId: string): Promise<Mobil
       `SELECT id, approval_id AS "approvalId", target_version AS "targetVersion",
               previous_stable_version AS "previousStableVersion", status,
               target_percentage AS "targetPercentage", max_unhealthy_percent AS "maxUnhealthyPercent",
-              notes, created_at AS "createdAt", started_at AS "startedAt", completed_at AS "completedAt"
+              guard_mode AS "guardMode", rollback_after_breaches AS "rollbackAfterBreaches",
+              consecutive_breaches AS "consecutiveBreaches", last_guard_at AS "lastGuardAt",
+              guard_paused_at AS "guardPausedAt", notes, created_at AS "createdAt",
+              started_at AS "startedAt", completed_at AS "completedAt"
        FROM mobile_release_rollouts WHERE tenant_id = $1
        ORDER BY created_at DESC LIMIT 20`,
       [tenantId],
@@ -86,6 +91,8 @@ async function readRollouts(client: PoolClient, tenantId: string): Promise<Mobil
       createdAt: row.createdAt.toISOString(),
       startedAt: row.startedAt?.toISOString() ?? null,
       completedAt: row.completedAt?.toISOString() ?? null,
+      lastGuardAt: row.lastGuardAt?.toISOString() ?? null,
+      guardPausedAt: row.guardPausedAt?.toISOString() ?? null,
       health: assessMobileReleaseRollout(row.targetVersion, row.maxUnhealthyPercent, devices),
       devices,
       events: eventResult.rows.filter((event) => event.rolloutId === row.id).map(({ rolloutId: _rolloutId, ...event }) => ({
@@ -148,11 +155,12 @@ export async function mobileReleaseRolloutRoutes(app: FastifyInstance) {
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO mobile_release_rollouts(
            tenant_id, approval_id, target_version, previous_stable_version,
-           max_unhealthy_percent, notes, created_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7)
+           max_unhealthy_percent, guard_mode, rollback_after_breaches, notes, created_by
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
          ON CONFLICT (tenant_id, target_version) DO NOTHING RETURNING id`,
         [user.tenantId, approval.rows[0].id, parsed.data.targetVersion, parsed.data.previousStableVersion,
-          parsed.data.maxUnhealthyPercent, parsed.data.notes, user.id],
+          parsed.data.maxUnhealthyPercent, parsed.data.guardMode, parsed.data.rollbackAfterBreaches,
+          parsed.data.notes, user.id],
       );
       if (!inserted.rows[0]) return { error: "MOBILE_RELEASE_ROLLOUT_EXISTS" as const };
       const devices = assignMobileRolloutDevices(await readRolloutDevices(client, user.tenantId), 10);
@@ -184,7 +192,10 @@ export async function mobileReleaseRolloutRoutes(app: FastifyInstance) {
         `SELECT id, approval_id AS "approvalId", target_version AS "targetVersion",
                 previous_stable_version AS "previousStableVersion", status,
                 target_percentage AS "targetPercentage", max_unhealthy_percent AS "maxUnhealthyPercent",
-                notes, created_at AS "createdAt", started_at AS "startedAt", completed_at AS "completedAt"
+                guard_mode AS "guardMode", rollback_after_breaches AS "rollbackAfterBreaches",
+                consecutive_breaches AS "consecutiveBreaches", last_guard_at AS "lastGuardAt",
+                guard_paused_at AS "guardPausedAt", notes, created_at AS "createdAt",
+                started_at AS "startedAt", completed_at AS "completedAt"
          FROM mobile_release_rollouts WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
         [user.tenantId, rolloutId],
       );
@@ -227,7 +238,9 @@ export async function mobileReleaseRolloutRoutes(app: FastifyInstance) {
         `UPDATE mobile_release_rollouts
          SET status = $3, target_percentage = $4,
              started_at = CASE WHEN $3 = 'active' AND started_at IS NULL THEN now() ELSE started_at END,
-             completed_at = CASE WHEN $3 IN ('completed','rolled_back') THEN now() ELSE NULL END
+             completed_at = CASE WHEN $3 IN ('completed','rolled_back') THEN now() ELSE NULL END,
+             guard_paused_at = CASE WHEN $3 = 'active' THEN NULL ELSE guard_paused_at END,
+             consecutive_breaches = CASE WHEN $3 = 'active' THEN 0 ELSE consecutive_breaches END
          WHERE tenant_id = $1 AND id = $2`,
         [user.tenantId, rolloutId, nextStatus, nextPercentage],
       );

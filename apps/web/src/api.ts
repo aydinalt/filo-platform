@@ -2,7 +2,7 @@ import type { ActionItem, CreateActionItemInput, CreateNotificationRuleInput, No
 import type { FleetReport } from "@filo/contracts";
 import type { NotificationAnalytics, NotificationArchiveAttempt, NotificationArchiveRun, NotificationDelivery, NotificationPreferences, NotificationProviderHealth, NotificationProviderIncident, NotificationProviderIncidentScanStatus, NotificationProviderIncidentScanSummary, NotificationRetention, NotificationRetentionSettings } from "@filo/contracts";
 import type { CreateNotificationTemplateInput, NotificationTemplate } from "@filo/contracts";
-import type { AcceptMemberInvitationInput, AccountSession, ApproveMobilePilotReleaseInput, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileDeviceCommandInput, CreateMobileEnrollmentInput, CreateMobilePilotRunInput, CreateMobileReleaseRolloutInput, DecideMobilePilotRunInput, MemberInvitation, MobileDeviceCommand, MobileDeviceStatus, MobileEnrollment, MobilePilotCohortReadiness, MobilePilotEvidenceType, MobilePilotPolicy, MobilePilotReleaseApproval, MobilePilotRun, MobileReleaseRollout, MobileReleaseRolloutActionInput, RegisterTenantInput, RequestPasswordResetInput, RevokeMobilePilotReleaseInput, UpdateMobilePilotPolicyInput } from "@filo/contracts";
+import type { AcceptMemberInvitationInput, AccountSession, ApproveMobilePilotReleaseInput, ChangePasswordInput, CompletePasswordResetInput, CreateMemberInvitationInput, CreateMobileDeviceCommandInput, CreateMobileEnrollmentInput, CreateMobilePilotRunInput, CreateMobileReleaseRolloutInput, DecideMobilePilotRunInput, MemberInvitation, MobileDeviceCommand, MobileDeviceStatus, MobileEnrollment, MobilePilotCohortReadiness, MobilePilotEvidenceType, MobilePilotPolicy, MobilePilotReleaseApproval, MobilePilotRun, MobileReleaseIncident, MobileReleaseRollout, MobileReleaseRolloutActionInput, RegisterTenantInput, RequestPasswordResetInput, RevokeMobilePilotReleaseInput, UpdateMobilePilotPolicyInput, UpdateMobileReleaseIncidentInput } from "@filo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -68,6 +68,12 @@ export const api = {
   actOnMobileReleaseRollout: (rolloutId: string, input: MobileReleaseRolloutActionInput) =>
     request<{ rollout: MobileReleaseRollout }>(`/api/mobile/release-rollouts/${rolloutId}/actions`, {
       method: "POST", body: JSON.stringify(input)
+    }),
+  mobileReleaseIncidents: () =>
+    request<{ incidents: MobileReleaseIncident[] }>("/api/mobile/release-incidents"),
+  updateMobileReleaseIncident: (incidentId: string, input: UpdateMobileReleaseIncidentInput) =>
+    request<void>(`/api/mobile/release-incidents/${incidentId}`, {
+      method: "PATCH", body: JSON.stringify(input)
     }),
   createMobileDeviceCommand: (credentialId: string, input: CreateMobileDeviceCommandInput) =>
     request<{ command: MobileDeviceCommand }>(`/api/mobile/devices/${credentialId}/commands`, {

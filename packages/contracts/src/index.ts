@@ -297,6 +297,8 @@ export const createMobileReleaseRolloutSchema = z.object({
   targetVersion: z.string().trim().regex(/^\d+\.\d+\.\d+$/u),
   previousStableVersion: z.string().trim().regex(/^\d+\.\d+\.\d+$/u),
   maxUnhealthyPercent: z.number().int().min(0).max(50).default(10),
+  guardMode: z.enum(["manual", "auto_pause", "auto_rollback"]).default("auto_pause"),
+  rollbackAfterBreaches: z.number().int().min(2).max(5).default(3),
   notes: z.string().trim().min(3).max(1000),
 }).refine((value) => value.targetVersion !== value.previousStableVersion, {
   message: "Target and stable versions must differ",
@@ -313,6 +315,17 @@ export const mobileReleaseRolloutActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.enum(["pause", "resume", "complete", "rollback"]), reason: z.string().trim().min(3).max(1000) }),
 ]);
 
+export const runMobileReleaseGuardSchema = z.object({
+  tenantId: z.string().uuid(),
+  actorUserId: z.string().uuid(),
+  runKey: z.string().trim().regex(/^[A-Za-z0-9:_-]{8,120}$/u),
+});
+
+export const updateMobileReleaseIncidentSchema = z.object({
+  status: z.enum(["acknowledged", "resolved"]),
+  notes: z.string().trim().min(3).max(1000),
+});
+
 export type CreateMobileEnrollmentInput = z.infer<typeof createMobileEnrollmentSchema>;
 export type ClaimMobileEnrollmentInput = z.infer<typeof claimMobileEnrollmentSchema>;
 export type MobileLocationBatchInput = z.infer<typeof mobileLocationBatchSchema>;
@@ -327,6 +340,8 @@ export type ApproveMobilePilotReleaseInput = z.infer<typeof approveMobilePilotRe
 export type RevokeMobilePilotReleaseInput = z.infer<typeof revokeMobilePilotReleaseSchema>;
 export type CreateMobileReleaseRolloutInput = z.infer<typeof createMobileReleaseRolloutSchema>;
 export type MobileReleaseRolloutActionInput = z.infer<typeof mobileReleaseRolloutActionSchema>;
+export type RunMobileReleaseGuardInput = z.infer<typeof runMobileReleaseGuardSchema>;
+export type UpdateMobileReleaseIncidentInput = z.infer<typeof updateMobileReleaseIncidentSchema>;
 
 export type MobileEnrollment = {
   id: string;
@@ -511,7 +526,7 @@ export type MobileReleaseRolloutHealth = {
 
 export type MobileReleaseRolloutEvent = {
   id: string;
-  action: "created" | "started" | "advanced" | "paused" | "resumed" | "completed" | "rolled_back";
+  action: "created" | "started" | "advanced" | "paused" | "resumed" | "completed" | "rolled_back" | "guard_recovered" | "auto_paused" | "auto_rolled_back";
   fromPercentage: number | null;
   toPercentage: number | null;
   reason: string;
@@ -527,6 +542,11 @@ export type MobileReleaseRollout = {
   status: "draft" | "active" | "paused" | "completed" | "rolled_back";
   targetPercentage: 10 | 25 | 50 | 100;
   maxUnhealthyPercent: number;
+  guardMode: "manual" | "auto_pause" | "auto_rollback";
+  rollbackAfterBreaches: number;
+  consecutiveBreaches: number;
+  lastGuardAt: string | null;
+  guardPausedAt: string | null;
   notes: string;
   createdAt: string;
   startedAt: string | null;
@@ -534,6 +554,21 @@ export type MobileReleaseRollout = {
   health: MobileReleaseRolloutHealth;
   devices: MobileReleaseRolloutDevice[];
   events: MobileReleaseRolloutEvent[];
+};
+
+export type MobileReleaseIncident = {
+  id: string;
+  rolloutId: string;
+  targetVersion: string;
+  status: "open" | "acknowledged" | "resolved";
+  severity: "warning" | "critical";
+  occurrenceCount: number;
+  healthSnapshot: MobileReleaseRolloutHealth;
+  firstObservedAt: string;
+  lastObservedAt: string;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+  resolutionNotes: string | null;
 };
 
 export type LatestLocation = {

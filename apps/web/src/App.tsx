@@ -25,6 +25,7 @@ import type {
   MobilePilotPolicy,
   MobilePilotReleaseApproval,
   MobilePilotRun,
+  MobileReleaseIncident,
   MobileReleaseRollout,
   MobileReleaseRolloutActionInput,
   NotificationItem,
@@ -99,8 +100,8 @@ const mobilePilotEvidenceLabels: Record<MobilePilotEvidenceType, string> = {
   remote_control: "Uzaktan komut kanıtı",
 };
 
-const MOBILE_RELEASE_TARGET = "0.97.0";
-const MOBILE_PREVIOUS_STABLE = "0.96.0";
+const MOBILE_RELEASE_TARGET = "0.98.0";
+const MOBILE_PREVIOUS_STABLE = "0.97.0";
 
 function InviteAcceptance({ token, onLogin }: { token: string; onLogin: (user: SessionUser) => void }) {
   const [preview, setPreview] = useState<{ tenantName: string; email: string; role: string; expiresAt: string } | null>(null);
@@ -756,6 +757,7 @@ function Dashboard({
   });
   const [mobilePilotApprovals, setMobilePilotApprovals] = useState<MobilePilotReleaseApproval[]>([]);
   const [mobileReleaseRollouts, setMobileReleaseRollouts] = useState<MobileReleaseRollout[]>([]);
+  const [mobileReleaseIncidents, setMobileReleaseIncidents] = useState<MobileReleaseIncident[]>([]);
   const [mobilePilotPolicy, setMobilePilotPolicy] = useState<MobilePilotPolicy>({
     trackingEnabled: true,
     minimumAppVersion: null,
@@ -886,6 +888,7 @@ function Dashboard({
         setMobilePilotCohort(releaseResult.readiness);
         setMobilePilotApprovals(releaseResult.approvals);
         setMobileReleaseRollouts((await api.mobileReleaseRollouts()).rollouts);
+        setMobileReleaseIncidents((await api.mobileReleaseIncidents()).incidents);
         setNotificationAnalytics((await api.notificationAnalytics()).analytics);
         setNotificationProviderHealth(await api.notificationProviderHealth());
         const providerIncidentResult =
@@ -1125,6 +1128,8 @@ function Dashboard({
         targetVersion: MOBILE_RELEASE_TARGET,
         previousStableVersion: MOBILE_PREVIOUS_STABLE,
         maxUnhealthyPercent: 10,
+        guardMode: "auto_rollback",
+        rollbackAfterBreaches: 3,
         notes,
       });
       setMobileReleaseRollouts((await api.mobileReleaseRollouts()).rollouts);
@@ -1132,6 +1137,25 @@ function Dashboard({
       setMobileMessage("Kontrollü rollout planı oluşturuldu; owner başlatana kadar taslakta kalacak.");
     } catch {
       setMobileMessage("Rollout planı için aktif üretim onayı gerekir veya bu sürümün planı zaten vardır.");
+    }
+  }
+
+  async function updateMobileReleaseIncident(
+    incident: MobileReleaseIncident,
+    status: "acknowledged" | "resolved",
+  ) {
+    const notes = window.prompt(
+      status === "acknowledged" ? "Olay inceleme notu" : "Çözüm ve doğrulama notu",
+      status === "acknowledged" ? "Rollout durduruldu; cihaz sağlık sinyalleri inceleniyor." : "Kök neden giderildi ve seçili cihazlar doğrulandı.",
+    )?.trim();
+    if (!notes) return;
+    try {
+      await api.updateMobileReleaseIncident(incident.id, { status, notes });
+      setMobileReleaseIncidents((await api.mobileReleaseIncidents()).incidents);
+      setEvents((await api.auditEvents()).events);
+      setMobileMessage(status === "acknowledged" ? "Yayın olayı owner tarafından kabul edildi." : "Yayın olayı çözüm kanıtıyla kapatıldı.");
+    } catch {
+      setMobileMessage("Yayın olayı artık aktif değil veya durum geçişi uygulanamadı.");
     }
   }
 
@@ -2366,7 +2390,8 @@ function Dashboard({
               <p>
                 Üretim onayından sonra cihazlar kararlı bir hash sırasıyla %10, %25, %50 ve %100
                 gruplarına açılır. Her büyütme hedef sürüm heartbeat’i ve sağlık eşiğiyle engellenebilir;
-                owner dağıtımı durdurabilir veya önceki kararlı sürüme geri alma kaydı oluşturabilir.
+                zamanlayıcı ihlalde otomatik duraklatır ve üç ardışık ihlalde önceki kararlı
+                sürüme geri alır. Owner her müdahaleyi ayrıca yönetebilir.
               </p>
               {!currentMobileRollout && user.role === "owner" && <div className="modal-actions">
                 <button disabled={!activeMobileReleaseApproval} onClick={() => void createMobileReleaseRollout()}>
@@ -2379,6 +2404,11 @@ function Dashboard({
                   <article><small>UYGUN CİHAZ</small><strong>{currentMobileRollout.health.eligibleDeviceCount}</strong></article>
                   <article><small>HEDEF SÜRÜM</small><strong>{currentMobileRollout.health.observedTargetDevices}</strong></article>
                   <article><small>SAĞLIKSIZ</small><strong>%{currentMobileRollout.health.unhealthyPercent}</strong></article>
+                  <article><small>ARDIŞIK İHLAL</small><strong>{currentMobileRollout.consecutiveBreaches}/{currentMobileRollout.rollbackAfterBreaches}</strong></article>
+                </div>
+                <div className="approval-banner">
+                  <strong>Otomatik koruma: {currentMobileRollout.guardMode === "auto_rollback" ? "Duraklat + geri al" : currentMobileRollout.guardMode === "auto_pause" ? "Duraklat" : "Yalnız uyar"}</strong>
+                  <span>Son değerlendirme: {currentMobileRollout.lastGuardAt ? new Date(currentMobileRollout.lastGuardAt).toLocaleString("tr-TR") : "Henüz çalışmadı"}</span>
                 </div>
                 {currentMobileRollout.health.missing.length > 0 && <div className="pilot-missing">
                   <strong>Aşama sağlık kapısı</strong>
@@ -2411,6 +2441,39 @@ function Dashboard({
                   <span>{new Date(currentMobileRollout.events[0].createdAt).toLocaleString("tr-TR")} · {currentMobileRollout.events[0].reason}</span>
                 </div>}
               </>}
+            </section>
+
+            <section className="table-card mobile-tracking">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">YAYIN OLAY YÖNETİMİ</p>
+                  <h2>Otomatik koruma olayları</h2>
+                </div>
+                <span className="status">{mobileReleaseIncidents.filter((incident) => incident.status !== "resolved").length} aktif</span>
+              </div>
+              <p>
+                Sağlık eşiği ihlalleri tek olay üzerinde birleştirilir. Owner olayı kabul eder,
+                kök neden ve saha doğrulaması tamamlandıktan sonra çözüm notuyla kapatır.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Sürüm</th><th>Önem</th><th>Durum</th><th>Tekrar</th><th>Sağlık kanıtı</th><th>İşlem</th></tr></thead>
+                  <tbody>
+                    {mobileReleaseIncidents.length === 0 && <tr><td colSpan={6}>Henüz rollout sağlık olayı yok.</td></tr>}
+                    {mobileReleaseIncidents.map((incident) => <tr key={incident.id}>
+                      <td>{incident.targetVersion}<small>{new Date(incident.lastObservedAt).toLocaleString("tr-TR")}</small></td>
+                      <td><span className="status">{incident.severity === "critical" ? "Kritik" : "Uyarı"}</span></td>
+                      <td>{incident.status === "open" ? "Açık" : incident.status === "acknowledged" ? "İnceleniyor" : "Çözüldü"}</td>
+                      <td>{incident.occurrenceCount}</td>
+                      <td>%{incident.healthSnapshot.unhealthyPercent} sağlıksız<small>{incident.healthSnapshot.missing.join(" · ") || "Eşik içinde"}</small></td>
+                      <td><div className="table-actions">
+                        {user.role === "owner" && incident.status === "open" && <button className="secondary" onClick={() => void updateMobileReleaseIncident(incident, "acknowledged")}>Kabul et</button>}
+                        {user.role === "owner" && incident.status !== "resolved" && <button onClick={() => void updateMobileReleaseIncident(incident, "resolved")}>Çözüldü</button>}
+                      </div></td>
+                    </tr>)}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             <section className="table-card mobile-tracking">

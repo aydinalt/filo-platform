@@ -226,3 +226,23 @@ the observed health snapshot to a separate forced-RLS event table. Start, advanc
 resume, completion and rollback are tenant-audited. Rollback closes the plan while retaining
 its stable-device assignments and full decision history; it never deletes qualification or
 production approval evidence.
+
+## Automated rollout guard and release incidents
+
+The always-on worker evaluates each active rollout through an authenticated internal route
+using tenant and actor scopes already resolved for scheduled maintenance. A tenant/run key
+advisory lock plus a forced-RLS guard-run ledger makes each scheduler bucket idempotent.
+Health is recomputed from current active credentials with the same stable cohort assignment
+and exact-version rules used by manual advancement.
+
+Guard mode is bounded to manual observation, automatic pause, or automatic rollback. An
+unhealthy active rollout is paused on its first automatic breach. In rollback mode the guard
+continues evaluating only guard-paused plans and closes the rollout as rolled back after the
+configured two-to-five consecutive breaches. Recovery resets the counter and appends evidence
+but never silently resumes a paused deployment. Owner control therefore remains explicit.
+
+One active incident per tenant and rollout aggregates repeated violations, promotes severity
+to critical at rollback threshold and retains the latest bounded health snapshot. Owners may
+acknowledge an open incident or resolve an open/acknowledged incident with mandatory notes.
+Incident, rollout and scheduler-run tables use forced RLS; automatic transitions and owner
+handling also create tenant audit events.

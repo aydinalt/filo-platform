@@ -1,4 +1,4 @@
-# Filo Platform V1 — kontrollü mobil dağıtım v0.97
+# Filo Platform V1 — otomatik rollout koruması v0.98
 
 Çalışan monorepo: React web paneli, Fastify API, PostgreSQL RLS şeması, güvenli
 oturum, tenant'a izole araç ana kaydı ve değiştirilemez işlem geçmişi.
@@ -57,6 +57,12 @@ gruplarıyla %10, %25, %50 ve %100 aşamalarında dağıtır. Her büyütme seç
 hedef sürüm heartbeat’i ve tenant tarafından belirlenen sağlık eşiğiyle korunur.
 Dağıtım duraklatılabilir, devam ettirilebilir veya önceki kararlı sürüme geri alınabilir;
 her karar anlık sağlık kanıtıyla değiştirilemez olay geçmişine yazılır.
+
+v0.98, aktif rollout'ları sürekli worker döngüsünde değerlendirir. Sağlık kapısı
+ilk ihlalde dağıtımı otomatik duraklatır; üç ardışık ihlal sürerse önceki kararlı
+sürüme otomatik geri alma uygular. İhlaller tek tenant izole yayın olayında birleştirilir,
+owner tarafından kabul edilir ve çözüm kanıtıyla kapatılır. Zamanlanmış çalışmalar
+idempotent anahtar ve audit geçmişiyle tekrar güvenlidir.
 
 v0.5 yalnız aktif vardiya ve açık takip sırasında konum kabul eden güvenli konum
 olaylarını, tekrar gönderim korumasını ve son konum operasyon görünümünü ekler.

@@ -45,6 +45,8 @@ import { mobileRoutes } from "./routes/mobile.js";
 import { mobilePilotRunRoutes } from "./routes/mobile-pilot-runs.js";
 import { mobilePilotReleaseRoutes } from "./routes/mobile-pilot-release.js";
 import { mobileReleaseRolloutRoutes } from "./routes/mobile-release-rollouts.js";
+import { mobileReleaseIncidentRoutes } from "./routes/mobile-release-incidents.js";
+import { mobileReleaseGuardRoutes } from "./routes/mobile-release-guard.js";
 
 type BuildAppOptions = {
   readinessCheck?: () => Promise<void>;
@@ -121,6 +123,8 @@ export async function buildApp({ readinessCheck = checkDatabaseConnection }: Bui
   await app.register(mobilePilotRunRoutes, { prefix: "/api/mobile" });
   await app.register(mobilePilotReleaseRoutes, { prefix: "/api/mobile" });
   await app.register(mobileReleaseRolloutRoutes, { prefix: "/api/mobile" });
+  await app.register(mobileReleaseIncidentRoutes, { prefix: "/api/mobile" });
+  await app.register(mobileReleaseGuardRoutes, { prefix: "/api/internal/mobile-release-guard" });
   await app.register(vehicleRoutes, { prefix: "/api/vehicles" });
   await app.register(auditRoutes, { prefix: "/api/audit" });
   await app.register(driverRoutes, { prefix: "/api/drivers" });
