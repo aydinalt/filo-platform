@@ -27,6 +27,12 @@ for(const file of supabaseFiles){
   if(/\b(?:AUTOINCREMENT|PRAGMA)\b|\bWITHOUT\s+ROWID\b|\bINSERT\s+OR\s+(?:REPLACE|IGNORE)\b|\bSELECT\s+RAISE\s*\(/iu.test(sql))errors.push(`${file}: PostgreSQL ile uyumsuz SQLite sözdizimi içeriyor`);
 }
 const combinedSupabase=(await Promise.all(supabaseFiles.map(file=>readFile(resolve(supabaseDirectory,file),"utf8")))).join("\n");
+const tenantTables=new Set();
+for(const match of combinedSupabase.matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+(?:public\.)?"?([a-z0-9_]+)"?\s*\(([\s\S]*?)\);/giu)){
+  if(/"?tenant_id"?\s+/iu.test(match[2]))tenantTables.add(match[1]);
+}
+const rlsTables=new Set([...combinedSupabase.matchAll(/ALTER TABLE\s+(?:public\.)?"?([a-z0-9_]+)"?\s+ENABLE ROW LEVEL SECURITY/giu)].map(match=>match[1]));
+for(const table of tenantTables)if(!rlsTables.has(table))errors.push(`${table}: tenant tablosunda RLS etkin değil`);
 for(const marker of ["ENABLE ROW LEVEL SECURITY","filo-private", "configure_operations_tick", "vault.create_secret", "REVOKE ALL ON public.\"module_records\" FROM anon, authenticated"])if(!combinedSupabase.includes(marker))errors.push(`Supabase güvenlik işareti eksik: ${marker}`);
 console.log(JSON.stringify({format:"FILO_MIGRATION_LINT_V2",status:errors.length?"BLOCKED":"PASSED",migrations:files.length,supabaseMigrations:supabaseFiles.length,errors},null,2));
 if(errors.length)process.exitCode=1;

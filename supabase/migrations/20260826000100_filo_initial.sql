@@ -932,6 +932,22 @@ DROP POLICY IF EXISTS "tenant_delete_file_objects" ON public."file_objects";
 CREATE POLICY "tenant_delete_file_objects" ON public."file_objects" FOR DELETE TO authenticated
 USING (public.is_tenant_member("file_objects".tenant_id));
 
+REVOKE ALL ON public."legal_profiles" FROM anon, authenticated;
+ALTER TABLE public."legal_profiles" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tenant_select_legal_profiles" ON public."legal_profiles";
+CREATE POLICY "tenant_select_legal_profiles" ON public."legal_profiles" FOR SELECT TO authenticated
+USING (public.is_tenant_member("legal_profiles".tenant_id));
+DROP POLICY IF EXISTS "tenant_insert_legal_profiles" ON public."legal_profiles";
+CREATE POLICY "tenant_insert_legal_profiles" ON public."legal_profiles" FOR INSERT TO authenticated
+WITH CHECK (public.is_tenant_member("legal_profiles".tenant_id));
+DROP POLICY IF EXISTS "tenant_update_legal_profiles" ON public."legal_profiles";
+CREATE POLICY "tenant_update_legal_profiles" ON public."legal_profiles" FOR UPDATE TO authenticated
+USING (public.is_tenant_member("legal_profiles".tenant_id))
+WITH CHECK (public.is_tenant_member("legal_profiles".tenant_id));
+DROP POLICY IF EXISTS "tenant_delete_legal_profiles" ON public."legal_profiles";
+CREATE POLICY "tenant_delete_legal_profiles" ON public."legal_profiles" FOR DELETE TO authenticated
+USING (public.is_tenant_member("legal_profiles".tenant_id));
+
 REVOKE ALL ON public."migration_runs" FROM anon, authenticated;
 ALTER TABLE public."migration_runs" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "tenant_select_migration_runs" ON public."migration_runs";
