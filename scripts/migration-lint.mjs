@@ -24,6 +24,7 @@ for(const file of supabaseFiles){
   const sql=await readFile(resolve(supabaseDirectory,file),"utf8");
   if(!/\bBEGIN;[\s\S]*\bCOMMIT;/iu.test(sql))errors.push(`${file}: transaction sınırı eksik`);
   if(/GRANT\s+(?:ALL|[^;]*(?:INSERT|UPDATE|DELETE))[^;]*TO\s+(?:anon|authenticated)/iu.test(sql))errors.push(`${file}: tarayıcı rollerine doğrudan yazma yetkisi verilemez`);
+  if(/\b(?:AUTOINCREMENT|PRAGMA)\b|\bWITHOUT\s+ROWID\b|\bINSERT\s+OR\s+(?:REPLACE|IGNORE)\b|\bSELECT\s+RAISE\s*\(/iu.test(sql))errors.push(`${file}: PostgreSQL ile uyumsuz SQLite sözdizimi içeriyor`);
 }
 const combinedSupabase=(await Promise.all(supabaseFiles.map(file=>readFile(resolve(supabaseDirectory,file),"utf8")))).join("\n");
 for(const marker of ["ENABLE ROW LEVEL SECURITY","filo-private", "configure_operations_tick", "vault.create_secret", "REVOKE ALL ON public.\"module_records\" FROM anon, authenticated"])if(!combinedSupabase.includes(marker))errors.push(`Supabase güvenlik işareti eksik: ${marker}`);

@@ -252,15 +252,20 @@ ALTER TABLE "file_objects" ADD "scan_status" text DEFAULT 'PENDING_RESCAN' NOT N
 ALTER TABLE "file_objects" ADD "scan_engine" text DEFAULT '' NOT NULL;
 ALTER TABLE "file_objects" ADD "scan_summary" text DEFAULT '' NOT NULL;
 
-CREATE TRIGGER "audit_events_block_update" BEFORE UPDATE ON "audit_events"
+CREATE OR REPLACE FUNCTION public.block_audit_event_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
 BEGIN
-	SELECT RAISE(ABORT, 'audit_events are append-only');
+	RAISE EXCEPTION 'audit_events are append-only' USING ERRCODE = '55000';
 END;
+$$;
+
+CREATE TRIGGER "audit_events_block_update" BEFORE UPDATE ON "audit_events"
+FOR EACH ROW EXECUTE FUNCTION public.block_audit_event_mutation();
 
 CREATE TRIGGER "audit_events_block_delete" BEFORE DELETE ON "audit_events"
-BEGIN
-	SELECT RAISE(ABORT, 'audit_events are append-only');
-END;
+FOR EACH ROW EXECUTE FUNCTION public.block_audit_event_mutation();
 
 CREATE TABLE "mobile_installations" (
 	"id" text PRIMARY KEY NOT NULL,
