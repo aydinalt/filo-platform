@@ -1,0 +1,2 @@
+gate_id,module,source_sha256,total,imported,errors,duplicates,persisted,sample_size,rollback_run,customer_approver,executed_at,result
+RDY-DATA-MIGRATION,,,,,,,,,,,,

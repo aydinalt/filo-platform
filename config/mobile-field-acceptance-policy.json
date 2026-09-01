@@ -1,0 +1,33 @@
+{
+  "format": "FILO_MOBILE_FIELD_POLICY_V1",
+  "release": "1.28.10",
+  "evidenceMaxAgeDays": 30,
+  "physicalDeviceRequired": true,
+  "thresholds": {
+    "standardDurationMinutes": 120,
+    "enduranceDurationMinutes": 480,
+    "maximumDurationMinutes": 720,
+    "locationIntervalSeconds": 30,
+    "minimumPointCoverageRatio": 0.8,
+    "maximumLocationGapSeconds": 300,
+    "maximumBatteryDropPercent8h": 25,
+    "minimumBatterySamples8h": 16,
+    "lateTelemetrySeconds": 60,
+    "maximumQueueItems": 10000,
+    "maximumCrashCount": 0,
+    "maximumPermissionLossCount": 0,
+    "maximumQueueOverflowCount": 0
+  },
+  "ios": {
+    "minimumDistinctMajorVersions": 3,
+    "requiredPassedScenarios": ["BACKGROUND_LOCKED", "OFFLINE_RECONNECT", "ENDURANCE_8H"],
+    "requiredLimitScenario": "USER_TERMINATED"
+  },
+  "android": {
+    "requiredManufacturers": ["SAMSUNG", "XIAOMI", "OPPO", "PIXEL"],
+    "requiredPassedScenarios": ["BACKGROUND_LOCKED", "OFFLINE_RECONNECT", "ENDURANCE_8H"],
+    "requiredLimitScenario": "FORCE_STOP"
+  },
+  "acceptedStatuses": ["PASSED", "FAILED", "LIMIT_DOCUMENTED"],
+  "terminationRule": "USER_TERMINATED veya FORCE_STOP kesintisiz takip başarısı değildir; yalnız işletim sistemi sınırı olarak belgelenebilir."
+}

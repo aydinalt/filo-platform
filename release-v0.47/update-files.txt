@@ -1,7 +1,0 @@
-apps/api/package.json
-apps/api/src/app.ts
-apps/api/test/release-smoke.test.ts
-docs/LOCAL_UPDATE_v0.47.md
-package-lock.json
-package.json
-release-v0.47/update-files.txt

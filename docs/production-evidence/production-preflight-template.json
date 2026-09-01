@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "FILO_PRODUCTION_PREFLIGHT_EVIDENCE_V1",
+  "environment": "PRODUCTION",
+  "checkedAt": null,
+  "releaseVersion": null,
+  "environmentRevision": null,
+  "result": "PENDING",
+  "evidenceUrl": null,
+  "approvedBy": null
+}

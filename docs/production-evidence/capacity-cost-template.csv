@@ -1,0 +1,5 @@
+resource,plan,monthly_budget,warning_percent,critical_percent,hard_stop_percent,current_estimate,measured_peak,p95_ms,p99_ms,error_rate_percent,status
+D1,,,70,90,100,,,,,,PLANNED
+R2,,,70,90,100,,,,,,PLANNED
+WORKER,,,70,90,100,,,,,,PLANNED
+PROVIDERS,,,70,90,100,,,,,,PLANNED

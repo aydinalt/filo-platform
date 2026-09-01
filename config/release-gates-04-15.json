@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "FILO_RELEASE_GATES_04_15_V1",
+  "gates": [
+    { "order": 4, "id": "RDY-TENANT-ISOLATION", "owner": "SECURITY", "template": "security-load-report-template.md", "freshnessDays": 30 },
+    { "order": 5, "id": "RDY-PAYMENT", "owner": "FINANCE", "template": "provider-lifecycle-template.csv", "freshnessDays": 30 },
+    { "order": 6, "id": "RDY-EINVOICE", "owner": "FINANCE", "template": "provider-lifecycle-template.csv", "freshnessDays": 30 },
+    { "order": 7, "id": "RDY-NOTIFICATION", "owner": "OPERATIONS", "template": "provider-lifecycle-template.csv", "freshnessDays": 30 },
+    { "order": 8, "id": "RDY-LEGAL-CUSTODY", "owner": "LEGAL", "template": "legal-approval-template.md", "freshnessDays": 365 },
+    { "order": 9, "id": "RDY-DATA-MIGRATION", "owner": "DATA", "template": "data-migration-acceptance-template.csv", "freshnessDays": 30 },
+    { "order": 10, "id": "RDY-OBSERVABILITY", "owner": "OPERATIONS", "template": "operations-runbook-template.md", "freshnessDays": 7 },
+    { "order": 11, "id": "RDY-BACKUP-RESTORE", "owner": "OPERATIONS", "template": "backup-restore-template.csv", "freshnessDays": 30 },
+    { "order": 12, "id": "RDY-I18N", "owner": "PRODUCT", "template": "localization-acceptance-template.csv", "freshnessDays": 30 },
+    { "order": 13, "id": "RDY-SECURITY-LOAD", "owner": "SECURITY", "template": "security-load-report-template.md", "freshnessDays": 30 },
+    { "order": 14, "id": "RDY-PILOT-UAT", "owner": "CUSTOMER_SUCCESS", "template": "pilot-uat-template.csv", "freshnessDays": 30 },
+    { "order": 15, "id": "RDY-MOBILE-STORE", "owner": "MOBILE", "template": "store-release-template.csv", "freshnessDays": 30 }
+  ]
+}

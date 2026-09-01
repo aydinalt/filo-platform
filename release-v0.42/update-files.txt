@@ -1,9 +1,0 @@
-apps/api/package.json
-apps/api/src/lib/notification-retention.ts
-apps/api/src/routes/notification-retention-worker.ts
-apps/api/test/notification-retention.test.ts
-docs/LOCAL_UPDATE_v0.42.md
-package-lock.json
-package.json
-packages/contracts/src/index.ts
-release-v0.42/update-files.txt

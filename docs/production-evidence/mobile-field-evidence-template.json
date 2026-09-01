@@ -1,0 +1,8 @@
+{
+  "format": "FILO_MOBILE_FIELD_EVIDENCE_V1",
+  "release": "1.28.10",
+  "generatedAt": "2026-08-27T00:00:00.000Z",
+  "physicalDevices": true,
+  "secretValuesIncluded": false,
+  "runs": []
+}

@@ -1,0 +1,8 @@
+provider,purpose,environment,account_owner,credential_owner,callback_url,allowlist_status,last_rotation_at,live_test_id,status
+PAYMENT,Checkout,PRODUCTION,,,,,,,PLANNED
+EINVOICE,E-document,PRODUCTION,,,,,,,PLANNED
+RESEND,Email,PRODUCTION,,,,,,,PLANNED
+EXPO,Push,PRODUCTION,,,,,,,PLANNED
+ESIGN,Qualified signature,PRODUCTION,,,,,,,PLANNED
+MALWARE_SCAN,Upload scanning,PRODUCTION,,,,,,,PLANNED
+VEHICLE_CATALOG,VIN catalog,PRODUCTION,,,,,,,PLANNED

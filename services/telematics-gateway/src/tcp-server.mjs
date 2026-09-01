@@ -1,0 +1,17 @@
+import net from "node:net";
+import { randomUUID } from "node:crypto";
+import { parseQueclinkLine, parseTeltonikaAvlFrame, parseTeltonikaImeiHandshake } from "./core.mjs";
+import { connectMqtt, postToPlatform, publishMqtt } from "./delivery.mjs";
+import { deviceByImei, loadRegistry } from "./registry.mjs";
+
+const registry=await loadRegistry(),transport=String(process.env.FILO_GATEWAY_TRANSPORT||"MQTT").toUpperCase(),mqttClient=transport==="MQTT"?await connectMqtt():null;
+const deliver=(device,records,messageId)=>mqttClient?publishMqtt(mqttClient,device,records,messageId):postToPlatform(device,records,messageId);
+const log=(level,event,detail={})=>console.log(JSON.stringify({timestamp:new Date().toISOString(),level,event,...detail}));
+
+function teltonikaConnection(socket){let buffer=Buffer.alloc(0),device=null;socket.setTimeout(180000);socket.on("data",async chunk=>{socket.pause();try{buffer=Buffer.concat([buffer,chunk]);if(!device){const handshake=parseTeltonikaImeiHandshake(buffer);if(!handshake){socket.resume();return}device=deviceByImei(registry,handshake.imei);if(device.provider!=="TELTONIKA")throw new Error("DEVICE_PROVIDER_MISMATCH");buffer=buffer.subarray(handshake.bytesConsumed);socket.write(handshake.response);log("info","imei_accepted",{imeiSuffix:device.imei.slice(-4),modelCode:device.modelCode})}while(buffer.length>=12){const parsed=parseTeltonikaAvlFrame(buffer);if(!parsed)break;await deliver(device,parsed.records,`TEL-${device.imei}-${Date.now()}-${randomUUID().slice(0,8)}`);socket.write(parsed.acknowledgement);buffer=buffer.subarray(parsed.bytesConsumed);log("info","avl_accepted",{imeiSuffix:device.imei.slice(-4),records:parsed.recordCount,codec:parsed.codec})}socket.resume()}catch(error){log("error","teltonika_rejected",{reason:error.message});socket.destroy()}});socket.on("timeout",()=>socket.destroy())}
+
+function queclinkConnection(socket){let text="";socket.setEncoding("ascii");socket.setTimeout(180000);socket.on("data",async chunk=>{text+=chunk;const frames=text.split("$");text=frames.pop()||"";for(const raw of frames){try{const candidate=`${raw}$`,imei=(candidate.match(/,([0-9]{15}),/)||[])[1];if(!imei)throw new Error("QUECLINK_IMEI_NOT_FOUND");const device=deviceByImei(registry,imei);if(device.provider!=="QUECLINK")throw new Error("DEVICE_PROVIDER_MISMATCH");const parsed=parseQueclinkLine(candidate,device.vendorProfile);await deliver(device,parsed.records,`QUE-${imei}-${Date.now()}-${randomUUID().slice(0,8)}`);if(device.vendorProfile.ackLiteral){const ack=String(device.vendorProfile.ackLiteral);if(!/^\+[A-Z]+:[A-Za-z0-9,._:-]{1,120}\$/.test(ack))throw new Error("QUECLINK_ACK_PROFILE_INVALID");socket.write(ack)}log("info","atrack_accepted",{imeiSuffix:imei.slice(-4),records:parsed.records.length})}catch(error){log("error","queclink_rejected",{reason:error.message});socket.destroy();break}}});socket.on("timeout",()=>socket.destroy())}
+
+const teltonikaPort=Number(process.env.TELTONIKA_PORT||5027),queclinkPort=Number(process.env.QUECLINK_PORT||5028);net.createServer(teltonikaConnection).listen(teltonikaPort,"0.0.0.0",()=>log("info","tcp_listening",{provider:"TELTONIKA",port:teltonikaPort}));net.createServer(queclinkConnection).listen(queclinkPort,"0.0.0.0",()=>log("info","tcp_listening",{provider:"QUECLINK",port:queclinkPort}));
+
+for(const signal of ["SIGTERM","SIGINT"])process.once(signal,async()=>{if(mqttClient)await mqttClient.endAsync();process.exit(0)});

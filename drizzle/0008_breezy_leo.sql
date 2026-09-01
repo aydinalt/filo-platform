@@ -1,0 +1,55 @@
+CREATE TABLE `data_acceptance_runs` (
+	`id` text PRIMARY KEY NOT NULL,
+	`tenant_id` text NOT NULL,
+	`migration_run_id` text NOT NULL,
+	`rollback_run_id` text NOT NULL,
+	`module` text NOT NULL,
+	`source_sha256` text NOT NULL,
+	`source_total` integer NOT NULL,
+	`imported` integer NOT NULL,
+	`errors` integer DEFAULT 0 NOT NULL,
+	`duplicates` integer DEFAULT 0 NOT NULL,
+	`persisted_count` integer DEFAULT 0 NOT NULL,
+	`sample_size` integer DEFAULT 0 NOT NULL,
+	`reconciliation_status` text NOT NULL,
+	`status` text NOT NULL,
+	`customer_approver` text NOT NULL,
+	`evidence_file_id` text NOT NULL,
+	`evidence_sha256` text NOT NULL,
+	`executed_at` text NOT NULL,
+	`created_by` text NOT NULL,
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `data_acceptance_tenant_status_idx` ON `data_acceptance_runs` (`tenant_id`,`status`,`created_at`);--> statement-breakpoint
+CREATE TABLE `field_validation_runs` (
+	`id` text PRIMARY KEY NOT NULL,
+	`tenant_id` text NOT NULL,
+	`kind` text NOT NULL,
+	`device_id` text NOT NULL,
+	`platform` text DEFAULT '' NOT NULL,
+	`manufacturer` text DEFAULT '' NOT NULL,
+	`model` text DEFAULT '' NOT NULL,
+	`os_version` text DEFAULT '' NOT NULL,
+	`provider` text DEFAULT '' NOT NULL,
+	`protocol` text DEFAULT '' NOT NULL,
+	`scenario` text NOT NULL,
+	`expected_outcome` text NOT NULL,
+	`observed_outcome` text NOT NULL,
+	`started_at` text NOT NULL,
+	`ended_at` text NOT NULL,
+	`duration_minutes` integer NOT NULL,
+	`telemetry_count` integer DEFAULT 0 NOT NULL,
+	`gateway_event_count` integer DEFAULT 0 NOT NULL,
+	`max_gap_seconds` integer DEFAULT 0 NOT NULL,
+	`battery_drop_percent` integer DEFAULT 0 NOT NULL,
+	`crash_count` integer DEFAULT 0 NOT NULL,
+	`permission_loss_count` integer DEFAULT 0 NOT NULL,
+	`status` text NOT NULL,
+	`evidence_file_id` text NOT NULL,
+	`evidence_sha256` text NOT NULL,
+	`created_by` text NOT NULL,
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `field_validation_tenant_kind_status_idx` ON `field_validation_runs` (`tenant_id`,`kind`,`status`,`created_at`);

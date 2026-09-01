@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "FILO_CAPACITY_BUDGET_V1",
+  "performance": {
+    "minimumConcurrentUsers": 100,
+    "maximumP95Ms": 500,
+    "maximumP99Ms": 1000,
+    "maximumErrorRatePercent": 1,
+    "maximumTelemetryFreshnessSeconds": 300
+  },
+  "operations": {
+    "maximumPendingOutbox": 0,
+    "maximumOpenCriticalAlerts": 0,
+    "maximumRestoreAgeDays": 30,
+    "secretMaximumAgeDays": 90
+  },
+  "monthlyCostAlerts": { "warningPercent": 70, "criticalPercent": 90, "hardStopPercent": 100 },
+  "rollout": [
+    { "phase": "INTERNAL", "trafficPercent": 0, "minimumMinutes": 60 },
+    { "phase": "PILOT", "trafficPercent": 5, "minimumMinutes": 240 },
+    { "phase": "CUSTOMER_25", "trafficPercent": 25, "minimumMinutes": 720 },
+    { "phase": "GENERAL", "trafficPercent": 100, "minimumMinutes": 1440 }
+  ]
+}

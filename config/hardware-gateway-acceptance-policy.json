@@ -1,0 +1,13 @@
+{
+  "format": "FILO_HARDWARE_GATEWAY_POLICY_V1",
+  "version": "1.28.11",
+  "decision": "NO_GO_UNTIL_PHYSICAL_EVIDENCE",
+  "candidateModels": [
+    {"provider":"TELTONIKA","model":"FMC920","cellular":"4G LTE Cat 1","protocol":"CODEC8E","procurementStatus":"REQUIRED"},
+    {"provider":"QUECLINK","model":"GV57MG PLUS","cellular":"LTE Cat M1/NB2","protocol":"ATRACK_PROFILE_V1","procurementStatus":"REQUIRED","vendorProtocolStatus":"LICENSED_PROFILE_REQUIRED"}
+  ],
+  "identity": {"imei":"15_DIGIT_LUHN","iccid":"18_22_DIGIT_LUHN","singleActiveVehicleAssignment":true,"tokenRotation":true},
+  "transport": {"deviceToGateway":"TCP","gatewayQueue":"MQTTS_QOS1","mqttRetained":false,"platform":"HMAC_HTTPS","rawTcpOnVercel":false},
+  "fieldGate": {"minimumMinutes":480,"maximumMinutes":720,"maximumGapSeconds":300,"minimumGatewayBatches":8,"minimumTelemetryCoveragePercent":80,"realDeviceRequired":true},
+  "requiredScenarios": ["LIVE_ROUTE_8H","TCP_RECONNECT","MQTT_REDELIVERY","SIM_OUTAGE_RECOVERY","POWER_CYCLE_RECOVERY","DUPLICATE_FRAME","IGNITION_EVENT"]
+}

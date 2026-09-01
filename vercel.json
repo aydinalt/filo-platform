@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "npm run build:vercel",
+  "functions": {
+    "app/api/device-telemetry/route.ts": { "maxDuration": 30 },
+    "app/api/tracker-gateway/route.ts": { "maxDuration": 30 },
+    "app/api/system/operations-tick/route.ts": { "maxDuration": 60 }
+  }
+}

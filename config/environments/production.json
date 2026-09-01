@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "FILO_ENVIRONMENT_PROFILE_V1",
+  "name": "production",
+  "requiresHttps": true,
+  "publicSignupAllowed": true,
+  "allowedData": "PRODUCTION",
+  "providerMode": "LIVE",
+  "secretMaxAgeDays": 90,
+  "isolatedResources": ["D1", "R2", "PROVIDER_ACCOUNTS"]
+}

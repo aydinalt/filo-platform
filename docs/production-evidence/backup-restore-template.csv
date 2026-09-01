@@ -1,0 +1,2 @@
+gate_id,backup_sha256,source_exported_at,target_namespace,record_count,file_count,rpo_minutes,rto_seconds,restore_started_at,restore_ended_at,owner,result
+RDY-BACKUP-RESTORE,,,,,,,,,,,

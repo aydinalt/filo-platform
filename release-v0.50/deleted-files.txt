@@ -1,3 +1,0 @@
-packages/contracts/src/README.md
-packages/contracts/src/package-lock.json
-packages/contracts/src/package.json

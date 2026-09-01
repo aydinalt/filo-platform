@@ -1,22 +1,71 @@
 {
-  "name": "filo-platform-v1",
+  "name": "site-creator-vinext-starter",
+  "version": "0.1.0",
   "private": true,
-  "version": "1.0.0",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "dev": "npm run dev --workspace @filo/api & npm run dev --workspace @filo/web",
-    "build": "npm run build --workspace @filo/contracts && npm run build --workspace @filo/database && npm run build --workspace @filo/api && npm run build --workspace @filo/worker && npm run typecheck --workspace @filo/mobile && npm run build --workspace @filo/web",
-    "typecheck": "npm run build --workspace @filo/contracts && npm run build --workspace @filo/database && npm run typecheck --workspace @filo/api && npm run typecheck --workspace @filo/worker && npm run typecheck --workspace @filo/mobile && npm run typecheck --workspace @filo/web",
-    "test": "node --test scripts/release-policy.test.mjs && npm run test --workspaces --if-present",
-    "release:verify": "node scripts/verify-release.mjs",
-    "db:migrate": "npm run db:migrate --workspace @filo/database",
-    "db:migrate:deploy": "node packages/database/dist/migrate.js",
-    "db:seed": "npm run db:seed --workspace @filo/database"
-  },
   "engines": {
-    "node": ">=22"
-  }
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "install:ci": "bash scripts/install-ci.sh",
+    "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vite",
+    "build": "bash scripts/build-verified.sh",
+    "build:vercel": "next build",
+    "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "typecheck": "bash scripts/sites-env.sh -- ./node_modules/.bin/tsc --noEmit --pretty false --incremental false",
+    "security:scan": "node scripts/release-security-check.mjs",
+    "migration:lint": "node scripts/migration-lint.mjs",
+    "sbom": "node scripts/generate-sbom.mjs",
+    "release:manifest": "node scripts/release-manifest.mjs",
+    "build:reproducible": "node scripts/reproducible-build-check.mjs",
+    "gates:4-15": "node scripts/validate-release-gates.mjs",
+    "gates:4-15:go-live": "node scripts/validate-release-gates.mjs --go-live",
+    "capacity:verify": "node scripts/validate-capacity-budget.mjs",
+    "readiness:final": "node scripts/validate-final-production-readiness.mjs",
+    "readiness:final:strict": "node scripts/validate-final-production-readiness.mjs --strict",
+    "technical:readiness": "node scripts/technical-go-live-audit.mjs",
+    "technical:readiness:strict": "node scripts/technical-go-live-audit.mjs --strict",
+    "synthetic:production": "node scripts/synthetic-production-check.mjs",
+    "ci:verify": "bash scripts/ci-verify.sh",
+    "preflight:production": "node scripts/production-preflight.mjs",
+    "preflight:production:json": "node scripts/production-preflight.mjs --json",
+    "preflight:production:strict": "node scripts/production-preflight.mjs --strict",
+    "hardware:gateway:evidence:verify": "node scripts/validate-hardware-gateway-evidence.mjs --strict",
+    "mobile:field:evidence:verify": "node scripts/validate-mobile-field-evidence.mjs --strict",
+    "validate:artifact": "bash scripts/validate-artifact.sh",
+    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
+    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
+    "supabase:migration": "node scripts/generate-supabase-migration.mjs",
+    "supabase:apply": "node scripts/supabase-deploy.mjs --apply",
+    "supabase:verify": "node scripts/supabase-deploy.mjs"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.57.4",
+    "drizzle-orm": "0.45.2",
+    "next": "^16.3.2",
+    "postgres": "^3.4.7",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/workers-types": "^4.20260515.1",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.26",
+    "drizzle-kit": "0.31.10",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.6",
+    "react-server-dom-webpack": "19.2.6",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3",
+    "vinext": "0.0.50",
+    "vite": "8.0.13",
+    "wrangler": "4.92.0"
+  },
+  "type": "module"
 }

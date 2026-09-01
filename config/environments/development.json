@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "FILO_ENVIRONMENT_PROFILE_V1",
+  "name": "development",
+  "requiresHttps": false,
+  "publicSignupAllowed": false,
+  "allowedData": "SYNTHETIC_ONLY",
+  "providerMode": "SANDBOX_OR_DISABLED",
+  "secretMaxAgeDays": 90,
+  "isolatedResources": ["D1", "R2", "PROVIDER_ACCOUNTS"]
+}

@@ -1,0 +1,26 @@
+project_id = "filo-platform"
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+enable_signup = true
+minimum_password_length = 10
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+secure_password_change = true
+max_frequency = "1m"
+otp_length = 6
+otp_expiry = 3600
+
+[auth.rate_limit]
+email_sent = 30
+token_refresh = 150
+verify = 30
+
+[storage]
+file_size_limit = "10MiB"

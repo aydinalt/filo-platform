@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "FILO_TECHNICAL_GO_LIVE_V1",
+  "legalGateDeferred": true,
+  "generalReleaseBlockedUntilLegalApproval": true,
+  "steps": [
+    { "order": 2, "id": "PRODUCTION_ENVIRONMENT", "evidence": "production-preflight-template.json" },
+    { "order": 3, "id": "LIVE_PROVIDERS", "evidence": "provider-account-inventory.csv" },
+    { "order": 4, "id": "MAP_GEOCODING", "evidence": "provider-lifecycle-template.csv" },
+    { "order": 5, "id": "MOBILE_FIELD_MATRIX", "evidence": "device-field-matrix.csv" },
+    { "order": 6, "id": "TRACKER_FIELD_TEST", "evidence": "device-field-matrix.csv" },
+    { "order": 7, "id": "PROVIDER_LIFECYCLES", "evidence": "provider-lifecycle-template.csv" },
+    { "order": 8, "id": "DATA_MIGRATION", "evidence": "data-migration-acceptance-template.csv" },
+    { "order": 9, "id": "BACKUP_RESTORE", "evidence": "backup-restore-template.csv" },
+    { "order": 10, "id": "OBSERVABILITY", "evidence": "operations-runbook-template.md" },
+    { "order": 11, "id": "SECURITY_LOAD", "evidence": "security-load-report-template.md" },
+    { "order": 12, "id": "PILOT_UAT", "evidence": "pilot-uat-template.csv" },
+    { "order": 13, "id": "MOBILE_STORES", "evidence": "store-release-template.csv" },
+    { "order": 14, "id": "CAPACITY_COST", "evidence": "capacity-cost-template.csv" },
+    { "order": 15, "id": "CONTROLLED_ROLLOUT", "evidence": "rollout-observation-template.csv" }
+  ]
+}

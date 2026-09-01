@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+const root=resolve(import.meta.dirname,"..");
+const read=path=>readFile(resolve(root,path),"utf8");
+
+test("v1.28.19 closes signup bypass and enforces AAL2 on privileged actions",async()=>{const [store,auth,platform,backup,restore,imports]=await Promise.all([read("lib/platform-store.ts"),read("app/chatgpt-auth.ts"),read("app/api/platform/route.ts"),read("app/api/export-backup/route.ts"),read("app/api/restore-rehearsal/route.ts"),read("app/api/import/route.ts")]);assert.match(store,/if\(!signup\.ready\|\|!signup\.signupEnabled\)/);assert.match(store,/PRIVILEGED_ACTION_DENIED/);assert.match(store,/MFA_REQUIRED/);assert.match(auth,/getAuthenticatorAssuranceLevel/);assert.match(auth,/assuranceLevel: assurance\.data\?\.currentLevel === "aal2"/);for(const source of [platform,backup,restore,imports])assert.match(source,/requirePrivilegedAccess/)});
+
+test("production telemetry is device-only and bulk imports commit atomically",async()=>{const [telemetry,store]=await Promise.all([read("app/api/telemetry/route.ts"),read("lib/platform-store.ts")]);assert.match(telemetry,/toLowerCase\(\)==="production"/);assert.match(telemetry,/DEVICE_CHANNEL_REQUIRED/);assert.match(telemetry,/BROWSER_DIAGNOSTIC/);assert.match(store,/ATOMIC_BULK_IMPORT_V1/);assert.match(store,/atomic:true/);assert.doesNotMatch(store,/const created=\[\];for\(const row of normalized\)created\.push\(await saveRecord/)});
+
+test("operations alerts use a real delivery outbox and cannot self-certify a drill",async()=>{const [operations,store,tick,dispatch]=await Promise.all([read("lib/operations-center.ts"),read("lib/platform-store.ts"),read("app/api/system/operations-tick/route.ts"),read("lib/provider-dispatch.ts")]);assert.match(operations,/OPERATIONS_ALERT_EMAILS/);assert.match(operations,/notifications\.operations_alert/);assert.match(operations,/notifications\.operations_escalation/);assert.match(operations,/ALERT_ROUTING_MISSING/);assert.match(store,/OBSERVABILITY_DRILL_QUEUED/);assert.match(store,/status:"EXTERNAL_DELIVERY_REQUIRED"/);assert.ok(tick.indexOf("monitoring=await runOperationsCenterSweep")<tick.indexOf("notifications=await dispatchNotifications"));assert.match(dispatch,/OPERATIONS_ESCALATION/)});
+
+test("rollout and final GO require continuous health and recomputed evidence",async()=>{const [store,validator,template]=await Promise.all([read("lib/platform-store.ts"),read("scripts/validate-final-production-readiness.mjs"),read("docs/production-evidence/final-production-acceptance-template.json")]);assert.match(store,/healthCoveragePassed/);assert.match(store,/healthMaxGapMinutes<=20/);assert.match(validator,/createHash\("sha256"\)/);assert.match(validator,/sizeBytes/);assert.match(validator,/tenantIsolationPassed/);assert.match(validator,/monthlyCostMeasured/);assert.match(validator,/healthCoveragePassed/);assert.match(JSON.parse(template).format,/FILO_FINAL_PRODUCTION_EVIDENCE_V[23]/)});

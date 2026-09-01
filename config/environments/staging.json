@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "FILO_ENVIRONMENT_PROFILE_V1",
+  "name": "staging",
+  "requiresHttps": true,
+  "publicSignupAllowed": false,
+  "allowedData": "SYNTHETIC_OR_MASKED",
+  "providerMode": "SANDBOX",
+  "secretMaxAgeDays": 90,
+  "isolatedResources": ["D1", "R2", "PROVIDER_ACCOUNTS"]
+}

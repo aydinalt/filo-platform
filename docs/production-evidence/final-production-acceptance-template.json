@@ -1,0 +1,14 @@
+{
+  "format": "FILO_FINAL_PRODUCTION_EVIDENCE_V3",
+  "release": "1.28.20",
+  "environment": "production",
+  "gates": [
+    {"id":"OBSERVABILITY","status":"EXTERNAL_EVIDENCE_REQUIRED","executedAt":"","approver":"","metrics":{"monitoringHours":0,"openCritical":-1,"deliveryTestPassed":false,"maximumSnapshotGapMinutes":999},"evidence":[]},
+    {"id":"INDEPENDENT_SECURITY","status":"EXTERNAL_EVIDENCE_REQUIRED","executedAt":"","approver":"","metrics":{"critical":-1,"high":-1,"tenantIsolationPassed":false,"privilegeEscalationPassed":false,"rlsBypassPassed":false,"uploadAttackPassed":false,"owaspAsvsPassed":false,"externalAuditor":false},"evidence":[]},
+    {"id":"PERFORMANCE_CAPACITY","status":"EXTERNAL_EVIDENCE_REQUIRED","executedAt":"","approver":"","metrics":{"concurrentUsers":0,"p95Ms":999999,"p99Ms":999999,"errorRatePercent":100,"telemetryLoadMeasured":false,"monthlyCostMeasured":false},"evidence":[]},
+    {"id":"LEGAL_KVKK","status":"EXTERNAL_EVIDENCE_REQUIRED","executedAt":"","approver":"","metrics":{"officialLegalApproval":false,"locationNoticeApproved":false,"retentionDeletionApproved":false,"subprocessorsApproved":false},"evidence":[]},
+    {"id":"DATA_MIGRATION","status":"EXTERNAL_EVIDENCE_REQUIRED","executedAt":"","approver":"","metrics":{"modules":0,"rollbackPassed":false,"reconciliationMismatchCount":-1},"evidence":[]},
+    {"id":"PILOT_UAT","status":"EXTERNAL_EVIDENCE_REQUIRED","executedAt":"","approver":"","metrics":{"companies":0,"vehicles":0,"criticalDefects":-1,"writtenApprovals":0},"evidence":[]},
+    {"id":"CONTROLLED_ROLLOUT","status":"EXTERNAL_EVIDENCE_REQUIRED","executedAt":"","approver":"","metrics":{"phases":[],"rollbackPlansVerified":false,"healthCoveragePassed":false,"ownerGo":false},"evidence":[]}
+  ]
+}

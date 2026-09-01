@@ -1,0 +1,22 @@
+{
+  "format": "FILO_HARDWARE_GATEWAY_EVIDENCE_V1",
+  "version": "1.28.11",
+  "environment": "production",
+  "decision": "NO_GO",
+  "procurementApproved": false,
+  "selectedDevice": {
+    "provider": "",
+    "model": "",
+    "imeiSuffix": "",
+    "firmware": "",
+    "protocol": "",
+    "realDevice": false
+  },
+  "sim": {"operator":"","iccidSuffix":"","apn":"","realSim":false},
+  "gateway": {"tcpHostedOutsideVercel":true,"mqttTls":false,"mqttQos":1,"mqttRetained":false,"hmacValid":false,"duplicateBlocked":false},
+  "fieldRun": {"startedAt":"","endedAt":"","durationMinutes":0,"gatewayBatches":0,"telemetryCount":0,"expectedTelemetryCount":0,"maxGapSeconds":0},
+  "scenarios": [],
+  "evidence": [],
+  "approvedBy": "",
+  "approvedAt": ""
+}

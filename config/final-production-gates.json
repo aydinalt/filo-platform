@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "FILO_FINAL_PRODUCTION_GATES_V3",
+  "release": "1.28.20",
+  "gates": [
+    {"order":12,"id":"OBSERVABILITY","owner":"OPERATIONS","freshnessDays":7,"minimumEvidenceFiles":1},
+    {"order":13,"id":"INDEPENDENT_SECURITY","owner":"SECURITY","freshnessDays":30},
+    {"order":14,"id":"PERFORMANCE_CAPACITY","owner":"ENGINEERING","freshnessDays":30},
+    {"order":15,"id":"LEGAL_KVKK","owner":"LEGAL","freshnessDays":365},
+    {"order":16,"id":"DATA_MIGRATION","owner":"DATA","freshnessDays":30},
+    {"order":17,"id":"PILOT_UAT","owner":"CUSTOMER_SUCCESS","freshnessDays":30},
+    {"order":18,"id":"CONTROLLED_ROLLOUT","owner":"PRODUCT_OPERATIONS","freshnessDays":7}
+  ],
+  "controlledRollout": [
+    {"phase":"INTERNAL","trafficPercent":0,"minimumMinutes":60},
+    {"phase":"PILOT","trafficPercent":5,"minimumMinutes":240},
+    {"phase":"CUSTOMER_25","trafficPercent":25,"minimumMinutes":720},
+    {"phase":"GENERAL","trafficPercent":100,"minimumMinutes":1440}
+  ]
+}

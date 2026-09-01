@@ -1,0 +1,22 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+
+const budget=JSON.parse(await readFile(resolve("config/capacity-budget.json"),"utf8"));
+const blockers=[];
+if(budget.schemaVersion!=="FILO_CAPACITY_BUDGET_V1")blockers.push("Şema sürümü geçersiz.");
+const p=budget.performance||{},o=budget.operations||{},c=budget.monthlyCostAlerts||{};
+if(!(p.minimumConcurrentUsers>=100))blockers.push("Eşzamanlı kullanıcı hedefi en az 100 olmalı.");
+if(!(p.maximumP95Ms>0&&p.maximumP95Ms<=500))blockers.push("p95 üst sınırı 500 ms veya altında olmalı.");
+if(!(p.maximumP99Ms>=p.maximumP95Ms&&p.maximumP99Ms<=1000))blockers.push("p99 üst sınırı 1000 ms veya altında olmalı.");
+if(!(p.maximumErrorRatePercent>=0&&p.maximumErrorRatePercent<=1))blockers.push("Hata oranı üst sınırı %1 veya altında olmalı.");
+if(!(p.maximumTelemetryFreshnessSeconds>0&&p.maximumTelemetryFreshnessSeconds<=300))blockers.push("Telemetri tazelik sınırı 300 saniye veya altında olmalı.");
+if(o.maximumPendingOutbox!==0||o.maximumOpenCriticalAlerts!==0)blockers.push("Açık kritik alarm veya bekleyen outbox kabul edilmez.");
+if(!(o.maximumRestoreAgeDays>0&&o.maximumRestoreAgeDays<=30))blockers.push("Restore kanıtı 30 günden eski olamaz.");
+if(!(o.secretMaximumAgeDays>0&&o.secretMaximumAgeDays<=90))blockers.push("Secret yaşı 90 günü aşamaz.");
+if(!(c.warningPercent<c.criticalPercent&&c.criticalPercent<c.hardStopPercent&&c.hardStopPercent===100))blockers.push("Maliyet uyarı eşikleri sıralı ve hard stop %100 olmalı.");
+const phases=budget.rollout||[];
+if(JSON.stringify(phases.map(x=>x.trafficPercent))!==JSON.stringify([0,5,25,100]))blockers.push("Rollout sırası iç kullanıcı, %5 pilot, %25 müşteri ve %100 genel yayın olmalı.");
+if(phases.some(x=>!(x.minimumMinutes>0)))blockers.push("Her rollout fazının minimum gözlem süresi olmalı.");
+const result={format:"FILO_CAPACITY_BUDGET_AUDIT_V1",status:blockers.length?"BLOCKED":"PASSED",budget,blockers};
+console.log(JSON.stringify(result,null,2));
+if(blockers.length)process.exitCode=1;

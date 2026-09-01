@@ -1,0 +1,4 @@
+wave,environment,start_at,end_at,traffic_percent,minimum_minutes,owner,on_call,critical_alerts,error_rate_percent,p95_ms,scheduled_jobs_failed,provider_callbacks_failed,customer_reported_incidents,rollback_decision,evidence_file_sha256,status,notes
+CANARY,PRODUCTION,,,,60,[SAHİP],[NÖBETÇİ],,,,,,,,,PLANNED,
+WAVE_25,PRODUCTION,,,,240,[SAHİP],[NÖBETÇİ],,,,,,,,,PLANNED,
+FULL,PRODUCTION,,,,1440,[SAHİP],[NÖBETÇİ],,,,,,,,,PLANNED,

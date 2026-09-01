@@ -1,2 +1,0 @@
-CREATE INDEX notification_delivery_outbox_tenant_created_status_idx ON notification_delivery_outbox(tenant_id, created_at DESC, status);
-CREATE INDEX notification_provider_events_tenant_occurred_type_idx ON notification_provider_events(tenant_id, occurred_at DESC, event_type);

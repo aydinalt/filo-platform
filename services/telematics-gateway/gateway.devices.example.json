@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "devices": [
+    {
+      "status": "PROVISIONED",
+      "provider": "TELTONIKA",
+      "modelCode": "FMC920",
+      "protocol": "CODEC8E",
+      "imei": "490154203237518",
+      "iccid": "8944500101234567891",
+      "vehicleId": "34 ABC 123",
+      "platformDeviceId": "GPS-1001",
+      "platformToken": "flt_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "apiBaseUrl": "https://filo.example.com"
+    },
+    {
+      "status": "PROVISIONED",
+      "provider": "QUECLINK",
+      "modelCode": "GV57MG_PLUS",
+      "protocol": "ATRACK_PROFILE_V1",
+      "imei": "356938035643809",
+      "iccid": "8990012345678901231",
+      "vehicleId": "34 XYZ 789",
+      "platformDeviceId": "GPS-1002",
+      "platformToken": "flt_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "apiBaseUrl": "https://filo.example.com",
+      "vendorProfile": {
+        "status": "VENDOR_PROTOCOL_REQUIRED",
+        "firmware": "REPLACE_WITH_TESTED_FIRMWARE",
+        "fields": null
+      }
+    }
+  ]
+}

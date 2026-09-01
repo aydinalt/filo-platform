@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "FILO_OPERATIONS_CENTER_POLICY_V1",
+  "release": "1.28.20",
+  "sweepIntervalMinutes": 15,
+  "evidenceFreshnessMinutes": 20,
+  "telemetryStaleSeconds": 300,
+  "capacityWarningPercent": 80,
+  "capacityCriticalPercent": 90,
+  "applicationErrorWindowMinutes": 15,
+  "cronFailureWindowMinutes": 60,
+  "criticalAcknowledgeMinutes": 15,
+  "criticalEscalationMinutes": 30,
+  "maximumEscalationLevel": 3,
+  "requiredSignals": [
+    "APPLICATION_ERRORS",
+    "STALE_TELEMETRY",
+    "FAILED_WEBHOOKS",
+    "FAILED_CRON",
+    "DATABASE_CAPACITY",
+    "STORAGE_CAPACITY",
+    "PROVIDER_OUTAGE",
+    "CAPACITY_METRICS_MISSING",
+    "ALERT_ROUTING_MISSING"
+  ]
+}
