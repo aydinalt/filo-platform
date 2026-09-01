@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS storage.buckets (
   public boolean NOT NULL DEFAULT false
 );
 
+ALTER TABLE storage.buckets
+ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT false;
+
 CREATE TABLE IF NOT EXISTS storage.objects (
   id uuid PRIMARY KEY,
   bucket_id text REFERENCES storage.buckets(id),
