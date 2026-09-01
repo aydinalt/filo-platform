@@ -115,12 +115,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client libtap-parser-sourcehandler-pgtap-perl
+      - name: Bootstrap Supabase test database
+        run: bash .github/scripts/run-psql-file.sh supabase/ci/bootstrap.sql
       - name: Apply Supabase migrations
         run: |
-          psql --file supabase/ci/bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             echo "Applying ${migration}"
-            psql --set ON_ERROR_STOP=1 --file "${migration}"
+            bash .github/scripts/run-psql-file.sh "${migration}"
           done
       - name: Run database isolation tests
         run: pg_prove supabase/tests/database/*.sql
