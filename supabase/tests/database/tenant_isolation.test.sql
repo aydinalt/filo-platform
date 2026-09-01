@@ -7,9 +7,9 @@ INSERT INTO public.tenants (id, name) VALUES
 INSERT INTO public.tenant_members (tenant_id, email, name, role, active) VALUES
   ('rls-alpha', 'alpha@example.com', 'ALPHA USER', 'Owner', 1),
   ('rls-beta', 'beta@example.com', 'BETA USER', 'Owner', 1);
-INSERT INTO public.module_records (id, tenant_id, module, status, data, created_by) VALUES
-  ('RLS-ALPHA-RECORD', 'rls-alpha', 'fleet', 'ACTIVE', '{}', 'alpha@example.com'),
-  ('RLS-BETA-RECORD', 'rls-beta', 'fleet', 'ACTIVE', '{}', 'beta@example.com');
+INSERT INTO public.module_records (id, tenant_id, module, status, data, created_by, updated_by) VALUES
+  ('RLS-ALPHA-RECORD', 'rls-alpha', 'fleet', 'ACTIVE', '{}', 'alpha@example.com', 'alpha@example.com'),
+  ('RLS-BETA-RECORD', 'rls-beta', 'fleet', 'ACTIVE', '{}', 'beta@example.com', 'beta@example.com');
 
 SELECT is(
   (SELECT count(*)::integer FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND EXISTS (SELECT 1 FROM information_schema.columns x WHERE x.table_schema='public' AND x.table_name=c.relname AND x.column_name='tenant_id') AND NOT c.relrowsecurity),
@@ -25,7 +25,7 @@ SELECT ok(public.is_tenant_member('rls-alpha'), 'alpha is recognized in its own 
 SELECT is(public.is_tenant_member('rls-beta'), false, 'alpha is not recognized in beta tenant');
 SELECT results_eq($$SELECT id FROM public.tenants ORDER BY id$$, $$VALUES ('rls-alpha'::text)$$, 'alpha can only see its tenant identity');
 SELECT throws_ok($$SELECT * FROM public.module_records$$, '42501', NULL, 'direct business-table reads are denied');
-SELECT throws_ok($$INSERT INTO public.module_records (id,tenant_id,module,status,data,created_by) VALUES ('RLS-WRITE','rls-alpha','fleet','ACTIVE','{}','alpha@example.com')$$, '42501', NULL, 'direct inserts are denied');
+SELECT throws_ok($$INSERT INTO public.module_records (id,tenant_id,module,status,data,created_by,updated_by) VALUES ('RLS-WRITE','rls-alpha','fleet','ACTIVE','{}','alpha@example.com','alpha@example.com')$$, '42501', NULL, 'direct inserts are denied');
 SELECT throws_ok($$UPDATE public.module_records SET status='CHANGED' WHERE tenant_id='rls-alpha'$$, '42501', NULL, 'direct updates are denied');
 SELECT throws_ok($$DELETE FROM public.module_records WHERE tenant_id='rls-alpha'$$, '42501', NULL, 'direct deletes are denied');
 
