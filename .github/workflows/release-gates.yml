@@ -95,10 +95,8 @@ jobs:
       - uses: supabase/setup-cli@v3
         with:
           version: 2.116.0
-      - name: Start database-only Supabase stack
-        run: >-
-          supabase start
-          -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      - name: Start local Postgres database
+        run: supabase db start --debug
       - run: supabase db reset
       - run: supabase test db
       - if: always()
