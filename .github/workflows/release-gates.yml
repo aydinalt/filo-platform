@@ -90,14 +90,37 @@ jobs:
   supabase-database:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: supabase/postgres:15.8.1.085@sha256:af083ef64d0408c8f098ee6f5c364a59b26f36fbc0f3a334a62c5c1d57362e9b
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 54322:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 54322
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
     steps:
       - uses: actions/checkout@v7
-      - uses: supabase/setup-cli@v3
-        with:
-          version: 2.116.0
-      - name: Start local Postgres database
-        run: supabase db start --debug
-      - run: supabase db reset
-      - run: supabase test db
-      - if: always()
-        run: supabase stop --no-backup
+      - name: Install PostgreSQL test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client libtap-parser-sourcehandler-pgtap-perl
+      - name: Apply Supabase migrations
+        run: |
+          psql --set ON_ERROR_STOP=1 --command 'CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA public;'
+          for migration in supabase/migrations/*.sql; do
+            echo "Applying ${migration}"
+            psql --set ON_ERROR_STOP=1 --file "${migration}"
+          done
+      - name: Run database isolation tests
+        run: pg_prove supabase/tests/database/*.sql
