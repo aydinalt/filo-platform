@@ -99,14 +99,14 @@ jobs:
         ports:
           - 54322:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-cmd "pg_isready -U supabase_admin -d postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 12
     env:
       PGHOST: 127.0.0.1
       PGPORT: 54322
-      PGUSER: postgres
+      PGUSER: supabase_admin
       PGPASSWORD: filo-ci-${{ github.run_id }}-${{ github.run_attempt }}
       PGDATABASE: postgres
     steps:

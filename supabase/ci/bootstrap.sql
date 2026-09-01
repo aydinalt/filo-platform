@@ -19,18 +19,24 @@ CREATE SCHEMA IF NOT EXISTS auth;
 CREATE SCHEMA IF NOT EXISTS storage;
 CREATE SCHEMA IF NOT EXISTS vault;
 
-DO $$
-BEGIN
-  IF to_regprocedure('auth.jwt()') IS NULL THEN
-    RAISE EXCEPTION 'Supabase test image is missing auth.jwt()';
-  END IF;
-  IF to_regclass('storage.buckets') IS NULL THEN
-    RAISE EXCEPTION 'Supabase test image is missing storage.buckets';
-  END IF;
-  IF to_regclass('storage.objects') IS NULL THEN
-    RAISE EXCEPTION 'Supabase test image is missing storage.objects';
-  END IF;
-END
+CREATE OR REPLACE FUNCTION auth.jwt()
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT COALESCE(NULLIF(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
 $$;
+
+CREATE TABLE IF NOT EXISTS storage.buckets (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  public boolean NOT NULL DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS storage.objects (
+  id uuid PRIMARY KEY,
+  bucket_id text REFERENCES storage.buckets(id),
+  name text NOT NULL DEFAULT ''
+);
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA public;
