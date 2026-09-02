@@ -19,7 +19,10 @@ test("PostgreSQL compatibility converts D1 placeholders, conflicts, JSON and ali
   const {normalizeSqliteQuery}=localizedModule;
   assert.equal(normalizeSqliteQuery("SELECT tenant_id AS tenantId FROM tenants WHERE id=?"),'SELECT tenant_id AS "tenantId" FROM tenants WHERE id=$1');
   assert.match(normalizeSqliteQuery("INSERT OR IGNORE INTO teams (id,name) VALUES (?,?)"),/INSERT INTO teams \(id,name\) VALUES \(\$1,\$2\) ON CONFLICT DO NOTHING/);
-  assert.match(normalizeSqliteQuery("SELECT json_extract(data,'$.plate') AS plate FROM module_records WHERE tenant_id=?"),/data::jsonb ->> 'plate'/);
+  const jsonExtract=normalizeSqliteQuery("SELECT json_extract(data,'$.plate') AS plate FROM module_records WHERE tenant_id=?");
+  assert.match(jsonExtract,/jsonb_typeof\(\(data\)::jsonb\) = 'string'/);
+  assert.match(jsonExtract,/\(data\)::jsonb ->> 'plate'/);
+  assert.match(jsonExtract,/#>> '\{\}'\)::jsonb ->> 'plate'/);
   assert.match(normalizeSqliteQuery("SELECT id FROM module_records WHERE id IN (SELECT value FROM json_each(?))"),/SELECT jsonb_array_elements_text\(\$1::jsonb\)/);
 });
 
