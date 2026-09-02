@@ -5,8 +5,16 @@ const supabaseOrigin = (() => {
   catch { return ""; }
 })();
 const connectSources = ["'self'", "https://challenges.cloudflare.com", supabaseOrigin].filter(Boolean).join(" ");
+const buildIdentity = (
+  process.env.GITHUB_SHA ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.CF_PAGES_COMMIT_SHA ||
+  "filo-1-28-20"
+).replace(/[^a-zA-Z0-9_-]/g, "-");
 
 const nextConfig: NextConfig = {
+  deploymentId: buildIdentity,
+  generateBuildId: async () => buildIdentity,
   serverExternalPackages: ["postgres"],
   async headers() {
     return [{ source: "/(.*)", headers: [

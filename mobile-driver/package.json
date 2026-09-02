@@ -6,7 +6,7 @@
   "scripts": {
     "start": "expo start --dev-client",
     "typecheck": "tsc --noEmit --pretty false",
-    "doctor": "node --use-system-ca node_modules/expo-doctor/bin/expo-doctor.js"
+    "doctor": "node scripts/run-expo-doctor.mjs"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
