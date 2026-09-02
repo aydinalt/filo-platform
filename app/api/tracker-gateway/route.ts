@@ -1,12 +1,13 @@
 import { runtimeEnv, workspaceForDeviceToken } from "../../../lib/platform-store";
 import { assertRequestSize, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 
 async function sha256(value:string){const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value));return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("")}
 async function hmac(secret:string,value:string){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);const digest=await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(value));return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("")}
 function secureEqual(left:string,right:string){if(left.length!==right.length)return false;let mismatch=0;for(let index=0;index<left.length;index++)mismatch|=left.charCodeAt(index)^right.charCodeAt(index);return mismatch===0}
-function errorResponse(error:unknown){if(error instanceof Response)return error;return Response.json({error:error instanceof Error?error.message:"Takip cihazı gateway işlemi başarısız."},{status:500})}
+function errorResponse(error:unknown){return apiErrorResponse(error,"Takip cihazı gateway işlemi başarısız.")}
 
 type GatewayPoint={vehicleId?:unknown;latitude?:unknown;longitude?:unknown;speed?:unknown;battery?:unknown;capturedAt?:unknown;eventType?:unknown;sequence?:unknown;accuracy?:unknown;altitude?:unknown;heading?:unknown};
 

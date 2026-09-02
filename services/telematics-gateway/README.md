@@ -1,4 +1,4 @@
-# Filo Telematics Gateway v1.28.11
+# Filo Telematics Gateway v1.28.20
 
 Bu servis, raw TCP GPS cihazlarını Vercel/Sites çalışma zamanının dışında karşılar.
 Teltonika Codec 8/8E paketlerinde IMEI, CRC ve kayıt sayısını doğrular; MQTT TLS

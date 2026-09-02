@@ -1,15 +1,12 @@
 # Filo Sürücü — native iOS/Android kaynak paketi
 
-Bu klasör, Filo Platform v1.28.10 mobil çalışma zamanı sözleşmesine bağlanan Expo/React Native kaynak paketidir. Web prototipi mobil uygulama gibi davranmaz; bu kod fiziksel iPhone ve Android cihazlarda development/internal build olarak çalıştırılmalıdır.
+Bu klasör, Filo Platform v1.28.20 mobil çalışma zamanı sözleşmesine bağlanan kilitli Expo/React Native paketidir. Web prototipi mobil uygulama gibi davranmaz; bu kod fiziksel iPhone ve Android cihazlarda development/internal build olarak çalıştırılmalıdır.
 
 ## Kurulum
 
-1. Güncel Expo SDK ile boş TypeScript proje oluşturun: `npx create-expo-app@latest filo-driver`.
-2. `App.tsx`, `app.config.ts` ve `src/driver-runtime.ts` dosyalarını projeye kopyalayın.
-3. Sürümleri Expo SDK ile eşleştirerek kurun:
-   `npx expo install expo-location expo-task-manager expo-secure-store @react-native-async-storage/async-storage expo-device expo-application expo-notifications expo-constants expo-battery expo-network`
-4. `npx expo prebuild` çalıştırın; ardından EAS development build üretin. Arka plan konumu Expo Go içinde doğrulanamaz.
-5. Panelde Cihaz Envanteri > telefon kaydı oluşturun, Sürücü Uygulaması ekranından tek kullanımlık kurulum profilini üretin ve uygulamaya girin.
+1. Bu klasörde `npm ci` ve `npm run typecheck` çalıştırın.
+2. `npx expo prebuild` çalıştırın; ardından `eas build --profile development` ile development build üretin. Arka plan konumu Expo Go içinde doğrulanamaz.
+3. Panelde Cihaz Envanteri > telefon kaydı oluşturun, Sürücü Uygulaması ekranından tek kullanımlık kurulum profilini üretin ve uygulamaya girin.
 
 ## Güvenlik ve işletim kuralları
 

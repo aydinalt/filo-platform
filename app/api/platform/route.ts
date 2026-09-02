@@ -39,6 +39,7 @@ import {
   workspaceSnapshot,
 } from "../../../lib/platform-store";
 import { assertRequestSize, assertSameOrigin, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -52,9 +53,7 @@ const PRIVILEGED_ACTIONS=new Set([
 ]);
 
 function errorResponse(error: unknown) {
-  if (error instanceof Response) return error;
-  const message = error instanceof Error ? error.message : "Beklenmeyen sunucu hatası.";
-  return Response.json({ error: message }, { status: 500 });
+  return apiErrorResponse(error, "Beklenmeyen sunucu hatası.");
 }
 
 export async function GET() {

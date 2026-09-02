@@ -6,11 +6,12 @@ import {
 } from "../../../lib/operations-center";
 import { requirePrivilegedAccess, requireWorkspace, runtimeEnv } from "../../../lib/platform-store";
 import { assertRequestSize, assertSameOrigin, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic="force-dynamic";
 
 const noStore=(body:unknown,status=200)=>Response.json(body,{status,headers:{"Cache-Control":"private, no-store"}});
-const fail=(error:unknown)=>error instanceof Response?error:noStore({error:error instanceof Error?error.message:"Operasyon merkezi işlemi tamamlanamadı."},500);
+const fail=(error:unknown)=>apiErrorResponse(error,"Operasyon merkezi işlemi tamamlanamadı.");
 
 export async function GET(){
   try{return noStore(await operationsCenterSnapshot(await requireWorkspace(false)))}catch(error){return fail(error)}

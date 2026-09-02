@@ -1,5 +1,6 @@
 import { assertPermission, requireWorkspace, runtimeEnv } from "../../../lib/platform-store";
 import { assertRequestSize, assertSameOrigin, enforceRateLimit, scanUploadedFileWithProvider } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -14,9 +15,7 @@ function signatureMatches(type:string,bytes:Uint8Array){
 }
 
 function errorResponse(error: unknown) {
-  if (error instanceof Response) return error;
-  const message = error instanceof Error ? error.message : "Dosya işlemi başarısız.";
-  return Response.json({ error: message }, { status: 500 });
+  return apiErrorResponse(error, "Dosya işlemi başarısız.");
 }
 
 export async function POST(request: Request) {

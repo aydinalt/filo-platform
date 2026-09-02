@@ -1,5 +1,6 @@
 import { runtimeEnv } from "../../../lib/platform-store";
 import { assertRequestSize, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic="force-dynamic";
 
@@ -34,5 +35,5 @@ export async function POST(request:Request){
       env.DB.prepare("UPDATE provider_callback_events SET status='PROCESSED' WHERE id=?").bind(callbackId),
     ]);
     return Response.json({ok:true,eventType,deliveryId:delivery.id,status:deliveryStatus});
-  }catch(error){return Response.json({error:error instanceof Error?error.message:"Resend webhook işlenemedi."},{status:500})}
+  }catch(error){return apiErrorResponse(error,"Resend webhook işlenemedi.")}
 }

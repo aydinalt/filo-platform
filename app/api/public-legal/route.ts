@@ -1,5 +1,6 @@
 import { buildPublicLegalDocument, platformLegalStatus } from "../../../lib/legal-documents";
 import { runtimeEnv } from "../../../lib/platform-store";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic="force-dynamic";
 
@@ -9,5 +10,5 @@ export async function GET(request:Request){
     if(kind==="status")return Response.json(status,{headers:{"Cache-Control":"public, max-age=60"}});
     if(kind!=="terms"&&kind!=="privacy")return Response.json({error:"Tanımsız kamu hukuk belgesi."},{status:400});
     return new Response(buildPublicLegalDocument(kind,env),{headers:{"Content-Type":"text/plain; charset=utf-8","Content-Disposition":`inline; filename=${kind}-${status.version}.txt`,"Cache-Control":"public, max-age=60","X-Legal-Profile-Ready":String(status.ready)}});
-  }catch(error){return Response.json({error:error instanceof Error?error.message:"Yasal bilgiler yüklenemedi."},{status:500})}
+  }catch(error){return apiErrorResponse(error,"Yasal bilgiler yüklenemedi.")}
 }

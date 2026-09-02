@@ -9,7 +9,7 @@ const root=resolve(fileURLToPath(new URL("..",import.meta.url)));
 
 test("release workflow contains quality, SCA, CodeQL, Supabase and reproducibility gates",async()=>{
   const workflow=await readFile(resolve(root,".github/workflows/release-gates.yml"),"utf8");
-  for(const marker of ["quality-and-artifact", "dependency-review", "software-composition", "codeql", "reproducible-build", "supabase-database", "pg_prove", "npm run ci:verify", "npm audit --omit=dev --audit-level=high"])assert.match(workflow,new RegExp(marker,"u"));
+  for(const marker of ["quality-and-artifact", "dependency-review", "software-composition", "component-builds", "vercel-build", "codeql", "reproducible-build", "supabase-database", "pg_prove", "npm run ci:verify", "npm run build:vercel", "npm run supabase:runtime:test", "npm audit --audit-level=high"])assert.match(workflow,new RegExp(marker,"u"));
 });
 
 test("environment profiles isolate data and provider modes",async()=>{

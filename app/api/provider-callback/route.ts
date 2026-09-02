@@ -1,5 +1,6 @@
 import { runtimeEnv } from "../../../lib/platform-store";
 import { assertRequestSize, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -78,5 +79,5 @@ export async function POST(request:Request){
     if(!result.meta.changes)return reject("İmza isteği bulunamadı.",404);
     await env.DB.batch([env.DB.prepare("UPDATE provider_connections SET status='CONNECTED',last_check_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE tenant_id=? AND provider=?").bind(tenantId,provider),env.DB.prepare("INSERT INTO audit_events (id,tenant_id,actor_email,action,module,record_id,payload) VALUES (?,?,'provider:esign','ESIGN_CALLBACK','custody',?,?)").bind(`AUD-${crypto.randomUUID()}`,tenantId,custodyRecordId,JSON.stringify({status,digest})),markProcessed()]);
     return Response.json({ok:true,eventId:externalEventId,custodyRecordId,status});
-  }catch(error){return Response.json({error:error instanceof Error?error.message:"Sağlayıcı geri bildirimi işlenemedi."},{status:500})}
+  }catch(error){return apiErrorResponse(error,"Sağlayıcı geri bildirimi işlenemedi.")}
 }

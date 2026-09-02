@@ -1,6 +1,6 @@
 {
-  "name": "site-creator-vinext-starter",
-  "version": "0.1.0",
+  "name": "filo-platform",
+  "version": "1.28.20",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -17,6 +17,7 @@
     "migration:lint": "node scripts/migration-lint.mjs",
     "sbom": "node scripts/generate-sbom.mjs",
     "release:manifest": "node scripts/release-manifest.mjs",
+    "release:package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-release.ps1",
     "build:reproducible": "node scripts/reproducible-build-check.mjs",
     "gates:4-15": "node scripts/validate-release-gates.mjs",
     "gates:4-15:go-live": "node scripts/validate-release-gates.mjs --go-live",
@@ -37,35 +38,41 @@
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
     "supabase:migration": "node scripts/generate-supabase-migration.mjs",
     "supabase:apply": "node scripts/supabase-deploy.mjs --apply",
-    "supabase:verify": "node scripts/supabase-deploy.mjs"
+    "supabase:verify": "node scripts/supabase-deploy.mjs",
+    "supabase:runtime:test": "node scripts/supabase-runtime-integration.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.57.4",
     "drizzle-orm": "0.45.2",
-    "next": "^16.3.2",
+    "next": "^16.3.4",
     "postgres": "^3.4.7",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@cloudflare/workers-types": "^4.20260515.1",
+    "@cloudflare/vite-plugin": "^1.54.3",
+    "@cloudflare/workers-types": "^5.20260902.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "@vitejs/plugin-rsc": "0.5.26",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vitejs/plugin-rsc": "^0.5.34",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
-    "react-server-dom-webpack": "19.2.6",
+    "eslint-config-next": "^16.3.4",
+    "react-server-dom-webpack": "^19.2.8",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
-    "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "vinext": "^1.0.0-beta.8",
+    "vite": "^8.2.2",
+    "wrangler": "^4.128.0"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    }
   },
   "type": "module"
 }

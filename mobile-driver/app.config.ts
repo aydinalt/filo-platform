@@ -3,10 +3,11 @@ export default {
     name: "Filo Sürücü",
     slug: "filo-driver",
     scheme: "filodriver",
-    version: "1.28.10",
+    version: "1.28.20",
     orientation: "portrait",
     ios: {
       bundleIdentifier: "com.filoplatform.driver",
+      buildNumber: "12820",
       supportsTablet: false,
       infoPlist: {
         UIBackgroundModes: ["location"],
@@ -16,6 +17,7 @@ export default {
     },
     android: {
       package: "com.filoplatform.driver",
+      versionCode: 12820,
       permissions: [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -31,6 +33,6 @@ export default {
       isIosBackgroundLocationEnabled: true,
       isAndroidBackgroundLocationEnabled: true,
       isAndroidForegroundServiceEnabled: true,
-    }], "expo-notifications"],
+    }], "expo-notifications", "expo-secure-store"],
   },
 };

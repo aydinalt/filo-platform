@@ -9,6 +9,7 @@ import {
   workspaceForDeviceToken,
 } from "../../../lib/platform-store";
 import { assertRequestSize, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +19,7 @@ function bearer(request:Request){
 }
 
 function errorResponse(error:unknown){
-  if(error instanceof Response)return error;
-  return Response.json({error:error instanceof Error?error.message:"Mobil çalışma zamanı işlemi başarısız."},{status:500});
+  return apiErrorResponse(error,"Mobil çalışma zamanı işlemi başarısız.");
 }
 
 export async function GET(request:Request){

@@ -1,10 +1,10 @@
 import { assertPermission, requirePrivilegedAccess, requireWorkspace, runtimeEnv, workspaceSnapshot } from "../../../lib/platform-store";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 
 function errorResponse(error:unknown){
-  if(error instanceof Response)return error;
-  return Response.json({error:error instanceof Error?error.message:"Dışa aktarma başarısız."},{status:500});
+  return apiErrorResponse(error,"Dışa aktarma başarısız.");
 }
 
 export async function GET(){

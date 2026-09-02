@@ -1,13 +1,14 @@
 {
   "name": "@filo/telematics-gateway",
-  "version": "1.28.11",
+  "version": "1.28.20",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22.13.0" },
   "scripts": {
     "start:tcp": "node src/tcp-server.mjs",
     "start:mqtt-bridge": "node src/mqtt-bridge.mjs",
-    "check:registry": "node src/registry.mjs --check"
+    "check:registry": "node src/registry.mjs --check",
+    "test": "node --test ../../tests/hardware-gateway-acceptance.test.mjs"
   },
   "dependencies": { "mqtt": "^5.14.1" }
 }

@@ -1,11 +1,11 @@
 import { assertPermission, requireWorkspace, runtimeEnv } from "../../../lib/platform-store";
 import { assertRequestSize, assertSameOrigin, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 
 function errorResponse(error: unknown) {
-  if (error instanceof Response) return error;
-  return Response.json({ error: error instanceof Error ? error.message : "Telemetri işlemi başarısız." }, { status: 500 });
+  return apiErrorResponse(error, "Telemetri işlemi başarısız.");
 }
 
 export async function GET() {

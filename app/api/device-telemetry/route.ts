@@ -1,9 +1,10 @@
 import { runtimeEnv, workspaceForDeviceToken } from "../../../lib/platform-store";
 import { assertRequestSize, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 
-function responseError(error:unknown){if(error instanceof Response)return error;return Response.json({error:error instanceof Error?error.message:"Telemetri alınamadı."},{status:500});}
+function responseError(error:unknown){return apiErrorResponse(error,"Telemetri alınamadı.");}
 
 export async function POST(request:Request){
   try{

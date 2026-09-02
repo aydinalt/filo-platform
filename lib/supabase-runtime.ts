@@ -72,6 +72,10 @@ class PostgresD1Adapter {
   }
 }
 
+export function createPostgresD1Adapter(client: Sql): D1Database {
+  return new PostgresD1Adapter(client) as unknown as D1Database;
+}
+
 class SupabaseStorageAdapter {
   constructor(private readonly client: SupabaseClient, private readonly bucket: string) {}
 
@@ -109,7 +113,7 @@ export function createSupabaseRuntimeEnv() {
   const sql = postgres(databaseUrl, { max: Number(process.env.SUPABASE_POOL_SIZE || 5), idle_timeout: 20, connect_timeout: 10, prepare: false, ssl: "require" });
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
   return {
-    DB: new PostgresD1Adapter(sql) as unknown as D1Database,
+    DB: createPostgresD1Adapter(sql),
     BUCKET: new SupabaseStorageAdapter(supabase, process.env.SUPABASE_STORAGE_BUCKET || "filo-private") as unknown as R2Bucket,
     ...process.env,
   };

@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+**/node_modules/
+**/.expo/
 /.pnp
 .pnp.*
 .yarn/*
@@ -40,6 +42,7 @@ next-env.d.ts
 /.wrangler/
 /.sites-runtime/
 /outputs/
+/release-packages/
 /work/
 /services/telematics-gateway/gateway.devices.json
 /services/telematics-gateway/certs/

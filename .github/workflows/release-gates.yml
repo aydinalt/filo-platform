@@ -53,7 +53,29 @@ jobs:
           node-version: 22.13.0
           cache: npm
       - run: npm ci
-      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --audit-level=high
+      - run: npm ci --prefix mobile-driver
+      - run: npm audit --prefix mobile-driver --audit-level=high
+      - run: npm ci --prefix services/telematics-gateway
+      - run: npm audit --prefix services/telematics-gateway --audit-level=high
+
+  component-builds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.13.0
+          cache: npm
+          cache-dependency-path: |
+            mobile-driver/package-lock.json
+            services/telematics-gateway/package-lock.json
+      - run: npm ci --prefix mobile-driver
+      - run: npm run typecheck --prefix mobile-driver
+      - run: npm run doctor --prefix mobile-driver
+      - run: npm ci --prefix services/telematics-gateway
+      - run: npm test --prefix services/telematics-gateway
 
   codeql:
     runs-on: ubuntu-latest
@@ -86,6 +108,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:reproducible
+
+  vercel-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - run: npm run build:vercel
 
   supabase-database:
     runs-on: ubuntu-latest
@@ -125,3 +159,10 @@ jobs:
           done
       - name: Run database isolation tests
         run: pg_prove supabase/tests/database/*.sql
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - name: Exercise the D1-to-PostgreSQL runtime adapter
+        run: npm run supabase:runtime:test

@@ -1,12 +1,12 @@
 import { dispatchNotifications, startPaymentCheckout, submitEDocument } from "../../../lib/provider-dispatch";
 import { requirePrivilegedAccess, requireWorkspace, runtimeEnv } from "../../../lib/platform-store";
 import { assertRequestSize, assertSameOrigin, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 
 function errorResponse(error:unknown){
-  if(error instanceof Response)return error;
-  return Response.json({error:error instanceof Error?error.message:"Sağlayıcı işlemi tamamlanamadı."},{status:500});
+  return apiErrorResponse(error,"Sağlayıcı işlemi tamamlanamadı.");
 }
 
 export async function POST(request:Request){

@@ -10,14 +10,16 @@ verified server-side, operations scheduling rotates fairly across tenants, and
 final evidence rejects symlink escapes while enforcing separation of duties. See
 [`docs/v1.28.20-critical-completion.md`](docs/v1.28.20-critical-completion.md).
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+The production source includes the web application, Supabase/PostgreSQL
+migrations, a locked Expo mobile-driver application, and a locked telematics
+gateway service. Cloudflare Sites/Vinext and Vercel/Supabase remain separately
+verified deployment targets.
 
 ## Prerequisites
 
 - Node.js `>=22.13.0`
-- Linux with `flock`, `curl`, and GNU `timeout`
+- Linux with `flock`, `curl`, and GNU `timeout` for the Sites lifecycle helpers
+- PowerShell 7 or Windows PowerShell 5.1 only when creating Windows release ZIPs
 
 ## Sites Lifecycle
 
@@ -41,6 +43,10 @@ Scripts that need writable project-scoped home, npm, XDG, and temporary paths us
 - `drizzle.config.ts` supports local migration generation when needed
 
 ## Workspace Auth Headers
+
+Workspace identity headers are accepted only in the Sites/Cloudflare runtime.
+When `FILO_RUNTIME=supabase`, the application ignores all `oai-authenticated-*`
+headers and resolves identity exclusively from the verified Supabase session.
 
 OpenAI workspace sites can read the current user's email from
 `oai-authenticated-user-email`.
@@ -106,6 +112,12 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run start`: start the built Vinext application
 - `npm test`: build, validate, and verify the rendered development-preview metadata
 - `npm run validate:artifact`: recheck an existing artifact's manifest and ESM `default.fetch` export
+- `npm run build:vercel`: verify the Vercel/Supabase Next.js target
+- `npm run supabase:runtime:test`: exercise the real PostgreSQL compatibility adapter (requires `PG*` connection variables)
+- `npm run typecheck --prefix mobile-driver` and `npm run doctor --prefix mobile-driver`: verify the locked Expo application
+- `npm test --prefix services/telematics-gateway`: verify the locked gateway service
+- `npm run sbom`: generate CycloneDX SBOMs for all three shipped components
+- `npm run release:package`: create full-source and update ZIPs from a clean, manifested commit
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
 Use build and validation commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.

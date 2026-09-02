@@ -1,6 +1,6 @@
 {
   "format": "FILO_MOBILE_FIELD_POLICY_V1",
-  "release": "1.28.10",
+  "release": "1.28.20",
   "evidenceMaxAgeDays": 30,
   "physicalDeviceRequired": true,
   "thresholds": {

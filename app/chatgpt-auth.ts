@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
+import { shouldAcceptSitesIdentityHeaders } from "../lib/auth-boundary";
 
 export type ChatGPTUser = {
   displayName: string;
@@ -21,6 +22,12 @@ const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+  const runtimeBindings = (globalThis as typeof globalThis & {
+    __FILO_ENV?: { FILO_RUNTIME?: string };
+  }).__FILO_ENV;
+  const runtime = runtimeBindings?.FILO_RUNTIME ?? process.env.FILO_RUNTIME;
+  if (!shouldAcceptSitesIdentityHeaders(runtime)) return getSupabaseUser();
+
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!email) return getSupabaseUser();

@@ -18,6 +18,8 @@ export async function GET(){
       checkedAt:new Date().toISOString(),
     },{headers:{"Cache-Control":"private, no-store"}});
   }catch(error){
-    return Response.json({status:"down",version:"1.28.20",error:error instanceof Error?error.message:"Sağlık kontrolü başarısız."},{status:503,headers:{"Cache-Control":"private, no-store"}});
+    const incidentId=`ERR-${crypto.randomUUID()}`;
+    console.error(`[${incidentId}] Sağlık kontrolü başarısız.`,error);
+    return Response.json({status:"down",version:"1.28.20",error:"Sağlık kontrolü başarısız.",incidentId},{status:503,headers:{"Cache-Control":"private, no-store"}});
   }
 }

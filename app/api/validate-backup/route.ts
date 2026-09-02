@@ -1,5 +1,6 @@
 import { assertPermission, requireWorkspace, runtimeEnv } from "../../../lib/platform-store";
 import { assertRequestSize, assertSameOrigin, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic = "force-dynamic";
 const MAX_BACKUP_SIZE=10*1024*1024;
@@ -35,6 +36,7 @@ export async function POST(request:Request){
     return Response.json({valid,checks,sha256,scope:"NON_DESTRUCTIVE_RESTORE_VALIDATION",warning:"Bu kontrol veri bütünlüğünü doğrular; ayrı ortamda gerçek geri yükleme provasının yerine geçmez."});
   }catch(error){
     if(error instanceof Response)return error;
-    return Response.json({error:error instanceof SyntaxError?"Yedek dosyası geçerli JSON değil.":error instanceof Error?error.message:"Yedek doğrulanamadı."},{status:400});
+    if(error instanceof SyntaxError)return Response.json({error:"Yedek dosyası geçerli JSON değil."},{status:400});
+    return apiErrorResponse(error,"Yedek doğrulanamadı.");
   }
 }

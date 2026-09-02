@@ -1,5 +1,6 @@
 import { assertPermission, requirePrivilegedAccess, requireWorkspace, runtimeEnv } from "../../../lib/platform-store";
 import { assertRequestSize, assertSameOrigin, enforceRateLimit } from "../../../lib/security";
+import { apiErrorResponse } from "../../../lib/api-errors";
 
 export const dynamic="force-dynamic";
 const MAX_BACKUP_SIZE=10*1024*1024;
@@ -14,4 +15,4 @@ export async function POST(request:Request){const started=Date.now();try{
   const staged=await DB.prepare("SELECT COUNT(*) AS count FROM restore_staging_records WHERE tenant_id=? AND rehearsal_id=?").bind(workspace.tenantId,id).first<{count:number}>(),rpoMinutes=Math.max(0,Math.floor((Date.now()-Date.parse(exportedAt))/60000)),rtoSeconds=Math.max(1,Math.ceil((Date.now()-started)/1000)),passed=Number(staged?.count||0)===items.length;
   await DB.batch([DB.prepare("UPDATE restore_rehearsals SET status=?,record_count=?,file_count=?,rpo_minutes=?,rto_seconds=? WHERE tenant_id=? AND id=?").bind(passed?"PASSED":"FAILED",records.length,files.length,rpoMinutes,rtoSeconds,workspace.tenantId,id),DB.prepare("INSERT INTO audit_events (id,tenant_id,actor_email,action,module,record_id,payload) VALUES (?,?,?,?,?,?,?)").bind(`AUD-${crypto.randomUUID()}`,workspace.tenantId,workspace.email,passed?"RESTORE_REHEARSAL_PASSED":"RESTORE_REHEARSAL_FAILED","security",id,JSON.stringify({backupSha256,targetNamespace,recordCount:records.length,fileCount:files.length,rpoMinutes,rtoSeconds,productionMutated:false}))]);
   return Response.json({passed,id,backupSha256,targetNamespace,recordCount:records.length,fileCount:files.length,rpoMinutes,rtoSeconds,productionMutated:false,scope:"ISOLATED_SHADOW_RESTORE"});
-}catch(error){if(error instanceof Response)return error;return Response.json({error:error instanceof SyntaxError?"Yedek dosyası geçerli JSON değil.":error instanceof Error?error.message:"Geri yükleme provası tamamlanamadı."},{status:400})}}
+}catch(error){if(error instanceof Response)return error;if(error instanceof SyntaxError)return Response.json({error:"Yedek dosyası geçerli JSON değil."},{status:400});return apiErrorResponse(error,"Geri yükleme provası tamamlanamadı.")}}
