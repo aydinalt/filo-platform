@@ -12,6 +12,13 @@ test("release workflow contains quality, SCA, CodeQL, Supabase and reproducibili
   for(const marker of ["quality-and-artifact", "dependency-review", "software-composition", "component-builds", "vercel-build", "codeql", "reproducible-build", "supabase-database", "pg_prove", "npm run ci:verify", "npm run build:vercel", "npm run supabase:runtime:test", "npm audit --audit-level=high"])assert.match(workflow,new RegExp(marker,"u"));
 });
 
+test("primary project commands are cross-platform and do not require Bash",async()=>{
+  const packageJson=JSON.parse(await readFile(resolve(root,"package.json"),"utf8"));
+  for(const name of ["install:ci","dev","build","start","test","typecheck","ci:verify","validate:artifact","lint","db:generate"]){assert.ok(packageJson.scripts[name],`${name} script is missing`);assert.doesNotMatch(packageJson.scripts[name],/\bbash\b|^[A-Z_]+=\S+\s/u)}
+  for(const script of ["run-tool.mjs","build-verified.mjs","validate-artifact.mjs","install-ci.mjs","ci-verify.mjs","typecheck.mjs"])await readFile(resolve(root,"scripts",script),"utf8");
+  const sitesPlugin=await readFile(resolve(root,"build/sites-vite-plugin.ts"),"utf8");assert.match(sitesPlugin,/packaging \?\?= packageArtifact\(\)/);assert.match(sitesPlugin,/maxRetries: 10/);
+});
+
 test("environment profiles isolate data and provider modes",async()=>{
   const profiles=[];
   for(const name of ["development","staging","production"]){profiles.push(JSON.parse(await readFile(resolve(root,"config/environments",`${name}.json`),"utf8")))}

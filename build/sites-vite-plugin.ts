@@ -17,6 +17,25 @@ async function exists(path: string): Promise<boolean> {
 // Packages Sites metadata and migrations after Vite finishes compiling.
 export function sites(): Plugin {
   let root = process.cwd();
+  let packaging: Promise<void> | undefined;
+
+  const packageArtifact = async () => {
+    const outputDirectory = resolve(root, "dist", ".openai");
+    const hostingConfig = resolve(root, ".openai", "hosting.json");
+    const drizzleSource = resolve(root, "drizzle");
+
+    await rm(outputDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    await mkdir(outputDirectory, { recursive: true });
+
+    if (await exists(hostingConfig)) {
+      await cp(hostingConfig, resolve(outputDirectory, "hosting.json"));
+    }
+    if (await exists(drizzleSource)) {
+      await cp(drizzleSource, resolve(outputDirectory, "drizzle"), {
+        recursive: true,
+      });
+    }
+  };
 
   return {
     name: "sites",
@@ -24,22 +43,9 @@ export function sites(): Plugin {
     configResolved(config) {
       root = config.root;
     },
-    async closeBundle() {
-      const outputDirectory = resolve(root, "dist", ".openai");
-      const hostingConfig = resolve(root, ".openai", "hosting.json");
-      const drizzleSource = resolve(root, "drizzle");
-
-      await rm(outputDirectory, { recursive: true, force: true });
-      await mkdir(outputDirectory, { recursive: true });
-
-      if (await exists(hostingConfig)) {
-        await cp(hostingConfig, resolve(outputDirectory, "hosting.json"));
-      }
-      if (await exists(drizzleSource)) {
-        await cp(drizzleSource, resolve(outputDirectory, "drizzle"), {
-          recursive: true,
-        });
-      }
+    closeBundle() {
+      packaging ??= packageArtifact();
+      return packaging;
     },
   };
 }

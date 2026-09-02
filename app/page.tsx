@@ -72,6 +72,8 @@ type PlatformSnapshot = {
 
 async function platformRequest<T>(payload?:Record<string,unknown>):Promise<T>{
   const response=await fetch("/api/platform",payload?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}:{headers:{"Accept":"application/json"}});
+  // Authentication endpoints require a full document navigation to complete the cookie flow.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   if(response.status===401){window.location.href="/signin-with-chatgpt?return_to=/";throw new Error("Giriş sayfasına yönlendiriliyorsunuz.")}
   const result=await response.json().catch(()=>({})) as {error?:string}&T;
   if(!response.ok)throw new Error(result.error||"İşlem tamamlanamadı.");
@@ -355,6 +357,8 @@ function Login({ onEnter, onSignup }: { onEnter: () => void|Promise<void>; onSig
   const resetCaptcha=()=>{setCaptchaToken("");setCaptchaReset(value=>value+1)};
   const submitLogin=async()=>{if(!supabaseAuthEnabled){await onEnter();return}if(!email||password.length<8){setMessage("Geçerli e-posta ve en az 8 karakterli şifre girin.");return}if(!requireCaptcha())return;setBusy(true);setMessage("");try{await signInWithPassword(email,password,captchaToken);await onEnter()}catch(error){setMessage(error instanceof Error?error.message:"Giriş tamamlanamadı.");resetCaptcha()}finally{setBusy(false)}};
   const submitSignup=async()=>{if(legalStatus!=="ready"){setMessage("Yeni üyelik, platform işletmecisinin yasal unvan ve iletişim bilgileri yayımlanana kadar güvenli biçimde durduruldu.");return}if(!terms||!privacyNotice){setMessage("Devam etmek için kullanım koşullarını kabul edin ve aydınlatma bildirimini okuduğunuzu işaretleyin.");return}if(!supabaseAuthEnabled){onSignup();return}if(!email||password.length<10){setMessage("Geçerli e-posta ve en az 10 karakterli şifre girin.");return}if(!requireCaptcha())return;setBusy(true);setMessage("");try{const result=await signUpWithPassword(email,password,"2026-08-v4",captchaToken);if(result.confirmationRequired)setMessage("Doğrulama bağlantısı e-posta adresinize gönderildi.");else await onEnter()}catch(error){setMessage(error instanceof Error?error.message:"Üyelik oluşturulamadı.");resetCaptcha()}finally{setBusy(false)}};
+  // The ChatGPT sign-in endpoint must perform a full navigation for its cookie exchange.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   const recover=async()=>{if(!supabaseAuthEnabled){window.location.href="/signin-with-chatgpt?return_to=/";return}if(!email){setMessage("Şifre yenileme bağlantısı için e-posta adresinizi girin.");return}if(!requireCaptcha())return;setBusy(true);setMessage("");try{await sendPasswordReset(email,captchaToken);setMessage("Şifre yenileme bağlantısı e-posta adresinize gönderildi.");resetCaptcha()}catch(error){setMessage(error instanceof Error?error.message:"Kurtarma bağlantısı gönderilemedi.");resetCaptcha()}finally{setBusy(false)}};
   const changeMode=(next:"login"|"signup"|"forgot")=>{setMode(next);setMessage("");resetCaptcha()};
   return <main className="login-shell" data-localize-ui>
@@ -1478,7 +1482,11 @@ export default function Home() {
   // The callback is intentionally mount-only; the signed return URL is consumed once.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(()=>{const signup=new URLSearchParams(window.location.search).get("signup")==="1";if(supabaseAuthEnabled||signup){const timer=window.setTimeout(()=>void startSession(signup,!signup),0);return()=>window.clearTimeout(timer)}},[]);
+  // The hosted sign-in endpoint requires a full document navigation to establish its session.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   if (!loggedIn) return <Login onEnter={()=>startSession(false)} onSignup={()=>{window.location.href="/signin-with-chatgpt?return_to=/?signup=1"}}/>;
+  // The hosted sign-out endpoint requires a full document navigation to clear its session.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   const signOut=async()=>{if(supabaseAuthEnabled){try{await signOutSupabase()}finally{setLoggedIn(false)}}else window.location.href="/signout-with-chatgpt?return_to=/"};
   const header = language==="en"?(enViewTitles[view]??viewTitles[view]):viewTitles[view];
   const openCreate=(target:View,prefill:Draft={})=>{if(role==="Viewer"){setToast("Viewer rolü salt okunurdur; yeni kayıt oluşturamaz");setTimeout(()=>setToast(""),2400);return}setRecordForm({view:target,prefill});};
