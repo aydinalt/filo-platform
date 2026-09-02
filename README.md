@@ -18,7 +18,7 @@ verified deployment targets.
 ## Prerequisites
 
 - Node.js `>=22.13.0`
-- Linux with `flock`, `curl`, and GNU `timeout` for the Sites lifecycle helpers
+- Windows, Linux or macOS; the maintained lifecycle helpers run with Node.js and do not require Bash/WSL
 - PowerShell 7 or Windows PowerShell 5.1 only when creating Windows release ZIPs
 
 ## Sites Lifecycle
@@ -27,9 +27,9 @@ The Sites lifecycle CLI runs the locked dependency install before returning this
 
 This starter does not use `wrangler.jsonc`.
 
-`install:ci` is intentionally a single, non-retrying `npm ci`. It refuses a concurrent install for the same project, consumes a matching image-seeded npm cache with `--prefer-offline` while retaining registry fallback for a missing cache object, otherwise downloads and verifies the complete vinext tarball recorded in `package-lock.json`, limits npm to one socket, and terminates a stalled install. `build` applies a short timeout and then validates the Sites artifact. These helpers target Linux and use GNU `timeout`; they are not native macOS scripts.
+`install:ci` is intentionally a single, bounded `npm ci`. It refuses a concurrent install for the same project, uses the lockfile integrity contract and project-local npm cache, limits npm to one socket, and terminates a stalled install. `build` applies a bounded timeout and validates the Sites artifact. Both helpers are maintained as platform-independent Node scripts.
 
-Scripts that need writable project-scoped home, npm, XDG, and temporary paths use `scripts/sites-env.sh`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler logs inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git.
+Scripts that need writable project-scoped npm, XDG and temporary paths use `scripts/run-tool.mjs`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler state inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git. The `.sh` files under `scripts/` remain compatibility entrypoints for external Linux automation and delegate to the maintained Node/npm commands.
 
 ## Included Shape
 
@@ -109,7 +109,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run install:ci`: perform the one bounded lockfile install
 - `npm run dev`: start the Vite/Vinext development server
 - `npm run build`: build and validate the deployable Sites artifact
-- `npm run start`: start the built Vinext application
+- `npm run start`: start the built Vinext application; Sites D1/R2 bindings are supplied by hosting, while local binding-aware checks use `npm run dev`
 - `npm test`: build, validate, and verify the rendered development-preview metadata
 - `npm run validate:artifact`: recheck an existing artifact's manifest and ESM `default.fetch` export
 - `npm run build:vercel`: verify the Vercel/Supabase Next.js target

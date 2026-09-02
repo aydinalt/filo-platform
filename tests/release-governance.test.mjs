@@ -17,6 +17,7 @@ test("primary project commands are cross-platform and do not require Bash",async
   for(const name of ["install:ci","dev","build","start","test","typecheck","ci:verify","validate:artifact","lint","db:generate"]){assert.ok(packageJson.scripts[name],`${name} script is missing`);assert.doesNotMatch(packageJson.scripts[name],/\bbash\b|^[A-Z_]+=\S+\s/u)}
   for(const script of ["run-tool.mjs","build-verified.mjs","validate-artifact.mjs","install-ci.mjs","ci-verify.mjs","typecheck.mjs"])await readFile(resolve(root,"scripts",script),"utf8");
   const sitesPlugin=await readFile(resolve(root,"build/sites-vite-plugin.ts"),"utf8");assert.match(sitesPlugin,/packaging \?\?= packageArtifact\(\)/);assert.match(sitesPlugin,/maxRetries: 10/);
+  const readme=await readFile(resolve(root,"README.md"),"utf8");assert.doesNotMatch(readme,/helpers target Linux|requires GNU timeout|Linux with `flock`/u);
 });
 
 test("environment profiles isolate data and provider modes",async()=>{
