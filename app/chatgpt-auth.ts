@@ -27,11 +27,13 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     __FILO_ENV?: { FILO_RUNTIME?: string };
   }).__FILO_ENV;
   const runtime = runtimeBindings?.FILO_RUNTIME ?? process.env.FILO_RUNTIME;
-  if (!shouldAcceptSitesIdentityHeaders(runtime)) return (await getSupabaseUser()) ?? getDemoUser();
+  const explicitIdentity = (await getSupabaseUser()) ?? (await getDemoUser());
+  if (explicitIdentity) return explicitIdentity;
+  if (!shouldAcceptSitesIdentityHeaders(runtime)) return null;
 
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!email) return (await getSupabaseUser()) ?? getDemoUser();
+  if (!email) return null;
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =

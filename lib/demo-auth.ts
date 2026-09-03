@@ -5,7 +5,7 @@ export type DemoAuthEnvironment = {
 };
 
 export type DemoAccount = {
-  username: "demo1" | "demo2";
+  username: "admin" | "demo1" | "demo2";
   email: string;
   name: string;
 };
@@ -15,6 +15,12 @@ export const DEMO_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
 const LOCAL_DEMO_SECRET = "filo-local-demo-session-key-only-for-development-v1";
 const DEMO_ACCOUNTS: Record<DemoAccount["username"], DemoAccount & { passwordHash: string }> = {
+  admin: {
+    username: "admin",
+    email: "aydinalt@gmail.com",
+    name: "FİLO DEMO PLATFORM YÖNETİCİSİ",
+    passwordHash: "b7c59773c75d7eaecaf42bd1df4ea0911ae2ce5417cc20542dc26e48a5817221",
+  },
   demo1: {
     username: "demo1",
     email: "demo1@demo.filo.local",
@@ -45,7 +51,8 @@ export async function verifyDemoCredentials(
   password: string,
 ): Promise<DemoAccount | null> {
   if (!demoAuthEnabled(env)) return null;
-  const normalized = username.trim().toLowerCase() as DemoAccount["username"];
+  const identifier = username.trim().toLowerCase();
+  const normalized = (identifier === "aydinalt@gmail.com" ? "admin" : identifier) as DemoAccount["username"];
   const account = DEMO_ACCOUNTS[normalized];
   if (!account) return null;
   const actual = await sha256(`${normalized}:${password}`);

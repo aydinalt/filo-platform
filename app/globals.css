@@ -687,6 +687,7 @@ body{background:#f3f4f6}.content{background:#f3f4f6}.panel{border-color:#dfe1e5;
 /* User-seat licensing and shared-login feedback */
 .demo-login-note { display:flex; flex-direction:column; gap:3px; padding:10px 12px; border:1px solid #dce6ff; border-radius:8px; background:#f4f7ff; color:#52617d; font-size:12px; }
 .demo-login-note strong { color:#315ca8; }
+.auth-provider-link { text-decoration:none; }
 .license-card { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:18px; padding:18px 20px; border-left:4px solid #2aa77a; }
 .license-card.limit-full { border-left-color:#e05d73; background:#fffafb; }
 .license-card h3 { margin:5px 0; }
