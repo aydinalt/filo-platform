@@ -362,6 +362,9 @@ test("payment lifecycle is idempotent and activates plans only after signed call
   for(const status of ["COMPLETED","FAILED","CANCELLED","REFUNDED","EXPIRED"])assert.match(providerCallbackApi,new RegExp(status));
   assert.match(providerCallbackApi,/status==="COMPLETED"/);
   assert.match(providerCallbackApi,/status==="REFUNDED"/);
+  assert.match(providerCallbackApi,/allowedPrevious/);
+  assert.match(providerCallbackApi,/providerReference!==reference/);
+  assert.match(providerCallbackApi,/Ödeme durum geçişi reddedildi/);
   assert.match(page,/Ödemeyi başlat \/ tekrar dene/);
   assert.match(page,/imzalı başarılı callback sonrasında aktifleşir/);
 });

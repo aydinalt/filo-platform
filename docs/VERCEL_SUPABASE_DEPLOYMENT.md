@@ -12,7 +12,7 @@ This repository supports two explicit runtime targets without mixing tenant data
 3. Run `supabase test db`. The pgTAP suite uses two tenant identities and verifies RLS, anonymous denial, tenant visibility and server-only business-table writes.
 4. Configure the private `filo-private` bucket. Never make evidence, custody, invoice or identity documents public.
 5. Create a Vercel project from the repository and configure the variables listed in `.env.example`.
-6. Set `FILO_RUNTIME=supabase` and `SUPABASE_CRON_MODE=PG_CRON` only on Vercel. Keep both unset on Sites/Cloudflare.
+6. Set `FILO_RUNTIME=supabase`, `FILO_DEPLOYMENT_TIER=production`, `NEXT_PUBLIC_FILO_DEPLOYMENT_TIER=production`, `FILO_DEMO_AUTH_ENABLED=false` and `SUPABASE_CRON_MODE=PG_CRON` only on the real Vercel production. The public Sites demonstration uses `FILO_DEPLOYMENT_TIER=prototype`, `NEXT_PUBLIC_FILO_DEPLOYMENT_TIER=prototype`, closed public signup and isolated synthetic data. A production-tier process rejects demo sessions and Sites identity headers even if they are accidentally enabled.
 7. Set the production Auth site URL and allow only the production `/auth/callback` redirect. Require e-mail confirmation, custom SMTP, Turnstile CAPTCHA, a minimum 10-character password, reviewed Auth e-mail rate limits and TOTP MFA. Set `PRIVILEGED_MFA_REQUIRED=true`; privileged mutations require Supabase AAL2. Mirror these controls in the `SUPABASE_AUTH_*` evidence variables so production preflight can fail closed.
 8. In the Supabase SQL editor, run the following once as project owner. The helper stores the endpoint and bearer in Vault and schedules the signed job every 15 minutes:
 

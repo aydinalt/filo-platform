@@ -19,6 +19,19 @@ test("isolated demo credentials use hashes and signed expiring sessions",async()
   assert.equal(await demo.readDemoSession(env,`${session}x`,base+1000),null);
   assert.equal(await demo.readDemoSession(env,session,base+(demo.DEMO_SESSION_MAX_AGE_SECONDS+1)*1000),null);
   const source=await read("lib/demo-auth.ts");assert.doesNotMatch(source,/password\s*:\s*["'](?:demo[12]|5614452)["']/i);
+  assert.equal(demo.demoAuthEnabled({...env,FILO_DEPLOYMENT_TIER:"production"}),false);
+  assert.equal(await demo.verifyDemoCredentials({...env,FILO_DEPLOYMENT_TIER:"production"},"demo1","demo1"),null);
+});
+
+test("production tier rejects prototype identity paths",async()=>{
+  const boundary=await importTypeScript("lib/auth-boundary.ts");
+  assert.equal(boundary.shouldAcceptSitesIdentityHeaders("cloudflare","prototype"),true);
+  assert.equal(boundary.shouldAcceptSitesIdentityHeaders("cloudflare","production"),false);
+  assert.equal(boundary.shouldAcceptSitesIdentityHeaders("supabase","prototype"),false);
+  const browser=await read("app/supabase-browser.ts"),page=await read("app/page.tsx");
+  assert.match(browser,/demoAuthAvailable = deploymentTier === "prototype"/);
+  assert.match(page,/isDemo&&demoAuthAvailable/);
+  assert.match(page,/Üretim kimlik doğrulaması henüz yapılandırılmadı/);
 });
 
 test("member activation is blocked until a paid user seat is available",async()=>{

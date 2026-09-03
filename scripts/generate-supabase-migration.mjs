@@ -2,7 +2,13 @@ import { readdirSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
-const files = readdirSync(join(root, "drizzle")).filter(name => /^\d+.*\.sql$/.test(name)).sort();
+// This file is an immutable baseline. Later PostgreSQL-specific migrations are
+// maintained separately and must never be folded back into the initial schema.
+const INITIAL_BASELINE_MAX_INDEX = 12;
+const files = readdirSync(join(root, "drizzle"))
+  .filter(name => /^\d+.*\.sql$/.test(name))
+  .filter(name => Number(name.slice(0, 4)) <= INITIAL_BASELINE_MAX_INDEX)
+  .sort();
 const tenantTables = new Set();
 let sql = files.map(name => readFileSync(join(root, "drizzle", name), "utf8")).join("\n");
 sql = sql.replaceAll("--> statement-breakpoint", "");
@@ -12,9 +18,26 @@ sql = sql.replace(/\binteger\s+DEFAULT\s+true\b/gi, "integer DEFAULT 1");
 sql = sql.replace(/\bblob\b/gi, "bytea");
 sql = sql.replace(/\breal\b/gi, "double precision");
 sql = sql.replace(/("[^"]+_at")\s+text(?!\s+DEFAULT\s+'')/gi, "$1 timestamptz");
+sql = sql.replace(
+  /CREATE TRIGGER "audit_events_block_update"[\s\S]*?\nEND;\s*CREATE TRIGGER "audit_events_block_delete"[\s\S]*?\nEND;/,
+  () => `CREATE OR REPLACE FUNCTION public.block_audit_event_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+\tRAISE EXCEPTION 'audit_events are append-only' USING ERRCODE = '55000';
+END;
+$$;
+
+CREATE TRIGGER "audit_events_block_update" BEFORE UPDATE ON "audit_events"
+FOR EACH ROW EXECUTE FUNCTION public.block_audit_event_mutation();
+
+CREATE TRIGGER "audit_events_block_delete" BEFORE DELETE ON "audit_events"
+FOR EACH ROW EXECUTE FUNCTION public.block_audit_event_mutation();`,
+);
 
 for (const match of sql.matchAll(/CREATE TABLE "([^"]+)" \(([\s\S]*?)\n\);/g)) {
-  if (/"tenant_id"\s+text\s+NOT NULL/i.test(match[2])) tenantTables.add(match[1]);
+  if (/"tenant_id"\s+text[^\r\n,]*\bNOT NULL/i.test(match[2])) tenantTables.add(match[1]);
 }
 
 const policies = [...tenantTables].sort().map(table => `

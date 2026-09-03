@@ -24,12 +24,13 @@ const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const runtimeBindings = (globalThis as typeof globalThis & {
-    __FILO_ENV?: { FILO_RUNTIME?: string };
+    __FILO_ENV?: { FILO_RUNTIME?: string; FILO_DEPLOYMENT_TIER?: string };
   }).__FILO_ENV;
   const runtime = runtimeBindings?.FILO_RUNTIME ?? process.env.FILO_RUNTIME;
+  const deploymentTier = runtimeBindings?.FILO_DEPLOYMENT_TIER ?? process.env.FILO_DEPLOYMENT_TIER;
   const explicitIdentity = (await getSupabaseUser()) ?? (await getDemoUser());
   if (explicitIdentity) return explicitIdentity;
-  if (!shouldAcceptSitesIdentityHeaders(runtime)) return null;
+  if (!shouldAcceptSitesIdentityHeaders(runtime, deploymentTier)) return null;
 
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
@@ -57,6 +58,7 @@ async function getDemoUser(): Promise<ChatGPTUser | null> {
   }).__FILO_ENV;
   const env: DemoAuthEnvironment = {
     APP_ENV: runtimeBindings?.APP_ENV ?? process.env.APP_ENV,
+    FILO_DEPLOYMENT_TIER: runtimeBindings?.FILO_DEPLOYMENT_TIER ?? process.env.FILO_DEPLOYMENT_TIER,
     FILO_DEMO_AUTH_ENABLED: runtimeBindings?.FILO_DEMO_AUTH_ENABLED ?? process.env.FILO_DEMO_AUTH_ENABLED,
     FILO_DEMO_SESSION_SECRET: runtimeBindings?.FILO_DEMO_SESSION_SECRET ?? process.env.FILO_DEMO_SESSION_SECRET,
   };

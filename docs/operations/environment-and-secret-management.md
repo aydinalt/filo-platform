@@ -4,15 +4,17 @@ Bu sözleşme development, staging ve production ortamlarının veri, dosya ve s
 
 ## Ortam ayrımı
 
-| Alan | Development | Staging | Production |
+| Alan | Development | Staging / public prototype | Production |
 | --- | --- | --- | --- |
 | Veri | Yalnız sentetik | Sentetik veya maskelenmiş | Gerçek müşteri verisi |
 | D1/R2 | Ayrı kaynak | Ayrı kaynak | Ayrı kaynak |
 | Sağlayıcı | Kapalı veya sandbox | Sandbox | Canlı hesap |
 | Ücretsiz kayıt | Kapalı | Kapalı | Hukuk onayından sonra açık |
 | Origin | Yerel olabilir | HTTPS | HTTPS |
+| Dağıtım katmanı | `prototype` | `prototype` | `production` |
+| Demo / Sites kimliği | İsteğe bağlı | Yalnız sentetik demo | Kesinlikle kapalı |
 
-Makine-okunur kurallar `config/environments/` içindedir. Her ortam `ENVIRONMENT_ID`, `PUBLIC_APP_ORIGIN` ve sağlayıcı hesaplarını ayrı tutar. Cloudflare hedefi farklı `D1_ENVIRONMENT_ID`/`R2_ENVIRONMENT_ID`; Supabase hedefi farklı proje URL'si, PostgreSQL bağlantısı, özel Storage ve Auth yapılandırması kullanır. Staging ile production aynı veri kaynağını, callback sırrını veya ödeme hesabını paylaşamaz.
+Makine-okunur kurallar `config/environments/` içindedir. Her ortam `ENVIRONMENT_ID`, `PUBLIC_APP_ORIGIN` ve sağlayıcı hesaplarını ayrı tutar. Sunucu ve tarayıcı için `FILO_DEPLOYMENT_TIER` ile `NEXT_PUBLIC_FILO_DEPLOYMENT_TIER` aynı olmalıdır. Gerçek üretimde ikisi de `production`, `FILO_DEMO_AUTH_ENABLED=false` olur; bu katmanda demo oturumu ve Sites kimlik başlıkları kod tarafından reddedilir. Cloudflare hedefi farklı `D1_ENVIRONMENT_ID`/`R2_ENVIRONMENT_ID`; Supabase hedefi farklı proje URL'si, PostgreSQL bağlantısı, özel Storage ve Auth yapılandırması kullanır. Staging ile production aynı veri kaynağını, callback sırrını veya ödeme hesabını paylaşamaz.
 
 ## Secret sınıfları
 

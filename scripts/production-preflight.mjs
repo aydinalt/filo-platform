@@ -36,6 +36,13 @@ const environmentCheck=runtime==="supabase"?{
   note:"Development, staging ve production farklı kimlik, D1, R2 ve origin kullanmalıdır."
 };
 
+environmentCheck.required.push("FILO_DEPLOYMENT_TIER","NEXT_PUBLIC_FILO_DEPLOYMENT_TIER","FILO_DEMO_AUTH_ENABLED");
+Object.assign(environmentCheck.exact,{
+  FILO_DEPLOYMENT_TIER:environment==="production"?"production":"prototype",
+  NEXT_PUBLIC_FILO_DEPLOYMENT_TIER:environment==="production"?"production":"prototype",
+  ...(environment==="production"?{FILO_DEMO_AUTH_ENABLED:"false"}:{}),
+});
+
 const checks=[
   environmentCheck,
   ...(runtime==="supabase"?[{id:"SUPABASE_AUTH",label:"Supabase üretim kimlik güvenliği",required:["SUPABASE_AUTH_SITE_URL","SUPABASE_AUTH_ALLOWED_REDIRECTS","SUPABASE_AUTH_EMAIL_CONFIRMATION_REQUIRED","SUPABASE_AUTH_CUSTOM_SMTP_ENABLED","SUPABASE_AUTH_CAPTCHA_ENABLED","NEXT_PUBLIC_SUPABASE_REQUIRE_CAPTCHA","NEXT_PUBLIC_TURNSTILE_SITE_KEY","SUPABASE_AUTH_RATE_LIMIT_EMAILS_PER_HOUR","SUPABASE_AUTH_PASSWORD_MIN_LENGTH","PRIVILEGED_MFA_REQUIRED"],exact:{SUPABASE_AUTH_EMAIL_CONFIRMATION_REQUIRED:"true",SUPABASE_AUTH_CUSTOM_SMTP_ENABLED:"true",SUPABASE_AUTH_CAPTCHA_ENABLED:"true",NEXT_PUBLIC_SUPABASE_REQUIRE_CAPTCHA:"true",PRIVILEGED_MFA_REQUIRED:"true"},validators:{SUPABASE_AUTH_SITE_URL:value=>httpsUrl(value)&&value.replace(/\/$/,"")===clean(process.env.PUBLIC_APP_ORIGIN).replace(/\/$/,""),SUPABASE_AUTH_ALLOWED_REDIRECTS:value=>csvIncludes(value).includes(`${clean(process.env.PUBLIC_APP_ORIGIN).replace(/\/$/,"")}/auth/callback`),NEXT_PUBLIC_TURNSTILE_SITE_KEY:value=>value.length>=10,SUPABASE_AUTH_RATE_LIMIT_EMAILS_PER_HOUR:value=>positiveInteger(value)&&Number(value)<=1000,SUPABASE_AUTH_PASSWORD_MIN_LENGTH:value=>positiveInteger(value)&&Number(value)>=10},note:"Site URL, tek üretim callback'i, e-posta doğrulama, özel SMTP, CAPTCHA, AAL2/MFA ve Auth hız sınırları Supabase panelinde aynı değerlerle doğrulanmalıdır."}]:[]),

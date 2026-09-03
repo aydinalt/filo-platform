@@ -48,8 +48,19 @@ export async function POST(request:Request){
     if(provider==="PAYMENT"){
       const orderId=String(payload.orderId||""),status=String(payload.status||"").toUpperCase(),reference=String(payload.providerReference||"");
       if(!orderId||!["COMPLETED","FAILED","CANCELLED","REFUNDED","EXPIRED"].includes(status))return reject("Geçersiz ödeme geri bildirimi.");
-      const order=await env.DB.prepare("SELECT plan FROM subscription_orders WHERE tenant_id=? AND id=?").bind(tenantId,orderId).first<{plan:string}>();
+      const order=await env.DB.prepare("SELECT plan,status,provider_reference AS providerReference FROM subscription_orders WHERE tenant_id=? AND id=?").bind(tenantId,orderId).first<{plan:string;status:string;providerReference:string}>();
       if(!order)return reject("Sipariş bulunamadı.",404);
+      if(["COMPLETED","REFUNDED"].includes(status)&&!reference)return reject("Tamamlanan veya iade edilen ödeme için sağlayıcı referansı zorunludur.");
+      if(order.providerReference&&reference&&order.providerReference!==reference)return reject("Ödeme sağlayıcı referansı siparişle eşleşmiyor.",409);
+      if(order.status===status){await markProcessed().run();return Response.json({ok:true,duplicateState:true,eventId:externalEventId,orderId,status})}
+      const allowedPrevious:Record<string,string[]>={
+        COMPLETED:["PENDING","PAYMENT_DISPATCHING","CHECKOUT_READY","PAYMENT_DISPATCH_FAILED"],
+        FAILED:["PENDING","PAYMENT_DISPATCHING","CHECKOUT_READY","PAYMENT_DISPATCH_FAILED"],
+        CANCELLED:["PENDING","PAYMENT_DISPATCHING","CHECKOUT_READY","PAYMENT_DISPATCH_FAILED"],
+        EXPIRED:["PENDING","PAYMENT_DISPATCHING","CHECKOUT_READY","PAYMENT_DISPATCH_FAILED"],
+        REFUNDED:["COMPLETED"],
+      };
+      if(!allowedPrevious[status]?.includes(order.status))return reject(`Ödeme durum geçişi reddedildi: ${order.status} → ${status}.`,409);
       const statements=[env.DB.prepare("UPDATE subscription_orders SET status=?,provider_reference=?,failure_code=?,updated_at=CURRENT_TIMESTAMP WHERE tenant_id=? AND id=?").bind(status,reference,["FAILED","CANCELLED","EXPIRED"].includes(status)?status:"",tenantId,orderId),env.DB.prepare("UPDATE provider_dispatches SET status=?,provider_reference=?,last_error=?,updated_at=CURRENT_TIMESTAMP WHERE tenant_id=? AND provider='PAYMENT' AND record_id=?").bind(status==="COMPLETED"?"COMPLETED":status,reference,["FAILED","CANCELLED","EXPIRED"].includes(status)?status:"",tenantId,orderId),env.DB.prepare("UPDATE provider_connections SET status='CONNECTED',last_check_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE tenant_id=? AND provider='PAYMENT'").bind(tenantId),env.DB.prepare("INSERT INTO audit_events (id,tenant_id,actor_email,action,module,record_id,payload) VALUES (?,?,'provider:payment','PAYMENT_CALLBACK','subscription',?,?)").bind(`AUD-${crypto.randomUUID()}`,tenantId,orderId,JSON.stringify({status,reference}))];
       if(status==="COMPLETED")statements.push(env.DB.prepare("INSERT INTO settings (tenant_id,key,value,updated_by,updated_at) VALUES (?,'plan',?,'provider:payment',CURRENT_TIMESTAMP) ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP").bind(tenantId,order.plan));
       statements.push(markProcessed());await env.DB.batch(statements);

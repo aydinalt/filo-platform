@@ -3,6 +3,8 @@
 import { createBrowserClient } from "@supabase/ssr";
 
 export const supabaseAuthEnabled = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+export const deploymentTier = String(process.env.NEXT_PUBLIC_FILO_DEPLOYMENT_TIER || (supabaseAuthEnabled ? "production" : "prototype")).trim().toLowerCase();
+export const demoAuthAvailable = deploymentTier === "prototype";
 
 function browserClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

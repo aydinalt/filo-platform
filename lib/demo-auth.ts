@@ -1,5 +1,6 @@
 export type DemoAuthEnvironment = {
   APP_ENV?: string;
+  FILO_DEPLOYMENT_TIER?: string;
   FILO_DEMO_AUTH_ENABLED?: string;
   FILO_DEMO_SESSION_SECRET?: string;
 };
@@ -36,6 +37,8 @@ const DEMO_ACCOUNTS: Record<DemoAccount["username"], DemoAccount & { passwordHas
 };
 
 export function demoAuthEnabled(env: DemoAuthEnvironment): boolean {
+  const tier = String(env.FILO_DEPLOYMENT_TIER || "").trim().toLowerCase();
+  if (tier === "production") return false;
   if (String(env.FILO_DEMO_AUTH_ENABLED || "").toLowerCase() === "true") return true;
   return String(env.APP_ENV || "development").toLowerCase() !== "production";
 }
