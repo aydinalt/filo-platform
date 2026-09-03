@@ -74,7 +74,7 @@ function defaultTenantName(email: string) {
   return `${domain.replace(/[-_]/g, " ").toLocaleUpperCase("tr-TR")} FİLO`;
 }
 
-async function ensureDemoWorkspaceRows(DB:D1Database) {
+export async function ensureDemoWorkspaceRows(DB:D1Database) {
   const tenantId="TEN-DEMO";
   await DB.batch([
     DB.prepare("INSERT OR IGNORE INTO tenants (id,name,country,default_currency) VALUES (?,'FİLO DEMO FİLOSU','TR','TRY')").bind(tenantId),
@@ -610,19 +610,27 @@ export async function saveMember(workspace: Workspace, member: Record<string, un
   if(current?.role==="Owner"&&workspace.email!==email)throw new Response("Owner hesabını yalnız hesabın sahibi değiştirebilir.",{status:403});
   if(current?.role==="Owner"&&(role!=="Owner"||member.active===false))throw new Response("Çalışma alanının tek Owner hesabı pasife alınamaz veya rolü düşürülemez.",{status:409});
   const requestedActive=member.active!==false;
-  if(requestedActive&&(!current||!current.active)){
-    const limits=await tenantEntitlements(workspace);
-    if(limits.availableMembers<1)throw Response.json({error:`${limits.plan} paketindeki ${limits.memberLimit} kullanıcı lisansının tamamı kullanılıyor. Bu kullanıcıyı aktifleştirmek için ek kullanıcı satın alın.`,code:"USER_SEAT_REQUIRED",entitlements:limits,purchaseView:"subscription"},{status:409});
-  }
+  const activating=requestedActive&&(!current||!current.active);
+  const limits=activating?await tenantEntitlements(workspace):null;
+  if(limits&&limits.availableMembers<1)throw Response.json({error:`${limits.plan} paketindeki ${limits.memberLimit} kullanıcı lisansının tamamı kullanılıyor. Bu kullanıcıyı aktifleştirmek için ek kullanıcı satın alın.`,code:"USER_SEAT_REQUIRED",entitlements:limits,purchaseView:"subscription"},{status:409});
   const inviteStatus=email===workspace.email?"ACTIVE":requestedActive?"INVITED":"PENDING_LICENSE";
+  const normalizedName=String(member.name||email).toLocaleUpperCase("tr-TR"),team=String(member.team||""),title=String(member.title||"");
+  const memberStatement=activating
+    ?DB.prepare("INSERT INTO tenant_members (tenant_id,email,name,role,team,title,active,invite_status,updated_at) SELECT ?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP WHERE (SELECT COUNT(*) FROM tenant_members WHERE tenant_id=? AND active=1)<? ON CONFLICT(tenant_id,email) DO UPDATE SET name=excluded.name,role=excluded.role,team=excluded.team,title=excluded.title,active=excluded.active,invite_status=excluded.invite_status,updated_at=CURRENT_TIMESTAMP WHERE tenant_members.active=0")
+      .bind(workspace.tenantId,email,normalizedName,role,team,title,1,inviteStatus,workspace.tenantId,limits!.memberLimit)
+    :DB.prepare("INSERT INTO tenant_members (tenant_id, email, name, role, team, title, active, invite_status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(tenant_id, email) DO UPDATE SET name = excluded.name, role = excluded.role, team = excluded.team, title = excluded.title, active = excluded.active, invite_status = excluded.invite_status, updated_at = CURRENT_TIMESTAMP")
+      .bind(workspace.tenantId,email,normalizedName,role,team,title,requestedActive?1:0,inviteStatus);
+  const memberResult=await memberStatement.run();
+  if(activating&&!Number(memberResult.meta.changes||0)){
+    const currentLimits=await tenantEntitlements(workspace);
+    throw Response.json({error:`${currentLimits.plan} paketindeki ${currentLimits.memberLimit} kullanıcı lisansının tamamı kullanılıyor. Bu kullanıcıyı aktifleştirmek için ek kullanıcı satın alın.`,code:"USER_SEAT_REQUIRED",entitlements:currentLimits,purchaseView:"subscription"},{status:409});
+  }
   const statements=[
-    DB.prepare("INSERT INTO tenant_members (tenant_id, email, name, role, team, title, active, invite_status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(tenant_id, email) DO UPDATE SET name = excluded.name, role = excluded.role, team = excluded.team, title = excluded.title, active = excluded.active, invite_status = excluded.invite_status, updated_at = CURRENT_TIMESTAMP")
-      .bind(workspace.tenantId, email, String(member.name || email).toLocaleUpperCase("tr-TR"), role, String(member.team || ""), String(member.title || ""), requestedActive ? 1 : 0, inviteStatus),
     DB.prepare("INSERT INTO audit_events (id, tenant_id, actor_email, action, module, record_id, payload) VALUES (?, ?, ?, 'MEMBER_SAVED', 'users', ?, ?)").bind(`AUD-${crypto.randomUUID()}`, workspace.tenantId, workspace.email, email, JSON.stringify({ role, team: member.team || "", active: requestedActive, inviteStatus })),
   ];
   if(requestedActive&&email!==workspace.email)statements.push(DB.prepare("INSERT INTO outbox_events (id, tenant_id, topic, payload) VALUES (?, ?, 'member.invited', ?)").bind(`OUT-${crypto.randomUUID()}`, workspace.tenantId, JSON.stringify({ email, role })));
   await DB.batch(statements);
-  return { email, name: String(member.name || email), role, team: String(member.team || ""), title: String(member.title || ""), active: requestedActive, inviteStatus };
+  return {email,name:String(member.name||email),role,team,title,active:requestedActive,inviteStatus};
 }
 
 export async function purchaseDemoUserSeats(workspace:Workspace,quantity:number){

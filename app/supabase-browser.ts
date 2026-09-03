@@ -22,8 +22,10 @@ export async function signInWithDemo(username: string, password: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "login", username, password }),
   });
-  const result = await response.json().catch(() => ({})) as { error?: string };
+  const result = await response.json().catch(() => ({})) as { error?: string; account?: { username: "admin" | "demo1" | "demo2"; name: string } };
   if (!response.ok) throw new Error(result.error || "Demo girişi tamamlanamadı.");
+  if (!result.account) throw new Error("Demo oturum bilgisi alınamadı.");
+  return result.account;
 }
 
 export async function signOutDemo() {

@@ -1,4 +1,4 @@
-import { isPlatformAdminEmail, requireIdentity, runtimeEnv, saveMember, tenantEntitlementsFor, type Workspace } from "./platform-store";
+import { ensureDemoWorkspaceRows, isPlatformAdminEmail, requireIdentity, runtimeEnv, saveMember, tenantEntitlementsFor, type Workspace } from "./platform-store";
 
 type AdminIdentity = Awaited<ReturnType<typeof requireIdentity>>;
 
@@ -10,7 +10,7 @@ export type AdminTenant = {
 };
 
 export type PlatformAdminSnapshot = {
-  operator:{email:string;name:string;assuranceLevel:string};
+  operator:{email:string;name:string;assuranceLevel:string;authSource:string};
   totals:{tenants:number;activeTenants:number;members:number;activeMembers:number;vehicles:number;openTickets:number;completedRevenueMinor:number;currency:string};
   tenants:AdminTenant[];
   members:Array<{tenantId:string;tenantName:string;email:string;name:string;role:string;team:string;title:string;active:boolean;inviteStatus:string;updatedAt:string}>;
@@ -27,9 +27,9 @@ export async function requirePlatformAdmin(write=false):Promise<AdminIdentity>{
   const env=runtimeEnv();
   const isolatedDemoAdmin=identity.authSource==="DEMO"&&identity.email.toLowerCase()==="aydinalt@gmail.com";
   if(!isolatedDemoAdmin&&!isPlatformAdminEmail(identity.email,env))throw new Response("Bu hesap platform yönetimi için yetkili değildir.",{status:403});
-  if(isolatedDemoAdmin)return identity;
-  if(write&&(identity.authSource!=="SUPABASE"||identity.assuranceLevel!=="aal2")){
-    throw Response.json({error:"Platform verisini değiştirmek için Supabase MFA ile AAL2 doğrulaması gereklidir.",code:"MFA_REQUIRED",mfaUrl:"/security/mfa"},{status:428});
+  if(isolatedDemoAdmin){await ensureDemoWorkspaceRows(env.DB);return identity}
+  if(identity.authSource!=="SUPABASE"||identity.assuranceLevel!=="aal2"){
+    throw Response.json({error:`Platform verisini ${write?"değiştirmek":"görüntülemek"} için Supabase MFA ile AAL2 doğrulaması gereklidir.`,code:"MFA_REQUIRED",mfaUrl:"/security/mfa?returnTo=/admin"},{status:428});
   }
   return identity;
 }
@@ -75,7 +75,7 @@ export async function platformAdminSnapshot(identity:AdminIdentity):Promise<Plat
   });
   const completed=subscriptions.filter(row=>row.status==="COMPLETED");
   return {
-    operator:{email:identity.email,name:identity.name,assuranceLevel:identity.assuranceLevel},
+    operator:{email:identity.email,name:identity.name,assuranceLevel:identity.assuranceLevel,authSource:identity.authSource},
     totals:{tenants:tenants.length,activeTenants:tenants.filter(item=>item.status==="ACTIVE").length,members:members.length,activeMembers:members.filter(item=>item.active).length,vehicles:visibleModules.filter(item=>item.module==="fleet").reduce((sum,item)=>sum+Number(item.count),0),openTickets:tickets.filter(item=>!new Set(["RESOLVED","CLOSED"]).has(item.status)).length,completedRevenueMinor:completed.reduce((sum,item)=>sum+Number(item.amountMinor||0),0),currency:completed[0]?.currency||"TRY"},
     tenants,members,subscriptions,providers,tickets,audit,weeklyActivity,moduleCounts:visibleModules.map(({tenantId,module,count})=>({tenantId,module,count:Number(count)})),
   };

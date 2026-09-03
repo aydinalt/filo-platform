@@ -23,23 +23,30 @@ test("isolated demo credentials use hashes and signed expiring sessions",async()
 
 test("member activation is blocked until a paid user seat is available",async()=>{
   const store=await read("lib/platform-store.ts");
-  assert.match(store,/requestedActive&&\(!current\|\|!current\.active\)/);
+  assert.match(store,/const activating=requestedActive&&\(!current\|\|!current\.active\)/);
   assert.match(store,/USER_SEAT_REQUIRED/);
   assert.match(store,/status='COMPLETED'/);
   assert.match(store,/order\?Math\.max\(1,Number\(order\.seats\)\)/);
   assert.match(store,/PENDING_LICENSE/);
   assert.match(store,/inactiveMembership[\s\S]*ACCOUNT_INACTIVE/);
+  assert.match(store,/SELECT COUNT\(\*\) FROM tenant_members WHERE tenant_id=\? AND active=1\)<\?/);
+  assert.match(store,/memberResult\.meta\.changes/);
 });
 
-test("platform admin is allowlisted, production writes require AAL2, and demo admin stays isolated",async()=>{
-  const [admin,route,page]=await Promise.all([read("lib/platform-admin.ts"),read("app/api/admin/route.ts"),read("app/page.tsx")]);
+test("platform admin is allowlisted, production reads and writes require AAL2, and demo admin stays isolated",async()=>{
+  const [admin,route,page,adminPage,browser]=await Promise.all([read("lib/platform-admin.ts"),read("app/api/admin/route.ts"),read("app/page.tsx"),read("app/admin/page.tsx"),read("app/supabase-browser.ts")]);
   assert.match(admin,/isPlatformAdminEmail\(identity\.email,env\)/);
   assert.match(admin,/identity\.authSource!=="SUPABASE"\|\|identity\.assuranceLevel!=="aal2"/);
   assert.match(admin,/PLATFORM_ADMIN_MEMBER_UPDATED/);
   assert.match(admin,/identity\.authSource==="DEMO"&&tenantId!=="TEN-DEMO"/);
   assert.match(admin,/const demoTenantId=identity\.authSource==="DEMO"\?"TEN-DEMO":null/);
+  assert.match(admin,/await ensureDemoWorkspaceRows\(env\.DB\)/);
   assert.match(route,/requirePlatformAdmin\(true\)/);
   assert.match(page,/snapshot\.workspace\.isPlatformAdmin/);
   assert.match(page,/router\.push\("\/admin"\)/);
+  assert.match(page,/account\.username==="admin"/);
   assert.match(page,/purchase-demo-seats/);
+  assert.match(browser,/return result\.account/);
+  assert.match(adminPage,/operator\.authSource==="DEMO"\)await signOutDemo/);
+  assert.match(adminPage,/MFA_REQUIRED/);
 });

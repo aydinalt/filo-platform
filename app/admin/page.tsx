@@ -10,14 +10,14 @@ import {
   Users, Webhook, X, type LucideIcon,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { signOutSupabase } from "../supabase-browser";
+import { signOutDemo, signOutSupabase } from "../supabase-browser";
 import styles from "./admin.module.css";
 
 type View="dashboard"|"companies"|"users"|"plans"|"integrations"|"security"|"system";
 type Tenant={id:string;name:string;country:string;currency:string;createdAt:string;owner:string;plan:string;memberLimit:number;activeMembers:number;totalMembers:number;availableMembers:number;vehicleLimit:number;activeVehicles:number;providerReady:number;providerTotal:number;openTickets:number;status:"ACTIVE"|"SETUP"|"LIMITED";updatedAt:string};
 type Member={tenantId:string;tenantName:string;email:string;name:string;role:string;team:string;title:string;active:boolean;inviteStatus:string;updatedAt:string};
 type Snapshot={
-  operator:{email:string;name:string;assuranceLevel:string};
+  operator:{email:string;name:string;assuranceLevel:string;authSource:"SUPABASE"|"DEMO"};
   totals:{tenants:number;activeTenants:number;members:number;activeMembers:number;vehicles:number;openTickets:number;completedRevenueMinor:number;currency:string};
   tenants:Tenant[];members:Member[];
   subscriptions:Array<{id:string;tenantId:string;tenantName:string;plan:string;period:string;seats:number;vehicles:number;amountMinor:number;currency:string;status:string;providerReference:string;createdAt:string;updatedAt:string}>;
@@ -60,8 +60,8 @@ function MetricCard({label,value,detail,icon:Icon,tone="blue"}:{label:string;val
 export default function AdminPage(){
   const router=useRouter();
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(""),[view,setView]=useState<View>("dashboard"),[mobileMenu,setMobileMenu]=useState(false),[dark,setDark]=useState(false),[notifications,setNotifications]=useState(false),[profileOpen,setProfileOpen]=useState(false),[query,setQuery]=useState(""),[toast,setToast]=useState(""),[selectedTenant,setSelectedTenant]=useState<Tenant|null>(null),[savingMember,setSavingMember]=useState("");
-  const load=async()=>{setLoading(true);setError("");try{setSnapshot(await adminRequest<Snapshot>())}catch(reason){const issue=reason as Error&{status?:number};if(issue.status===401){router.replace("/?returnTo=/admin");return}setError(issue.message)}finally{setLoading(false)}};
-  useEffect(()=>{let active=true;adminRequest<Snapshot>().then(value=>{if(active)setSnapshot(value)}).catch(reason=>{if(!active)return;const issue=reason as Error&{status?:number};if(issue.status===401)router.replace("/?returnTo=/admin");else setError(issue.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[router]);
+  const load=async()=>{setLoading(true);setError("");try{setSnapshot(await adminRequest<Snapshot>())}catch(reason){const issue=reason as Error&{status?:number;code?:string};if(issue.status===401){router.replace("/?returnTo=/admin");return}if(issue.status===428&&issue.code==="MFA_REQUIRED"){router.replace("/security/mfa?returnTo=/admin");return}setError(issue.message)}finally{setLoading(false)}};
+  useEffect(()=>{let active=true;adminRequest<Snapshot>().then(value=>{if(active)setSnapshot(value)}).catch(reason=>{if(!active)return;const issue=reason as Error&{status?:number;code?:string};if(issue.status===401)router.replace("/?returnTo=/admin");else if(issue.status===428&&issue.code==="MFA_REQUIRED")router.replace("/security/mfa?returnTo=/admin");else setError(issue.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[router]);
   const notify=(message:string)=>{setToast(message);window.setTimeout(()=>setToast(""),3500)};
   const text=query.trim().toLocaleLowerCase("tr-TR");
   const tenants=useMemo(()=>snapshot?.tenants.filter(item=>!text||[item.id,item.name,item.owner,item.plan].some(value=>value.toLocaleLowerCase("tr-TR").includes(text)))||[],[snapshot,text]);
@@ -70,7 +70,7 @@ export default function AdminPage(){
     setSavingMember(`${member.tenantId}:${member.email}`);
     try{await adminRequest({action:"save-member",member:{...member,...patch}});await load();notify("Kullanıcı yetkisi kaydedildi ve denetim günlüğüne işlendi.")}catch(reason){notify(reason instanceof Error?reason.message:"Kullanıcı güncellenemedi.")}finally{setSavingMember("")}
   };
-  const signOut=async()=>{try{await signOutSupabase()}finally{router.replace("/")}};
+  const signOut=async()=>{try{if(snapshot?.operator.authSource==="DEMO")await signOutDemo();else await signOutSupabase()}finally{router.replace("/")}};
   if(loading&&!snapshot)return <main className={styles.statePage}><RefreshCw className={styles.spin}/><h1>Admin verileri yükleniyor</h1><p>Yetki ve platform kayıtları doğrulanıyor.</p></main>;
   if(error&&!snapshot)return <main className={styles.statePage}><ShieldCheck/><h1>Admin erişimi kullanılamıyor</h1><p>{error}</p><div><Link href="/?portal=user">Kullanıcı portalına dön</Link><button onClick={()=>void load()}>Tekrar dene</button></div></main>;
   if(!snapshot)return null;
