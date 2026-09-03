@@ -7,6 +7,7 @@ import {
   importTaxProfiles,
   issueDeviceToken,
   processOutbox,
+  purchaseDemoUserSeats,
   provisionHardwareDevice,
   recordDataAcceptance,
   recordFieldValidation,
@@ -90,6 +91,7 @@ export async function POST(request: Request) {
     if (action === "support") return Response.json({ ticket: await createSupportTicket(workspace, (payload.ticket || {}) as Record<string, unknown>) });
     if (action === "consent") return Response.json({ consent: await recordConsent(workspace, (payload.consent || {}) as Record<string, unknown>) });
     if (action === "create-subscription-order") return Response.json({ order: await createSubscriptionOrder(workspace, (payload.order || {}) as Record<string, unknown>) });
+    if (action === "purchase-demo-seats") return Response.json({ result: await purchaseDemoUserSeats(workspace, Number(payload.quantity || 1)) });
     if (action === "process-outbox") return Response.json({ result: await processOutbox(workspace) });
     if (action === "verify-providers") return Response.json({ result: await verifyProviderConfiguration(workspace) });
     if (action === "run-automations") return Response.json({ result: await runOperationalAutomations(workspace) });

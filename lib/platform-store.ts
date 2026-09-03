@@ -4,10 +4,11 @@ import { scanUploadedFileWithProvider } from "./security";
 import { READINESS_GATES, READINESS_ORDER, type ReadinessGateId } from "./readiness-contract";
 import { geocodingConfiguration } from "./map-geocoding";
 
-type RuntimeEnv = { DB: D1Database; BUCKET: R2Bucket; APP_ENV?:string; ENVIRONMENT_ID?:string; PUBLIC_APP_ORIGIN?:string; RELEASE_VERSION?:string; FILO_RUNTIME?:string; D1_ENVIRONMENT_ID?:string; R2_ENVIRONMENT_ID?:string; NEXT_PUBLIC_SUPABASE_URL?:string; NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?:string; SUPABASE_SERVICE_ROLE_KEY?:string; SUPABASE_DATABASE_URL?:string; SUPABASE_STORAGE_BUCKET?:string; SUPABASE_CRON_MODE?:string; SECRETS_ROTATED_AT?:string; SECRET_ROTATION_OWNER?:string; SECRET_MAX_AGE_DAYS?:string; PAYMENT_API_URL?:string; PAYMENT_API_KEY?:string; PAYMENT_WEBHOOK_SECRET?:string; PAYMENT_PROVIDER_NAME?:string; PAYMENT_CHECKOUT_HOSTS?:string; ESIGN_API_KEY?:string; ESIGN_WEBHOOK_SECRET?:string; RESEND_API_KEY?:string; RESEND_WEBHOOK_SECRET?:string; RESEND_FROM?:string; EXPO_ACCESS_TOKEN?:string; EXPO_PROJECT_ID?:string; FCM_SERVER_KEY?:string; EINVOICE_API_URL?:string; EINVOICE_API_KEY?:string; EINVOICE_WEBHOOK_SECRET?:string; EINVOICE_PROVIDER_NAME?:string; LEGAL_CONTROLLER_NAME?:string; LEGAL_CONTROLLER_EMAIL?:string; LEGAL_CONTROLLER_ADDRESS?:string; LEGAL_TERMS_EFFECTIVE_AT?:string; PUBLIC_SIGNUP_ENABLED?:string; PRIVILEGED_MFA_REQUIRED?:string; BROWSER_TELEMETRY_ENABLED?:string; OPERATIONS_ALERT_EMAILS?:string; OPERATIONS_CRON_SECRET?:string; DATABASE_CAPACITY_USED_PERCENT?:string; STORAGE_CAPACITY_USED_PERCENT?:string; MALWARE_SCAN_PROVIDER?:string; CLOUDMERSIVE_API_KEY?:string; VEHICLE_CATALOG_PROVIDER?:string; VEHICLE_CATALOG_API_URL?:string; VEHICLE_CATALOG_API_KEY?:string; VEHICLE_CATALOG_ALLOWED_HOSTS?:string; TRACKER_GATEWAY_MODE?:string; DEVICE_TOKEN_MAX_AGE_DAYS?:string; MAP_PROVIDER?:string; MAP_ALLOWED_HOSTS?:string; MAP_GEOCODING_API_URL?:string; MAP_GEOCODING_API_KEY?:string; MAP_GEOCODING_ALLOWED_HOSTS?:string };
+type RuntimeEnv = { DB: D1Database; BUCKET: R2Bucket; APP_ENV?:string; ENVIRONMENT_ID?:string; PUBLIC_APP_ORIGIN?:string; RELEASE_VERSION?:string; FILO_RUNTIME?:string; D1_ENVIRONMENT_ID?:string; R2_ENVIRONMENT_ID?:string; NEXT_PUBLIC_SUPABASE_URL?:string; NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?:string; SUPABASE_SERVICE_ROLE_KEY?:string; SUPABASE_DATABASE_URL?:string; SUPABASE_STORAGE_BUCKET?:string; SUPABASE_CRON_MODE?:string; SECRETS_ROTATED_AT?:string; SECRET_ROTATION_OWNER?:string; SECRET_MAX_AGE_DAYS?:string; PAYMENT_API_URL?:string; PAYMENT_API_KEY?:string; PAYMENT_WEBHOOK_SECRET?:string; PAYMENT_PROVIDER_NAME?:string; PAYMENT_CHECKOUT_HOSTS?:string; ESIGN_API_KEY?:string; ESIGN_WEBHOOK_SECRET?:string; RESEND_API_KEY?:string; RESEND_WEBHOOK_SECRET?:string; RESEND_FROM?:string; EXPO_ACCESS_TOKEN?:string; EXPO_PROJECT_ID?:string; FCM_SERVER_KEY?:string; EINVOICE_API_URL?:string; EINVOICE_API_KEY?:string; EINVOICE_WEBHOOK_SECRET?:string; EINVOICE_PROVIDER_NAME?:string; LEGAL_CONTROLLER_NAME?:string; LEGAL_CONTROLLER_EMAIL?:string; LEGAL_CONTROLLER_ADDRESS?:string; LEGAL_TERMS_EFFECTIVE_AT?:string; PUBLIC_SIGNUP_ENABLED?:string; PRIVILEGED_MFA_REQUIRED?:string; BROWSER_TELEMETRY_ENABLED?:string; OPERATIONS_ALERT_EMAILS?:string; OPERATIONS_CRON_SECRET?:string; DATABASE_CAPACITY_USED_PERCENT?:string; STORAGE_CAPACITY_USED_PERCENT?:string; MALWARE_SCAN_PROVIDER?:string; CLOUDMERSIVE_API_KEY?:string; VEHICLE_CATALOG_PROVIDER?:string; VEHICLE_CATALOG_API_URL?:string; VEHICLE_CATALOG_API_KEY?:string; VEHICLE_CATALOG_ALLOWED_HOSTS?:string; TRACKER_GATEWAY_MODE?:string; DEVICE_TOKEN_MAX_AGE_DAYS?:string; MAP_PROVIDER?:string; MAP_ALLOWED_HOSTS?:string; MAP_GEOCODING_API_URL?:string; MAP_GEOCODING_API_KEY?:string; MAP_GEOCODING_ALLOWED_HOSTS?:string; PLATFORM_ADMIN_EMAILS?:string; FILO_DEMO_AUTH_ENABLED?:string; FILO_DEMO_SESSION_SECRET?:string };
 type SignupAcceptance={contract:string;termsVersion:string;privacyVersion:string;acceptedAt:string};
-type Identity = { email: string; name: string; authSource: "SITES_SIWC"|"SUPABASE"; assuranceLevel: "aal1"|"aal2"|"workspace"; signupAcceptance?:SignupAcceptance };
-export type Workspace = { tenantId: string; tenantName: string; email: string; name: string; role: string; authSource: "SITES_SIWC"|"SUPABASE"|"SYSTEM"; assuranceLevel: "aal1"|"aal2"|"workspace"|"system" };
+type Identity = { email: string; name: string; authSource: "SITES_SIWC"|"SUPABASE"|"DEMO"; assuranceLevel: "aal1"|"aal2"|"workspace"|"demo"; signupAcceptance?:SignupAcceptance };
+export type Workspace = { tenantId: string; tenantName: string; email: string; name: string; role: string; authSource: "SITES_SIWC"|"SUPABASE"|"DEMO"|"SYSTEM"; assuranceLevel: "aal1"|"aal2"|"workspace"|"demo"|"system" };
+export type TenantEntitlements = { plan:string; memberLimit:number; activeMembers:number; availableMembers:number; vehicleLimit:number; activeVehicles:number; source:"FREE"|"PLAN"|"SUBSCRIPTION"|"DEMO_PURCHASE" };
 
 const MODULES = new Set([
   "crm", "requests", "offers", "company", "entities", "fleet", "drivers", "operations",
@@ -73,8 +74,24 @@ function defaultTenantName(email: string) {
   return `${domain.replace(/[-_]/g, " ").toLocaleUpperCase("tr-TR")} FİLO`;
 }
 
+async function ensureDemoWorkspaceRows(DB:D1Database) {
+  const tenantId="TEN-DEMO";
+  await DB.batch([
+    DB.prepare("INSERT OR IGNORE INTO tenants (id,name,country,default_currency) VALUES (?,'FİLO DEMO FİLOSU','TR','TRY')").bind(tenantId),
+    DB.prepare("INSERT OR IGNORE INTO tenant_members (tenant_id,email,name,role,team,title,active,invite_status) VALUES (?,'demo1@demo.filo.local','DEMO YETKİLİ KULLANICI','Owner','OPERASYON','YETKİLİ KULLANICI',1,'ACTIVE')").bind(tenantId),
+    DB.prepare("INSERT OR IGNORE INTO tenant_members (tenant_id,email,name,role,team,title,active,invite_status) VALUES (?,'demo2@demo.filo.local','DEMO YETKİSİZ KULLANICI','Viewer','OPERASYON','DAVETLİ KULLANICI',0,'PENDING_LICENSE')").bind(tenantId),
+    DB.prepare("INSERT OR IGNORE INTO teams (id,tenant_id,name,manager,area,active) VALUES ('TEAM-DEMO-OPS',?,'OPERASYON','DEMO YETKİLİ KULLANICI','FİLO VE OPERASYON',1)").bind(tenantId),
+    DB.prepare("INSERT OR IGNORE INTO settings (tenant_id,key,value,updated_by) VALUES (?,'language','tr','system:demo')").bind(tenantId),
+    DB.prepare("INSERT OR IGNORE INTO settings (tenant_id,key,value,updated_by) VALUES (?,'plan','FREE','system:demo')").bind(tenantId),
+    DB.prepare("INSERT OR IGNORE INTO settings (tenant_id,key,value,updated_by) VALUES (?,'demoMode','true','system:demo')").bind(tenantId),
+    DB.prepare("INSERT OR IGNORE INTO settings (tenant_id,key,value,updated_by) VALUES (?,'demoPurchasedSeats','0','system:demo')").bind(tenantId),
+    ...PROVIDER_DEFAULTS.map(([provider,kind])=>DB.prepare("INSERT OR IGNORE INTO provider_connections (tenant_id,provider,kind,status) VALUES (?,?,?,'CONFIG_REQUIRED')").bind(tenantId,provider,kind)),
+  ]);
+}
+
 export async function ensureWorkspace(identity: Identity): Promise<Workspace> {
   const { DB } = runtimeEnv();
+  if(identity.authSource==="DEMO")await ensureDemoWorkspaceRows(DB);
   const existing = await DB.prepare(
     `SELECT tm.tenant_id AS tenantId, tm.role, tm.name, t.name AS tenantName
      FROM tenant_members tm JOIN tenants t ON t.id = tm.tenant_id
@@ -88,6 +105,13 @@ export async function ensureWorkspace(identity: Identity): Promise<Workspace> {
       ...PROVIDER_DEFAULTS.map(([provider,kind]) => DB.prepare("INSERT OR IGNORE INTO provider_connections (tenant_id, provider, kind, status) VALUES (?, ?, ?, 'CONFIG_REQUIRED')").bind(existing.tenantId, provider, kind)),
     ]);
     return { tenantId: existing.tenantId, tenantName: existing.tenantName, email: identity.email, name: identity.name, role: existing.role, authSource:identity.authSource, assuranceLevel:identity.assuranceLevel };
+  }
+
+  const inactiveMembership=await DB.prepare("SELECT tenant_id AS tenantId,invite_status AS inviteStatus FROM tenant_members WHERE lower(email)=lower(?) AND active=0 ORDER BY updated_at DESC LIMIT 1").bind(identity.email).first<{tenantId:string;inviteStatus:string}>();
+  if(inactiveMembership)throw Response.json({error:"Hesabınız yetkili kullanıcı tarafından henüz aktifleştirilmedi. Kullanıcı lisansı ve rol ataması tamamlandıktan sonra giriş yapabilirsiniz.",code:"ACCOUNT_INACTIVE",inviteStatus:inactiveMembership.inviteStatus},{status:403});
+
+  if(identity.authSource==="DEMO"){
+    throw new Response("Demo çalışma alanı kullanılamıyor.",{status:403});
   }
 
   const env=runtimeEnv(),signup=platformLegalStatus(env);
@@ -136,14 +160,16 @@ export async function requirePrivilegedAccess(workspace:Workspace,action:string)
   const env=runtimeEnv();
   const required=String(env.PRIVILEGED_MFA_REQUIRED||"").toLowerCase()==="true"||(String(env.FILO_RUNTIME||"").toLowerCase()==="supabase"&&String(env.APP_ENV||"").toLowerCase()==="production");
   if(!required)return;
-  const allowed=workspace.authSource==="SUPABASE"&&workspace.assuranceLevel==="aal2";
+  const demoRealm=workspace.authSource==="DEMO"&&workspace.tenantId==="TEN-DEMO";
+  const allowed=demoRealm||(workspace.authSource==="SUPABASE"&&workspace.assuranceLevel==="aal2");
   await env.DB.prepare("INSERT INTO audit_events (id,tenant_id,actor_email,action,module,record_id,payload) VALUES (?,?,?,?,?,?,?)")
-    .bind(`AUD-${crypto.randomUUID()}`,workspace.tenantId,workspace.email,allowed?"PRIVILEGED_ACTION_AUTHORIZED":"PRIVILEGED_ACTION_DENIED","security",action,JSON.stringify({action,authSource:workspace.authSource,assuranceLevel:workspace.assuranceLevel,required:"aal2"})).run();
+    .bind(`AUD-${crypto.randomUUID()}`,workspace.tenantId,workspace.email,allowed?(demoRealm?"DEMO_PRIVILEGED_ACTION_AUTHORIZED":"PRIVILEGED_ACTION_AUTHORIZED"):"PRIVILEGED_ACTION_DENIED","security",action,JSON.stringify({action,authSource:workspace.authSource,assuranceLevel:workspace.assuranceLevel,required:demoRealm?"isolated-demo":"aal2"})).run();
   if(!allowed)throw Response.json({error:"Bu kritik işlem için Supabase MFA ile AAL2 doğrulaması gereklidir.",code:"MFA_REQUIRED",mfaUrl:"/security/mfa"},{status:428});
 }
 
 export async function workspaceSnapshot(workspace: Workspace) {
   const env=runtimeEnv(),{ DB } = env;
+  const entitlements=await tenantEntitlements(workspace);
   const [records, teams, members, settingsRows, tickets, audit, links, files, telemetry, providers, subscriptions, signatures, outbox,legalProfile,mobileInstallations,trackingSessions,gatewayEvents,providerDispatches,eDocuments,notificationDeliveries,migrationRuns,monitoringEvents,restoreRehearsals,securityTestRuns,securityFindings,pilotRuns,pilotScenarios,mobileReleases,fieldValidationRuns,dataAcceptanceRuns,productionRollouts,e2eAcceptanceRuns,catalogVersions,catalogEntries,vinDecodeEvents,operationsControls,operationsReadinessRuns,taxVersions,taxEntries,gatewayTokenCounts] = await Promise.all([
     DB.prepare("SELECT id, module, status, data, version, created_at AS createdAt, updated_at AS updatedAt FROM module_records WHERE tenant_id = ? AND archived = 0 ORDER BY updated_at DESC LIMIT 1000").bind(workspace.tenantId).all(),
     DB.prepare("SELECT id, name, manager, area, active, updated_at AS updatedAt FROM teams WHERE tenant_id = ? ORDER BY name").bind(workspace.tenantId).all(),
@@ -190,7 +216,8 @@ export async function workspaceSnapshot(workspace: Workspace) {
   const tokenCounts=Object.fromEntries(gatewayTokenCounts.results.map(row=>[row.provider+"_GATEWAY",Number(row.count)]));
   const providerConfig=providerConfiguration(env,tokenCounts);
   return {
-    workspace,
+    workspace:{...workspace,isPlatformAdmin:isPlatformAdminEmail(workspace.email,env)},
+    entitlements,
     records: (records.results as Array<Record<string, unknown>>).map(row => ({ ...row, data: JSON.parse(String(row.data || "{}")) })),
     teams: teams.results,
     members: members.results,
@@ -249,16 +276,38 @@ function normalizeRecordData(input:Record<string,unknown>){
   return Object.fromEntries(Object.entries(input).map(([key,value])=>{if(typeof value!=="string")return [key,value];const clean=value.trim();if(key==="_sourceModule"||key.toLowerCase().includes("email")||key.toLowerCase().includes("url"))return [key,clean.toLowerCase()];if(key.startsWith("_")||preserve.has(key)||/date|until|expiry/i.test(key))return [key,clean];return [key,clean.toLocaleUpperCase("tr-TR")]}));
 }
 
-async function tenantPlan(workspace:Workspace) {
-  const { DB } = runtimeEnv();
-  return (await DB.prepare("SELECT value FROM settings WHERE tenant_id = ? AND key = 'plan'").bind(workspace.tenantId).first<{value:string}>())?.value || "FREE";
+export function isPlatformAdminEmail(email:string,env:Pick<RuntimeEnv,"PLATFORM_ADMIN_EMAILS">=runtimeEnv()):boolean{
+  const allowed=String(env.PLATFORM_ADMIN_EMAILS||"").split(",").map(value=>value.trim().toLowerCase()).filter(Boolean);
+  return allowed.includes(email.trim().toLowerCase());
+}
+
+export async function tenantEntitlements(workspace:Workspace):Promise<TenantEntitlements>{
+  const {DB}=runtimeEnv();
+  return tenantEntitlementsFor(DB,workspace.tenantId);
+}
+
+export async function tenantEntitlementsFor(DB:D1Database,tenantId:string):Promise<TenantEntitlements>{
+  const [planRow,order,demoSeatsRow,memberCount,vehicleCount]=await Promise.all([
+    DB.prepare("SELECT value FROM settings WHERE tenant_id=? AND key='plan'").bind(tenantId).first<{value:string}>(),
+    DB.prepare("SELECT plan,seats,vehicles FROM subscription_orders WHERE tenant_id=? AND status='COMPLETED' ORDER BY updated_at DESC LIMIT 1").bind(tenantId).first<{plan:string;seats:number;vehicles:number}>(),
+    DB.prepare("SELECT value FROM settings WHERE tenant_id=? AND key='demoPurchasedSeats'").bind(tenantId).first<{value:string}>(),
+    DB.prepare("SELECT COUNT(*) AS count FROM tenant_members WHERE tenant_id=? AND active=1").bind(tenantId).first<{count:number}>(),
+    DB.prepare("SELECT COUNT(*) AS count FROM module_records WHERE tenant_id=? AND module='fleet' AND archived=0").bind(tenantId).first<{count:number}>(),
+  ]);
+  const plan=String(order?.plan||planRow?.value||"FREE").toUpperCase();
+  const defaults=PLAN_LIMITS[plan]||PLAN_LIMITS.FREE;
+  const demoExtra=tenantId==="TEN-DEMO"?Math.max(0,Number(demoSeatsRow?.value||0)):0;
+  const memberLimit=order?Math.max(1,Number(order.seats)):defaults.members+demoExtra;
+  const vehicleLimit=order?Math.max(1,Number(order.vehicles)):defaults.vehicles;
+  const activeMembers=Number(memberCount?.count||0),activeVehicles=Number(vehicleCount?.count||0);
+  return {plan,memberLimit,activeMembers,availableMembers:Math.max(0,memberLimit-activeMembers),vehicleLimit,activeVehicles,source:order?"SUBSCRIPTION":demoExtra?"DEMO_PURCHASE":plan==="FREE"?"FREE":"PLAN"};
 }
 
 async function enforcePlanLimit(workspace:Workspace, moduleName:string) {
-  const plan = await tenantPlan(workspace); const limits=PLAN_LIMITS[plan]||PLAN_LIMITS.FREE; const {DB}=runtimeEnv();
+  const limits=await tenantEntitlements(workspace); const plan=limits.plan; const {DB}=runtimeEnv();
   if(moduleName==="fleet"){
     const row=await DB.prepare("SELECT COUNT(*) AS count FROM module_records WHERE tenant_id = ? AND module = 'fleet' AND archived = 0").bind(workspace.tenantId).first<{count:number}>();
-    if(Number(row?.count||0)>=limits.vehicles)throw new Response(`${plan} paketinde araç sınırı ${limits.vehicles}. Paket yükseltmeden yeni araç eklenemez.`,{status:409});
+    if(Number(row?.count||0)>=limits.vehicleLimit)throw new Response(`${plan} paketinde araç sınırı ${limits.vehicleLimit}. Paket yükseltmeden yeni araç eklenemez.`,{status:409});
   }
 }
 
@@ -560,14 +609,34 @@ export async function saveMember(workspace: Workspace, member: Record<string, un
   if(role==="Owner"&&current?.role!=="Owner")throw new Response("Yeni Owner atanamaz; sahiplik devri ayrı doğrulanmış süreç gerektirir.",{status:403});
   if(current?.role==="Owner"&&workspace.email!==email)throw new Response("Owner hesabını yalnız hesabın sahibi değiştirebilir.",{status:403});
   if(current?.role==="Owner"&&(role!=="Owner"||member.active===false))throw new Response("Çalışma alanının tek Owner hesabı pasife alınamaz veya rolü düşürülemez.",{status:409});
-  if(!current){const plan=await tenantPlan(workspace);const limits=PLAN_LIMITS[plan]||PLAN_LIMITS.FREE;const count=await DB.prepare("SELECT COUNT(*) AS count FROM tenant_members WHERE tenant_id=? AND active=1").bind(workspace.tenantId).first<{count:number}>();if(Number(count?.count||0)>=limits.members)throw new Response(`${plan} paketinde kullanıcı sınırı ${limits.members}.`,{status:409});}
-  await DB.batch([
+  const requestedActive=member.active!==false;
+  if(requestedActive&&(!current||!current.active)){
+    const limits=await tenantEntitlements(workspace);
+    if(limits.availableMembers<1)throw Response.json({error:`${limits.plan} paketindeki ${limits.memberLimit} kullanıcı lisansının tamamı kullanılıyor. Bu kullanıcıyı aktifleştirmek için ek kullanıcı satın alın.`,code:"USER_SEAT_REQUIRED",entitlements:limits,purchaseView:"subscription"},{status:409});
+  }
+  const inviteStatus=email===workspace.email?"ACTIVE":requestedActive?"INVITED":"PENDING_LICENSE";
+  const statements=[
     DB.prepare("INSERT INTO tenant_members (tenant_id, email, name, role, team, title, active, invite_status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(tenant_id, email) DO UPDATE SET name = excluded.name, role = excluded.role, team = excluded.team, title = excluded.title, active = excluded.active, invite_status = excluded.invite_status, updated_at = CURRENT_TIMESTAMP")
-      .bind(workspace.tenantId, email, String(member.name || email).toLocaleUpperCase("tr-TR"), role, String(member.team || ""), String(member.title || ""), member.active === false ? 0 : 1, email === workspace.email ? "ACTIVE" : "INVITED"),
-    DB.prepare("INSERT INTO audit_events (id, tenant_id, actor_email, action, module, record_id, payload) VALUES (?, ?, ?, 'MEMBER_SAVED', 'users', ?, ?)").bind(`AUD-${crypto.randomUUID()}`, workspace.tenantId, workspace.email, email, JSON.stringify({ role, team: member.team || "", active: member.active !== false })),
-    DB.prepare("INSERT INTO outbox_events (id, tenant_id, topic, payload) VALUES (?, ?, 'member.invited', ?)").bind(`OUT-${crypto.randomUUID()}`, workspace.tenantId, JSON.stringify({ email, role })),
+      .bind(workspace.tenantId, email, String(member.name || email).toLocaleUpperCase("tr-TR"), role, String(member.team || ""), String(member.title || ""), requestedActive ? 1 : 0, inviteStatus),
+    DB.prepare("INSERT INTO audit_events (id, tenant_id, actor_email, action, module, record_id, payload) VALUES (?, ?, ?, 'MEMBER_SAVED', 'users', ?, ?)").bind(`AUD-${crypto.randomUUID()}`, workspace.tenantId, workspace.email, email, JSON.stringify({ role, team: member.team || "", active: requestedActive, inviteStatus })),
+  ];
+  if(requestedActive&&email!==workspace.email)statements.push(DB.prepare("INSERT INTO outbox_events (id, tenant_id, topic, payload) VALUES (?, ?, 'member.invited', ?)").bind(`OUT-${crypto.randomUUID()}`, workspace.tenantId, JSON.stringify({ email, role })));
+  await DB.batch(statements);
+  return { email, name: String(member.name || email), role, team: String(member.team || ""), title: String(member.title || ""), active: requestedActive, inviteStatus };
+}
+
+export async function purchaseDemoUserSeats(workspace:Workspace,quantity:number){
+  assertPermission(workspace,"billing");
+  if(workspace.authSource!=="DEMO"||workspace.tenantId!=="TEN-DEMO")throw new Response("Demo lisans işlemi yalnız izole demo çalışma alanında kullanılabilir.",{status:403});
+  if(!Number.isInteger(quantity)||quantity<1||quantity>20)throw new Response("1–20 arasında ek kullanıcı seçin.",{status:400});
+  const {DB}=runtimeEnv();
+  const current=await DB.prepare("SELECT value FROM settings WHERE tenant_id=? AND key='demoPurchasedSeats'").bind(workspace.tenantId).first<{value:string}>();
+  const total=Math.max(0,Number(current?.value||0))+quantity;
+  await DB.batch([
+    DB.prepare("INSERT INTO settings (tenant_id,key,value,updated_by,updated_at) VALUES (?,'demoPurchasedSeats',?,?,CURRENT_TIMESTAMP) ON CONFLICT(tenant_id,key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP").bind(workspace.tenantId,String(total),workspace.email),
+    DB.prepare("INSERT INTO audit_events (id,tenant_id,actor_email,action,module,record_id,payload) VALUES (?,?,?,'DEMO_USER_SEATS_PURCHASED','subscription','demo-seat',?)").bind(`AUD-${crypto.randomUUID()}`,workspace.tenantId,workspace.email,JSON.stringify({quantity,total,simulation:true})),
   ]);
-  return { email, name: String(member.name || email), role, team: String(member.team || ""), title: String(member.title || ""), active: member.active !== false, inviteStatus: email === workspace.email ? "ACTIVE" : "INVITED" };
+  return {quantity,total,simulation:true,entitlements:await tenantEntitlements(workspace)};
 }
 
 export async function saveSettings(workspace: Workspace, values: Record<string, unknown>) {
@@ -807,7 +876,7 @@ export async function bulkImportRecords(workspace:Workspace,input:{module:string
     return {valid:errors.length===0,total:normalized.length,errors,imported:0,preview:normalized.slice(0,10)};
   }
   if(moduleName==="fleet"){
-    const plan=await tenantPlan(workspace),limit=(PLAN_LIMITS[plan]||PLAN_LIMITS.FREE).vehicles,{DB}=runtimeEnv();const current=await DB.prepare("SELECT COUNT(*) AS count FROM module_records WHERE tenant_id=? AND module='fleet' AND archived=0").bind(workspace.tenantId).first<{count:number}>();
+    const entitlements=await tenantEntitlements(workspace),plan=entitlements.plan,limit=entitlements.vehicleLimit,{DB}=runtimeEnv();const current=await DB.prepare("SELECT COUNT(*) AS count FROM module_records WHERE tenant_id=? AND module='fleet' AND archived=0").bind(workspace.tenantId).first<{count:number}>();
     if(Number(current?.count||0)+normalized.length>limit)throw new Response(`${plan} paketinde en fazla ${limit} araç bulunabilir. Toplu aktarım paket sınırını aşıyor.`,{status:409});
   }
   const {DB}=runtimeEnv(),migrationRunId=`MIG-${crypto.randomUUID()}`,sourceSha256=input.sourceSha256||await sha256Text(JSON.stringify(normalized));

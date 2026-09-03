@@ -16,6 +16,25 @@ export async function signInWithPassword(email: string, password: string, captch
   if (error) throw error;
 }
 
+export async function signInWithDemo(username: string, password: string) {
+  const response = await fetch("/api/demo-auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "login", username, password }),
+  });
+  const result = await response.json().catch(() => ({})) as { error?: string };
+  if (!response.ok) throw new Error(result.error || "Demo girişi tamamlanamadı.");
+}
+
+export async function signOutDemo() {
+  const response = await fetch("/api/demo-auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "logout" }),
+  });
+  if (!response.ok) throw new Error("Demo oturumu kapatılamadı.");
+}
+
 export async function signUpWithPassword(email: string, password: string, legalVersion:string, captchaToken?: string) {
   const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent("/?signup=1")}`;
   const acceptedAt=new Date().toISOString();

@@ -2,13 +2,14 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 import { shouldAcceptSitesIdentityHeaders } from "../lib/auth-boundary";
+import { DEMO_SESSION_COOKIE, readDemoSession, type DemoAuthEnvironment } from "../lib/demo-auth";
 
 export type ChatGPTUser = {
   displayName: string;
   email: string;
   fullName: string | null;
-  authSource: "SITES_SIWC" | "SUPABASE";
-  assuranceLevel: "aal1" | "aal2" | "workspace";
+  authSource: "SITES_SIWC" | "SUPABASE" | "DEMO";
+  assuranceLevel: "aal1" | "aal2" | "workspace" | "demo";
   signupAcceptance?: {contract:string;termsVersion:string;privacyVersion:string;acceptedAt:string};
 };
 
@@ -26,11 +27,11 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     __FILO_ENV?: { FILO_RUNTIME?: string };
   }).__FILO_ENV;
   const runtime = runtimeBindings?.FILO_RUNTIME ?? process.env.FILO_RUNTIME;
-  if (!shouldAcceptSitesIdentityHeaders(runtime)) return getSupabaseUser();
+  if (!shouldAcceptSitesIdentityHeaders(runtime)) return (await getSupabaseUser()) ?? getDemoUser();
 
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!email) return getSupabaseUser();
+  if (!email) return (await getSupabaseUser()) ?? getDemoUser();
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =
@@ -45,6 +46,27 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     fullName,
     authSource: "SITES_SIWC",
     assuranceLevel: "workspace",
+  };
+}
+
+async function getDemoUser(): Promise<ChatGPTUser | null> {
+  const runtimeBindings = (globalThis as typeof globalThis & {
+    __FILO_ENV?: DemoAuthEnvironment;
+  }).__FILO_ENV;
+  const env: DemoAuthEnvironment = {
+    APP_ENV: runtimeBindings?.APP_ENV ?? process.env.APP_ENV,
+    FILO_DEMO_AUTH_ENABLED: runtimeBindings?.FILO_DEMO_AUTH_ENABLED ?? process.env.FILO_DEMO_AUTH_ENABLED,
+    FILO_DEMO_SESSION_SECRET: runtimeBindings?.FILO_DEMO_SESSION_SECRET ?? process.env.FILO_DEMO_SESSION_SECRET,
+  };
+  const cookieStore = await cookies();
+  const account = await readDemoSession(env, cookieStore.get(DEMO_SESSION_COOKIE)?.value);
+  if (!account) return null;
+  return {
+    email: account.email,
+    displayName: account.name,
+    fullName: account.name,
+    authSource: "DEMO",
+    assuranceLevel: "demo",
   };
 }
 

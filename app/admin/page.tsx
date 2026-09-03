@@ -1,182 +1,104 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  Activity, Bell, Boxes, Building2, CalendarDays, ChevronDown, ChevronRight,
-  CircleDollarSign, Command, CreditCard, Gauge, Grid2X2, Headphones, Languages,
-  LockKeyhole, Menu, Moon, MoreHorizontal, PackageCheck, Plus, Search, ServerCog,
-  Settings, ShieldCheck, Sun, Truck, UserRound, Users, Webhook, X,
-  type LucideIcon,
+  Activity, Bell, Building2, CalendarDays, ChevronDown, ChevronRight,
+  CircleDollarSign, Command, CreditCard, Gauge, Headphones, Languages, LockKeyhole,
+  Menu, Moon, RefreshCw, Search, ServerCog, ShieldCheck, Sun, Truck, UserRound,
+  Users, Webhook, X, type LucideIcon,
 } from "lucide-react";
-import {
-  Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
-  Tooltip, XAxis, YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { signOutSupabase } from "../supabase-browser";
 import styles from "./admin.module.css";
 
-type View = "dashboard" | "companies" | "users" | "plans" | "integrations" | "security" | "system";
-type Company = { id: string; name: string; plan: string; users: number; vehicles: number; status: "Aktif" | "Kurulum" | "Kısıtlı"; owner: string; updated: string };
-
-const weekly = [
-  { day: "Pzt", trips: 318, events: 32 }, { day: "Sal", trips: 362, events: 28 },
-  { day: "Çar", trips: 341, events: 41 }, { day: "Per", trips: 408, events: 35 },
-  { day: "Cum", trips: 447, events: 29 }, { day: "Cmt", trips: 302, events: 18 },
-  { day: "Paz", trips: 276, events: 15 },
-];
-
-const tenantMix = [
-  { name: "Aktif", value: 82, color: "#3c82f6" },
-  { name: "Kurulum", value: 11, color: "#f7bd52" },
-  { name: "Kısıtlı", value: 7, color: "#f26b7a" },
-];
-
-const initialCompanies: Company[] = [
-  { id: "CMP-1048", name: "Atlas Lojistik", plan: "Kurumsal", users: 24, vehicles: 186, status: "Aktif", owner: "Aydın Altuntaş", updated: "2 dk önce" },
-  { id: "CMP-1047", name: "Marmara Dağıtım", plan: "Pro", users: 12, vehicles: 74, status: "Aktif", owner: "Ece Demir", updated: "18 dk önce" },
-  { id: "CMP-1046", name: "Anka Saha Hizmetleri", plan: "Pro", users: 8, vehicles: 42, status: "Kurulum", owner: "Mehmet Kaya", updated: "1 saat önce" },
-  { id: "CMP-1045", name: "Ege Soğuk Zincir", plan: "Kurumsal", users: 19, vehicles: 98, status: "Aktif", owner: "Selin Arı", updated: "3 saat önce" },
-  { id: "CMP-1044", name: "Kuzey Servis Ağı", plan: "Başlangıç", users: 4, vehicles: 16, status: "Kısıtlı", owner: "Burak Yalçın", updated: "Dün" },
-];
-
-const userRows = [
-  { name: "Aydın Altuntaş", email: "aydin@atlaslojistik.com", role: "Owner", company: "Atlas Lojistik", state: "Aktif" },
-  { name: "Ece Demir", email: "ece@marmaradagitim.com", role: "Admin", company: "Marmara Dağıtım", state: "Aktif" },
-  { name: "Mehmet Kaya", email: "mehmet@ankasaha.com", role: "Admin", company: "Anka Saha Hizmetleri", state: "Davet bekliyor" },
-  { name: "Selin Arı", email: "selin@egesoguk.com", role: "Owner", company: "Ege Soğuk Zincir", state: "Aktif" },
-];
-
-const navGroups: Array<{ label: string; items: Array<{ id: View; label: string; icon: LucideIcon; badge?: string }> }> = [
-  { label: "ANA MENÜ", items: [{ id: "dashboard", label: "Genel Bakış", icon: Gauge }, { id: "companies", label: "Firmalar", icon: Building2, badge: "23" }, { id: "users", label: "Kullanıcılar", icon: Users }] },
-  { label: "TİCARİ YÖNETİM", items: [{ id: "plans", label: "Paketler & Abonelik", icon: CreditCard }, { id: "integrations", label: "Entegrasyonlar", icon: Webhook }] },
-  { label: "PLATFORM", items: [{ id: "security", label: "Güvenlik & Audit", icon: ShieldCheck, badge: "3" }, { id: "system", label: "Sistem Sağlığı", icon: ServerCog }] },
-];
-
-const viewTitles: Record<View, { title: string; breadcrumb: string; description: string }> = {
-  dashboard: { title: "Yönetim Özeti", breadcrumb: "Genel Bakış", description: "Platformun ticari ve teknik durumunu tek ekrandan izleyin." },
-  companies: { title: "Firma Yönetimi", breadcrumb: "Firmalar", description: "Tenant hesaplarını, paketleri ve kullanım durumunu yönetin." },
-  users: { title: "Kullanıcı Yönetimi", breadcrumb: "Kullanıcılar", description: "Platform genelindeki kullanıcı ve yönetici erişimlerini denetleyin." },
-  plans: { title: "Paketler & Abonelik", breadcrumb: "Abonelik", description: "Paket kapasitesi, gelir ve yenileme süreçlerini izleyin." },
-  integrations: { title: "Entegrasyon Merkezi", breadcrumb: "Entegrasyonlar", description: "Sağlayıcı, webhook ve bağlantı sağlığını yönetin." },
-  security: { title: "Güvenlik & Audit", breadcrumb: "Güvenlik", description: "Yetkili işlemler, MFA ve denetim olaylarını takip edin." },
-  system: { title: "Sistem Sağlığı", breadcrumb: "Sistem", description: "Servis, kuyruk, veritabanı ve depolama durumunu izleyin." },
+type View="dashboard"|"companies"|"users"|"plans"|"integrations"|"security"|"system";
+type Tenant={id:string;name:string;country:string;currency:string;createdAt:string;owner:string;plan:string;memberLimit:number;activeMembers:number;totalMembers:number;availableMembers:number;vehicleLimit:number;activeVehicles:number;providerReady:number;providerTotal:number;openTickets:number;status:"ACTIVE"|"SETUP"|"LIMITED";updatedAt:string};
+type Member={tenantId:string;tenantName:string;email:string;name:string;role:string;team:string;title:string;active:boolean;inviteStatus:string;updatedAt:string};
+type Snapshot={
+  operator:{email:string;name:string;assuranceLevel:string};
+  totals:{tenants:number;activeTenants:number;members:number;activeMembers:number;vehicles:number;openTickets:number;completedRevenueMinor:number;currency:string};
+  tenants:Tenant[];members:Member[];
+  subscriptions:Array<{id:string;tenantId:string;tenantName:string;plan:string;period:string;seats:number;vehicles:number;amountMinor:number;currency:string;status:string;providerReference:string;createdAt:string;updatedAt:string}>;
+  providers:Array<{tenantId:string;tenantName:string;provider:string;kind:string;status:string;lastCheckAt:string;updatedAt:string}>;
+  tickets:Array<{id:string;tenantId:string;tenantName:string;requesterEmail:string;module:string;pageArea:string;type:string;priority:string;description:string;reference:string;status:string;createdAt:string}>;
+  audit:Array<{id:string;tenantId:string;tenantName:string;actorEmail:string;action:string;module:string;recordId:string;createdAt:string}>;
+  weeklyActivity:Array<{day:string;events:number;changes:number}>;
+  moduleCounts:Array<{tenantId:string;module:string;count:number}>;
 };
 
-function MetricCard({ label, value, trend, icon: Icon, tone = "blue" }: { label: string; value: string; trend: string; icon: LucideIcon; tone?: "blue" | "green" | "amber" | "rose" }) {
-  return <article className={styles.metricCard}><div><span>{label}</span><strong>{value}</strong><small className={styles[`trend${tone}`]}>↗ {trend}</small></div><i className={`${styles.metricIcon} ${styles[`icon${tone}`]}`}><Icon size={19} /></i></article>;
+const navGroups:Array<{label:string;items:Array<{id:View;label:string;icon:LucideIcon}>}>=[
+  {label:"ANA MENÜ",items:[{id:"dashboard",label:"Genel Bakış",icon:Gauge},{id:"companies",label:"Firmalar",icon:Building2},{id:"users",label:"Kullanıcılar",icon:Users}]},
+  {label:"TİCARİ YÖNETİM",items:[{id:"plans",label:"Paketler & Abonelik",icon:CreditCard},{id:"integrations",label:"Entegrasyonlar",icon:Webhook}]},
+  {label:"PLATFORM",items:[{id:"security",label:"Güvenlik & Audit",icon:ShieldCheck},{id:"system",label:"Sistem Sağlığı",icon:ServerCog}]},
+];
+const viewTitles:Record<View,{title:string;breadcrumb:string;description:string}>={
+  dashboard:{title:"Yönetim Özeti",breadcrumb:"Genel Bakış",description:"Platformun ticari ve teknik durumunu canlı verilerle izleyin."},
+  companies:{title:"Firma Yönetimi",breadcrumb:"Firmalar",description:"Firma hesaplarını, paketlerini ve kullanım durumlarını inceleyin."},
+  users:{title:"Kullanıcı Yönetimi",breadcrumb:"Kullanıcılar",description:"Rolleri ve lisans kapsamındaki kullanıcı erişimlerini yönetin."},
+  plans:{title:"Paketler & Abonelik",breadcrumb:"Abonelik",description:"Ödeme sonucu doğrulanmış paketleri ve kapasite kullanımını izleyin."},
+  integrations:{title:"Entegrasyon Merkezi",breadcrumb:"Entegrasyonlar",description:"Her firma için sağlayıcı bağlantı durumunu görün."},
+  security:{title:"Güvenlik & Audit",breadcrumb:"Güvenlik",description:"Yönetim işlemlerini ve denetim olaylarını takip edin."},
+  system:{title:"Sistem Sağlığı",breadcrumb:"Sistem",description:"Veritabanı kayıtları, destek yükü ve bağlantı durumunu izleyin."},
+};
+
+async function adminRequest<T>(body?:Record<string,unknown>):Promise<T>{
+  const response=await fetch("/api/admin",body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{cache:"no-store"});
+  const payload=await response.json().catch(()=>({})) as T&{error?:string;code?:string};
+  if(!response.ok){const error=new Error(payload.error||"Admin işlemi tamamlanamadı.") as Error&{status?:number;code?:string};error.status=response.status;error.code=payload.code;throw error}
+  return payload;
+}
+const formatDate=(value:string)=>value?new Intl.DateTimeFormat("tr-TR",{dateStyle:"short",timeStyle:"short"}).format(new Date(value)):"—";
+const formatMoney=(minor:number,currency:string)=>new Intl.NumberFormat("tr-TR",{style:"currency",currency:currency||"TRY",maximumFractionDigits:0}).format(minor/100);
+const statusLabel=(value:Tenant["status"])=>value==="ACTIVE"?"Aktif":value==="LIMITED"?"Kısıtlı":"Kurulum";
+
+function MetricCard({label,value,detail,icon:Icon,tone="blue"}:{label:string;value:string;detail:string;icon:LucideIcon;tone?:"blue"|"green"|"amber"|"rose"}){
+  return <article className={styles.metricCard}><div><span>{label}</span><strong>{value}</strong><small className={styles[`trend${tone}`]}>{detail}</small></div><i className={`${styles.metricIcon} ${styles[`icon${tone}`]}`}><Icon size={19}/></i></article>;
 }
 
-export default function AdminPage() {
-  const [view, setView] = useState<View>("dashboard");
-  const [mobileMenu, setMobileMenu] = useState(false);
-  const [dark, setDark] = useState(false);
-  const [notifications, setNotifications] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [companies, setCompanies] = useState(initialCompanies);
-  const [companyModal, setCompanyModal] = useState(false);
-  const [draft, setDraft] = useState({ name: "", owner: "", plan: "Pro" });
-  const [toast, setToast] = useState("");
-
-  const title = viewTitles[view];
-  const filteredCompanies = useMemo(() => {
-    const text = query.trim().toLocaleLowerCase("tr-TR");
-    return companies.filter((company) => !text || [company.name, company.owner, company.plan, company.id].some((value) => value.toLocaleLowerCase("tr-TR").includes(text)));
-  }, [companies, query]);
-
-  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3000); };
-  const addCompany = (event: FormEvent) => {
-    event.preventDefault();
-    if (draft.name.trim().length < 3 || draft.owner.trim().length < 3) return;
-    setCompanies((items) => [{ id: `CMP-${1048 + items.length}`, name: draft.name.trim(), owner: draft.owner.trim(), plan: draft.plan, users: 1, vehicles: 0, status: "Kurulum", updated: "Şimdi" }, ...items]);
-    setDraft({ name: "", owner: "", plan: "Pro" });
-    setCompanyModal(false);
-    notify("Firma taslağı oluşturuldu. Üretim verisine yazılmadı.");
+export default function AdminPage(){
+  const router=useRouter();
+  const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState(""),[view,setView]=useState<View>("dashboard"),[mobileMenu,setMobileMenu]=useState(false),[dark,setDark]=useState(false),[notifications,setNotifications]=useState(false),[profileOpen,setProfileOpen]=useState(false),[query,setQuery]=useState(""),[toast,setToast]=useState(""),[selectedTenant,setSelectedTenant]=useState<Tenant|null>(null),[savingMember,setSavingMember]=useState("");
+  const load=async()=>{setLoading(true);setError("");try{setSnapshot(await adminRequest<Snapshot>())}catch(reason){const issue=reason as Error&{status?:number};if(issue.status===401){router.replace("/?returnTo=/admin");return}setError(issue.message)}finally{setLoading(false)}};
+  useEffect(()=>{let active=true;adminRequest<Snapshot>().then(value=>{if(active)setSnapshot(value)}).catch(reason=>{if(!active)return;const issue=reason as Error&{status?:number};if(issue.status===401)router.replace("/?returnTo=/admin");else setError(issue.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[router]);
+  const notify=(message:string)=>{setToast(message);window.setTimeout(()=>setToast(""),3500)};
+  const text=query.trim().toLocaleLowerCase("tr-TR");
+  const tenants=useMemo(()=>snapshot?.tenants.filter(item=>!text||[item.id,item.name,item.owner,item.plan].some(value=>value.toLocaleLowerCase("tr-TR").includes(text)))||[],[snapshot,text]);
+  const members=useMemo(()=>snapshot?.members.filter(item=>!text||[item.name,item.email,item.tenantName,item.role].some(value=>value.toLocaleLowerCase("tr-TR").includes(text)))||[],[snapshot,text]);
+  const updateMember=async(member:Member,patch:Partial<Member>)=>{
+    setSavingMember(`${member.tenantId}:${member.email}`);
+    try{await adminRequest({action:"save-member",member:{...member,...patch}});await load();notify("Kullanıcı yetkisi kaydedildi ve denetim günlüğüne işlendi.")}catch(reason){notify(reason instanceof Error?reason.message:"Kullanıcı güncellenemedi.")}finally{setSavingMember("")}
   };
-
-  return <main className={`${styles.adminShell} ${dark ? styles.dark : ""}`}>
-    <aside className={`${styles.sidebar} ${mobileMenu ? styles.sidebarOpen : ""}`}>
-      <div className={styles.logo}><span>F</span><div><strong>Filo</strong><small>ADMIN</small></div><button aria-label="Menüyü kapat" onClick={() => setMobileMenu(false)}><X size={18} /></button></div>
-      <nav aria-label="Admin navigasyonu">
-        {navGroups.map((group) => <section key={group.label}><h2>{group.label}</h2>{group.items.map((item) => <button key={item.id} className={view === item.id ? styles.activeNav : ""} onClick={() => { setView(item.id); setMobileMenu(false); }}><item.icon size={17} /><span>{item.label}</span>{item.badge && <b>{item.badge}</b>}<ChevronRight className={styles.chevron} size={14} /></button>)}</section>)}
-      </nav>
-      <div className={styles.supportCard}><Headphones size={18} /><div><strong>Yönetici desteği</strong><small>Kritik konularda öncelikli kanal</small></div><button onClick={() => notify("Destek merkezi açıldı.")}>Destek al</button></div>
-      <Link className={styles.backLink} href="/prototype">← Operasyon prototipine dön</Link>
-    </aside>
-
-    {mobileMenu && <button className={styles.mobileBackdrop} aria-label="Menüyü kapat" onClick={() => setMobileMenu(false)} />}
-
-    <section className={styles.pageArea}>
-      <header className={styles.topbar}>
-        <button className={styles.menuButton} aria-label="Menüyü aç" onClick={() => setMobileMenu(true)}><Menu size={20} /></button>
-        <label className={styles.quickSearch}><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Hızlı arama..." /></label>
-        <button className={styles.megaButton}>Hızlı İşlemler <ChevronDown size={14} /></button>
-        <div className={styles.topSpacer} />
-        <button className={styles.topIcon} aria-label={dark ? "Açık temaya geç" : "Koyu temaya geç"} onClick={() => setDark((value) => !value)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-        <button className={styles.topIcon} aria-label="Uygulamalar"><Grid2X2 size={18} /></button>
-        <div className={styles.popoverAnchor}><button className={`${styles.topIcon} ${styles.withDot}`} aria-label="Bildirimler" onClick={() => setNotifications((value) => !value)}><Bell size={18} /></button>{notifications && <div className={styles.notificationPopover}><header><strong>Bildirimler</strong><span>3 yeni</span></header><button><i className={styles.noticeCritical}><ShieldCheck size={15} /></i><span><b>MFA zorunluluk kontrolü</b><small>3 yönetici hesabı · 5 dk önce</small></span></button><button><i><Webhook size={15} /></i><span><b>Webhook teslimatı gecikti</b><small>Resend · 18 dk önce</small></span></button><button><i><CreditCard size={15} /></i><span><b>Abonelik yenilemesi yaklaşıyor</b><small>4 firma · bugün</small></span></button></div>}</div>
-        <button className={styles.language}><Languages size={16} /> TR <ChevronDown size={13} /></button>
-        <div className={styles.profileAnchor}><button className={styles.profileButton} onClick={() => setProfileOpen((value) => !value)}><span>AA</span><p><strong>Aydın Altuntaş</strong><small>Platform Owner</small></p><ChevronDown size={14} /></button>{profileOpen && <div className={styles.profileMenu}><button><UserRound size={15} /> Profilim</button><button><Settings size={15} /> Ayarlar</button><button><LockKeyhole size={15} /> Güvenli çıkış</button></div>}</div>
-      </header>
-
-      <div className={styles.content}>
-        <header className={styles.pageHeader}><div><h1>{title.title}</h1><p>{title.description}</p></div><ol><li>Filo</li><li>Admin</li><li>{title.breadcrumb}</li></ol></header>
-        <div className={styles.prototypeNote}><span>ADMIN PROTOTİPİ</span> Örnek veri kullanır; butonlar üretim kayıtlarını değiştirmez.</div>
-        {toast && <div className={styles.toast} role="status"><ShieldCheck size={16} />{toast}</div>}
-
-        {view === "dashboard" && <>
-          <section className={styles.metricsGrid}>
-            <article className={styles.welcomeCard}><div><span>İYİ AKŞAMLAR,</span><h2>Aydın!</h2><p><CalendarDays size={14} /> 2 Eylül 2026</p></div><Command size={52} /></article>
-            <MetricCard label="AKTİF FİRMA" value="23" trend="2 yeni firma" icon={Building2} />
-            <MetricCard label="TOPLAM ARAÇ" value="1.248" trend="%8,4 büyüme" icon={Truck} tone="green" />
-            <MetricCard label="AYLIK GELİR" value="₺684,2K" trend="%6,1 artış" icon={CircleDollarSign} tone="amber" />
-          </section>
-
-          <section className={styles.analyticsGrid}>
-            <article className={styles.card}><header className={styles.cardHeader}><div><h2>Firma Dağılımı</h2><p>Tenant yaşam döngüsü ve aktivasyon durumu</p></div><button aria-label="Firma dağılımı seçenekleri"><MoreHorizontal size={18} /></button></header><div className={styles.donutLayout}><div className={styles.chartBox} aria-label="Firma durum dağılımı grafiği"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={tenantMix} dataKey="value" innerRadius={62} outerRadius={86} paddingAngle={3} stroke="none">{tenantMix.map((item) => <Cell key={item.name} fill={item.color} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer><div className={styles.donutCenter}><strong>23</strong><span>Firma</span></div></div><div className={styles.legend}>{tenantMix.map((item) => <div key={item.name}><i style={{ background: item.color }} /><span>{item.name}</span><strong>%{item.value}</strong></div>)}</div></div></article>
-            <article className={styles.card}><header className={styles.cardHeader}><div><h2>Haftalık Operasyon</h2><p>Yolculuklar ve incelenen risk olayları</p></div><button onClick={() => notify("Grafik verileri yenilendi.")}><Activity size={15} /> Yenile</button></header><div className={styles.barChart} aria-label="Haftalık operasyon grafiği"><ResponsiveContainer width="100%" height="100%"><BarChart data={weekly} barGap={5}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e7eaf0" /><XAxis dataKey="day" axisLine={false} tickLine={false} /><YAxis axisLine={false} tickLine={false} width={34} /><Tooltip /><Bar dataKey="trips" name="Yolculuk" fill="#3c82f6" radius={[4,4,0,0]} /><Bar dataKey="events" name="Risk olayı" fill="#f7bd52" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer></div></article>
-          </section>
-
-          <section className={styles.lowerGrid}>
-            <CompanyTable rows={filteredCompanies.slice(0, 5)} onNew={() => setCompanyModal(true)} onNotify={notify} />
-            <SystemHealth onNotify={notify} />
-          </section>
-        </>}
-
-        {view === "companies" && <CompanyTable rows={filteredCompanies} onNew={() => setCompanyModal(true)} onNotify={notify} full />}
-        {view === "users" && <UserTable onNotify={notify} />}
-        {view === "plans" && <PlanView />}
-        {view === "integrations" && <IntegrationView onNotify={notify} />}
-        {view === "security" && <SecurityView onNotify={notify} />}
-        {view === "system" && <SystemHealth onNotify={notify} full />}
+  const signOut=async()=>{try{await signOutSupabase()}finally{router.replace("/")}};
+  if(loading&&!snapshot)return <main className={styles.statePage}><RefreshCw className={styles.spin}/><h1>Admin verileri yükleniyor</h1><p>Yetki ve platform kayıtları doğrulanıyor.</p></main>;
+  if(error&&!snapshot)return <main className={styles.statePage}><ShieldCheck/><h1>Admin erişimi kullanılamıyor</h1><p>{error}</p><div><Link href="/?portal=user">Kullanıcı portalına dön</Link><button onClick={()=>void load()}>Tekrar dene</button></div></main>;
+  if(!snapshot)return null;
+  const title=viewTitles[view],name=snapshot.operator.name||snapshot.operator.email,tenantMix=[{name:"Aktif",value:snapshot.tenants.filter(item=>item.status==="ACTIVE").length,color:"#3c82f6"},{name:"Kurulum",value:snapshot.tenants.filter(item=>item.status==="SETUP").length,color:"#f7bd52"},{name:"Kısıtlı",value:snapshot.tenants.filter(item=>item.status==="LIMITED").length,color:"#f26b7a"}];
+  return <main className={`${styles.adminShell} ${dark?styles.dark:""}`}>
+    <aside className={`${styles.sidebar} ${mobileMenu?styles.sidebarOpen:""}`}><div className={styles.logo}><span>F</span><div><strong>Filo</strong><small>ADMIN</small></div><button aria-label="Menüyü kapat" onClick={()=>setMobileMenu(false)}><X size={18}/></button></div><nav aria-label="Admin navigasyonu">{navGroups.map(group=><section key={group.label}><h2>{group.label}</h2>{group.items.map(item=><button key={item.id} className={view===item.id?styles.activeNav:""} onClick={()=>{setView(item.id);setMobileMenu(false)}}><item.icon size={17}/><span>{item.label}</span><ChevronRight className={styles.chevron} size={14}/></button>)}</section>)}</nav><div className={styles.supportCard}><Headphones size={18}/><div><strong>Canlı yönetim</strong><small>{snapshot.totals.openTickets} açık destek kaydı</small></div><button onClick={()=>setView("system")}>Kayıtları incele</button></div><Link className={styles.backLink} href="/?portal=user">← Kullanıcı portalına dön</Link></aside>
+    {mobileMenu&&<button className={styles.mobileBackdrop} aria-label="Menüyü kapat" onClick={()=>setMobileMenu(false)}/>}
+    <section className={styles.pageArea}><header className={styles.topbar}><button className={styles.menuButton} aria-label="Menüyü aç" onClick={()=>setMobileMenu(true)}><Menu size={20}/></button><label className={styles.quickSearch}><Search size={16}/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Firma, kullanıcı veya paket ara..."/></label><button className={styles.megaButton} onClick={()=>void load()}><RefreshCw size={14}/> Verileri yenile</button><div className={styles.topSpacer}/><button className={styles.topIcon} aria-label={dark?"Açık temaya geç":"Koyu temaya geç"} onClick={()=>setDark(value=>!value)}>{dark?<Sun size={18}/>:<Moon size={18}/>}</button><div className={styles.popoverAnchor}><button className={`${styles.topIcon} ${snapshot.totals.openTickets?styles.withDot:""}`} aria-label="Bildirimler" onClick={()=>setNotifications(value=>!value)}><Bell size={18}/></button>{notifications&&<div className={styles.notificationPopover}><header><strong>Operasyon bildirimleri</strong><span>{snapshot.totals.openTickets} açık</span></header>{snapshot.tickets.slice(0,4).map(ticket=><button key={ticket.id} onClick={()=>setView("system")}><i className={styles.noticeCritical}><ShieldCheck size={15}/></i><span><b>{ticket.tenantName} · {ticket.priority}</b><small>{ticket.description}</small></span></button>)}</div>}</div><button className={styles.language}><Languages size={16}/> TR <ChevronDown size={13}/></button><div className={styles.profileAnchor}><button className={styles.profileButton} onClick={()=>setProfileOpen(value=>!value)}><span>{name.slice(0,2).toUpperCase()}</span><p><strong>{name}</strong><small>Platform Admin · {snapshot.operator.assuranceLevel.toUpperCase()}</small></p><ChevronDown size={14}/></button>{profileOpen&&<div className={styles.profileMenu}><button><UserRound size={15}/> {snapshot.operator.email}</button><button onClick={()=>void signOut()}><LockKeyhole size={15}/> Güvenli çıkış</button></div>}</div></header>
+      <div className={styles.content}><header className={styles.pageHeader}><div><h1>{title.title}</h1><p>{title.description}</p></div><ol><li>Filo</li><li>Admin</li><li>{title.breadcrumb}</li></ol></header><div className={styles.prototypeNote}><span>CANLI YÖNETİM</span> Veriler kalıcı çalışma alanlarından okunur. Kullanıcı değişiklikleri MFA/AAL2 ve denetim kaydıyla korunur.</div>{toast&&<div className={styles.toast} role="status"><ShieldCheck size={16}/>{toast}</div>}
+        {view==="dashboard"&&<><section className={styles.metricsGrid}><article className={styles.welcomeCard}><div><span>HOŞ GELDİNİZ,</span><h2>{name.split(" ")[0]}!</h2><p><CalendarDays size={14}/>{new Date().toLocaleDateString("tr-TR",{dateStyle:"long"})}</p></div><Command size={52}/></article><MetricCard label="AKTİF FİRMA" value={`${snapshot.totals.activeTenants}/${snapshot.totals.tenants}`} detail="doğrulanmış tenant" icon={Building2}/><MetricCard label="TOPLAM ARAÇ" value={String(snapshot.totals.vehicles)} detail={`${snapshot.totals.activeMembers} aktif kullanıcı`} icon={Truck} tone="green"/><MetricCard label="TAMAMLANAN ÖDEME" value={formatMoney(snapshot.totals.completedRevenueMinor,snapshot.totals.currency)} detail={`${snapshot.subscriptions.filter(item=>item.status==="COMPLETED").length} sipariş`} icon={CircleDollarSign} tone="amber"/></section><section className={styles.analyticsGrid}><article className={styles.card}><header className={styles.cardHeader}><div><h2>Firma Dağılımı</h2><p>Canlı aktivasyon ve lisans durumu</p></div></header><div className={styles.donutLayout}><div className={styles.chartBox}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={tenantMix} dataKey="value" innerRadius={62} outerRadius={86} paddingAngle={3} stroke="none">{tenantMix.map(item=><Cell key={item.name} fill={item.color}/>)}</Pie><Tooltip/></PieChart></ResponsiveContainer><div className={styles.donutCenter}><strong>{snapshot.totals.tenants}</strong><span>Firma</span></div></div><div className={styles.legend}>{tenantMix.map(item=><div key={item.name}><i style={{background:item.color}}/><span>{item.name}</span><strong>{item.value}</strong></div>)}</div></div></article><article className={styles.card}><header className={styles.cardHeader}><div><h2>Haftalık Yönetim Aktivitesi</h2><p>Denetim olayları ve veri değişiklikleri</p></div></header><div className={styles.barChart}><ResponsiveContainer width="100%" height="100%"><BarChart data={snapshot.weeklyActivity} barGap={5}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e7eaf0"/><XAxis dataKey="day" axisLine={false} tickLine={false}/><YAxis axisLine={false} tickLine={false} width={34}/><Tooltip/><Bar dataKey="events" name="Olay" fill="#3c82f6" radius={[4,4,0,0]}/><Bar dataKey="changes" name="Değişiklik" fill="#f7bd52" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div></article></section><section className={styles.lowerGrid}><CompanyTable rows={tenants.slice(0,5)} onSelect={setSelectedTenant}/><SystemHealth snapshot={snapshot}/></section></>}
+        {view==="companies"&&<CompanyTable rows={tenants} onSelect={setSelectedTenant} full/>}
+        {view==="users"&&<UserTable rows={members} saving={savingMember} onUpdate={updateMember}/>}
+        {view==="plans"&&<PlanView snapshot={snapshot}/>}
+        {view==="integrations"&&<IntegrationView snapshot={snapshot}/>} {view==="security"&&<SecurityView snapshot={snapshot}/>} {view==="system"&&<SystemHealth snapshot={snapshot} full/>}
       </div>
     </section>
-
-    {companyModal && <div className={styles.modalBackdrop} onMouseDown={(event) => event.target === event.currentTarget && setCompanyModal(false)}><form className={styles.modal} onSubmit={addCompany} role="dialog" aria-modal="true" aria-labelledby="company-title"><header><div><span>FİRMA OLUŞTURMA</span><h2 id="company-title">Yeni tenant hesabı</h2><p>Firma owner ve paket bilgilerini tanımlayın.</p></div><button type="button" aria-label="Kapat" onClick={() => setCompanyModal(false)}><X size={18} /></button></header><label>Firma adı<input required minLength={3} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Örn. Anadolu Lojistik" /></label><label>Owner adı<input required minLength={3} value={draft.owner} onChange={(event) => setDraft({ ...draft, owner: event.target.value })} placeholder="Ad soyad" /></label><label>Paket<select value={draft.plan} onChange={(event) => setDraft({ ...draft, plan: event.target.value })}><option>Başlangıç</option><option>Pro</option><option>Kurumsal</option></select></label><div><button type="button" onClick={() => setCompanyModal(false)}>Vazgeç</button><button className={styles.primary} type="submit"><Plus size={15} /> Firma taslağı oluştur</button></div></form></div>}
+    {selectedTenant&&<div className={styles.modalBackdrop} onMouseDown={event=>event.target===event.currentTarget&&setSelectedTenant(null)}><section className={`${styles.modal} ${styles.detailModal}`} role="dialog" aria-modal="true" aria-labelledby="tenant-detail"><header><div><span>FİRMA DETAYI</span><h2 id="tenant-detail">{selectedTenant.name}</h2><p>{selectedTenant.id} · {selectedTenant.country}/{selectedTenant.currency}</p></div><button aria-label="Kapat" onClick={()=>setSelectedTenant(null)}><X size={18}/></button></header><div className={styles.detailGrid}><p><span>Owner</span><strong>{selectedTenant.owner}</strong></p><p><span>Paket</span><strong>{selectedTenant.plan}</strong></p><p><span>Kullanıcı</span><strong>{selectedTenant.activeMembers}/{selectedTenant.memberLimit}</strong></p><p><span>Araç</span><strong>{selectedTenant.activeVehicles}/{selectedTenant.vehicleLimit}</strong></p><p><span>Entegrasyon</span><strong>{selectedTenant.providerReady}/{selectedTenant.providerTotal}</strong></p><p><span>Açık destek</span><strong>{selectedTenant.openTickets}</strong></p></div><div className={styles.detailActions}><button onClick={()=>{setView("users");setQuery(selectedTenant.name);setSelectedTenant(null)}}>Kullanıcıları yönet</button><button className={styles.primary} onClick={()=>{setView("plans");setQuery(selectedTenant.name);setSelectedTenant(null)}}>Aboneliği incele</button></div></section></div>}
   </main>;
 }
 
-function CompanyTable({ rows, onNew, onNotify, full = false }: { rows: Company[]; onNew: () => void; onNotify: (message: string) => void; full?: boolean }) {
-  return <article className={`${styles.card} ${full ? styles.fullCard : ""}`}><header className={styles.cardHeader}><div><h2>{full ? "Tüm Firmalar" : "Son Firma Hareketleri"}</h2><p>{rows.length} firma görüntüleniyor</p></div><div className={styles.headerActions}><button onClick={() => onNotify("Firma listesi CSV için hazırlandı.")}>Dışa aktar</button><button className={styles.primary} onClick={onNew}><Plus size={14} /> Yeni firma</button></div></header><div className={styles.tableWrap}><table><thead><tr><th>Firma</th><th>Paket</th><th>Kullanıcı</th><th>Araç</th><th>Durum</th><th>Güncelleme</th><th /></tr></thead><tbody>{rows.map((company) => <tr key={company.id}><td><strong>{company.name}</strong><small>{company.id} · {company.owner}</small></td><td>{company.plan}</td><td>{company.users}</td><td>{company.vehicles}</td><td><span className={`${styles.status} ${styles[`status${company.status}`]}`}>{company.status}</span></td><td>{company.updated}</td><td><button aria-label={`${company.name} işlemleri`} onClick={() => onNotify(`${company.name} detay paneli açıldı.`)}><MoreHorizontal size={17} /></button></td></tr>)}</tbody></table></div></article>;
-}
+function CompanyTable({rows,onSelect,full=false}:{rows:Tenant[];onSelect:(tenant:Tenant)=>void;full?:boolean}){return <article className={`${styles.card} ${full?styles.fullCard:""}`}><header className={styles.cardHeader}><div><h2>{full?"Tüm Firmalar":"Firma Durumu"}</h2><p>{rows.length} firma görüntüleniyor</p></div></header><div className={styles.tableWrap}><table><thead><tr><th>Firma</th><th>Paket</th><th>Kullanıcı</th><th>Araç</th><th>Entegrasyon</th><th>Durum</th><th>Güncelleme</th><th/></tr></thead><tbody>{rows.map(item=><tr key={item.id}><td><strong>{item.name}</strong><small>{item.id} · {item.owner}</small></td><td>{item.plan}</td><td>{item.activeMembers}/{item.memberLimit}</td><td>{item.activeVehicles}/{item.vehicleLimit}</td><td>{item.providerReady}/{item.providerTotal}</td><td><span className={`${styles.status} ${styles[`status${statusLabel(item.status)}`]}`}>{statusLabel(item.status)}</span></td><td>{formatDate(item.updatedAt)}</td><td><button onClick={()=>onSelect(item)}>Detay</button></td></tr>)}</tbody></table></div></article>}
 
-function UserTable({ onNotify }: { onNotify: (message: string) => void }) {
-  return <article className={`${styles.card} ${styles.fullCard}`}><header className={styles.cardHeader}><div><h2>Platform Kullanıcıları</h2><p>Owner ve yönetici hesaplarının erişim durumu</p></div><button className={styles.primary} onClick={() => onNotify("Kullanıcı davet akışı açıldı.")}><Plus size={14} /> Kullanıcı davet et</button></header><div className={styles.tableWrap}><table><thead><tr><th>Kullanıcı</th><th>Firma</th><th>Rol</th><th>Durum</th><th>Güvenlik</th><th /></tr></thead><tbody>{userRows.map((user) => <tr key={user.email}><td><strong>{user.name}</strong><small>{user.email}</small></td><td>{user.company}</td><td>{user.role}</td><td><span className={`${styles.status} ${user.state === "Aktif" ? styles.statusAktif : styles.statusKurulum}`}>{user.state}</span></td><td><span className={styles.mfa}><LockKeyhole size={13} /> MFA</span></td><td><button aria-label={`${user.name} işlemleri`} onClick={() => onNotify(`${user.name} erişim ayrıntısı açıldı.`)}><MoreHorizontal size={17} /></button></td></tr>)}</tbody></table></div></article>;
-}
+function UserTable({rows,saving,onUpdate}:{rows:Member[];saving:string;onUpdate:(member:Member,patch:Partial<Member>)=>Promise<void>}){return <article className={`${styles.card} ${styles.fullCard}`}><header className={styles.cardHeader}><div><h2>Platform Kullanıcıları</h2><p>{rows.length} kullanıcı · Owner hesapları platform admininden değiştirilemez</p></div></header><div className={styles.tableWrap}><table><thead><tr><th>Kullanıcı</th><th>Firma</th><th>Rol</th><th>Durum</th><th>Davet</th><th>İşlem</th></tr></thead><tbody>{rows.map(member=>{const key=`${member.tenantId}:${member.email}`,busy=saving===key,owner=member.role==="Owner";return <tr key={key}><td><strong>{member.name}</strong><small>{member.email}</small></td><td><strong>{member.tenantName}</strong><small>{member.tenantId}</small></td><td>{owner?<span className={styles.mfa}><ShieldCheck size={13}/> Owner</span>:<select className={styles.tableSelect} value={member.role} disabled={busy} onChange={event=>void onUpdate(member,{role:event.target.value})}><option>Admin</option><option>Operator</option><option>Viewer</option></select>}</td><td><span className={`${styles.status} ${member.active?styles.statusAktif:styles.statusKısıtlı}`}>{member.active?"Aktif":"Pasif"}</span></td><td>{member.inviteStatus}</td><td>{owner?<small>Sahiplik korumalı</small>:<button className={styles.rowAction} disabled={busy} onClick={()=>void onUpdate(member,{active:!member.active})}>{busy?"Kaydediliyor…":member.active?"Pasifleştir":"Aktifleştir"}</button>}</td></tr>})}</tbody></table></div></article>}
 
-function PlanView() {
-  return <section className={styles.planGrid}>{[{ name: "Başlangıç", price: "₺1.490", companies: 5, tone: "blue" }, { name: "Pro", price: "₺4.990", companies: 11, tone: "green" }, { name: "Kurumsal", price: "Özel", companies: 7, tone: "amber" }].map((plan) => <article className={styles.planCard} key={plan.name}><i className={styles[`plan${plan.tone}`]}><PackageCheck size={20} /></i><span>{plan.name}</span><strong>{plan.price}</strong><small>aylık · KDV hariç</small><hr /><p><b>{plan.companies}</b> aktif firma</p><p>Rol ve kapasite limitleri sunucuda uygulanır.</p><button>Paketi yönet</button></article>)}</section>;
-}
+function PlanView({snapshot}:{snapshot:Snapshot}){const plans=["FREE","STARTER","PROFESSIONAL","ENTERPRISE"];return <><section className={styles.planGrid}>{plans.map((plan,index)=>{const tenants=snapshot.tenants.filter(item=>item.plan===plan),activeOrders=snapshot.subscriptions.filter(item=>item.plan===plan&&item.status==="COMPLETED");return <article className={styles.planCard} key={plan}><i className={styles[["planblue","plangreen","planamber","planblue"][index]]}><CreditCard size={20}/></i><span>{plan}</span><strong>{tenants.length} firma</strong><small>{activeOrders.length} tamamlanmış ödeme</small><hr/><p><b>{tenants.reduce((sum,item)=>sum+item.memberLimit,0)}</b> toplam kullanıcı kapasitesi</p><p><b>{tenants.reduce((sum,item)=>sum+item.vehicleLimit,0)}</b> toplam araç kapasitesi</p></article>})}</section><article className={`${styles.card} ${styles.fullCard}`}><header className={styles.cardHeader}><div><h2>Abonelik Siparişleri</h2><p>Yalnız imzalı ödeme callback&apos;i COMPLETED durumunu üretir</p></div></header><div className={styles.tableWrap}><table><thead><tr><th>Sipariş</th><th>Firma</th><th>Paket</th><th>Kapasite</th><th>Tutar</th><th>Durum</th><th>Tarih</th></tr></thead><tbody>{snapshot.subscriptions.map(order=><tr key={order.id}><td><strong>{order.id}</strong><small>{order.providerReference||"Sağlayıcı referansı bekleniyor"}</small></td><td>{order.tenantName}</td><td>{order.plan} · {order.period}</td><td>{order.seats} kullanıcı / {order.vehicles} araç</td><td>{formatMoney(order.amountMinor,order.currency)}</td><td><span className={`${styles.status} ${order.status==="COMPLETED"?styles.statusAktif:styles.statusKurulum}`}>{order.status}</span></td><td>{formatDate(order.createdAt)}</td></tr>)}</tbody></table></div></article></>}
 
-function IntegrationView({ onNotify }: { onNotify: (message: string) => void }) {
-  return <section className={styles.integrationGrid}>{[{ name: "Supabase", meta: "Auth · PostgreSQL · Storage", state: "Bağlı", icon: Boxes }, { name: "Resend", meta: "E-posta teslimatı", state: "Bağlı", icon: Webhook }, { name: "Telematik Gateway", meta: "TCP → HTTPS adaptörü", state: "İzleniyor", icon: Truck }, { name: "Muhasebe Sağlayıcısı", meta: "E-belge ve ödeme", state: "Kurulum", icon: CircleDollarSign }].map((item) => <article className={styles.integrationCard} key={item.name}><i><item.icon size={20} /></i><div><strong>{item.name}</strong><small>{item.meta}</small></div><span>{item.state}</span><button onClick={() => onNotify(`${item.name} bağlantı ayrıntısı açıldı.`)}>Yönet</button></article>)}</section>;
-}
+function IntegrationView({snapshot}:{snapshot:Snapshot}){const grouped=Object.values(snapshot.providers.reduce<Record<string,{name:string;kind:string;connected:number;total:number;tenants:Set<string>;last:string}>>((map,item)=>{const current=map[item.provider]||{name:item.provider,kind:item.kind,connected:0,total:0,tenants:new Set<string>(),last:""};current.total++;current.tenants.add(item.tenantId);if(item.status==="CONNECTED")current.connected++;if(item.updatedAt>current.last)current.last=item.updatedAt;map[item.provider]=current;return map},{}));return <section className={styles.integrationGrid}>{grouped.map(item=><article className={styles.integrationCard} key={item.name}><i><Webhook size={20}/></i><div><strong>{item.name}</strong><small>{item.kind} · {item.tenants.size} firma · {formatDate(item.last)}</small></div><span>{item.connected}/{item.total} bağlı</span></article>)}</section>}
 
-function SecurityView({ onNotify }: { onNotify: (message: string) => void }) {
-  return <section className={styles.securityGrid}><article className={styles.securityHero}><ShieldCheck size={35} /><div><span>GÜVENLİK DURUMU</span><h2>Koruma politikaları etkin</h2><p>Owner ve ayrıcalıklı işlemler MFA ile korunuyor; tüm yönetim işlemleri audit kaydına bağlanıyor.</p></div><strong>94/100</strong></article><article className={styles.card}><header className={styles.cardHeader}><div><h2>İncelenecek Olaylar</h2><p>Son 24 saat</p></div></header>{["3 hesapta MFA doğrulaması bekliyor", "2 başarısız webhook imza kontrolü", "1 yeni cihaz oturumu"].map((item, index) => <button className={styles.securityEvent} key={item} onClick={() => onNotify("Güvenlik olayı incelemeye açıldı.")}><span>{index + 1}</span>{item}<ChevronRight size={15} /></button>)}</article></section>;
-}
+function SecurityView({snapshot}:{snapshot:Snapshot}){return <section className={styles.securityGrid}><article className={styles.securityHero}><ShieldCheck size={35}/><div><span>YÖNETİM GÜVENLİĞİ</span><h2>MFA korumalı platform işlemleri</h2><p>Admin allowlist ile sınırlandırılır; kullanıcı değişiklikleri AAL2 ve ayrı denetim olayları gerektirir.</p></div><strong>{snapshot.operator.assuranceLevel.toUpperCase()}</strong></article><article className={styles.card}><header className={styles.cardHeader}><div><h2>Son Denetim Olayları</h2><p>{snapshot.audit.length} kayıt</p></div></header>{snapshot.audit.slice(0,20).map(event=><div className={styles.securityEvent} key={event.id}><span>✓</span><div><strong>{event.action}</strong><small>{event.tenantName} · {event.actorEmail} · {event.module}/{event.recordId}</small></div><small>{formatDate(event.createdAt)}</small></div>)}</article></section>}
 
-function SystemHealth({ onNotify, full = false }: { onNotify: (message: string) => void; full?: boolean }) {
-  const services = [{ name: "Uygulama API", value: 100, state: "Sağlıklı" }, { name: "PostgreSQL", value: 98, state: "Sağlıklı" }, { name: "Dosya depolama", value: 94, state: "Sağlıklı" }, { name: "İşlem kuyruğu", value: 86, state: "İzleniyor" }];
-  return <article className={`${styles.card} ${styles.healthCard} ${full ? styles.fullCard : ""}`}><header className={styles.cardHeader}><div><h2>Sistem Sağlığı</h2><p>Son kontrol · 2 dk önce</p></div><button onClick={() => onNotify("Sistem sağlık kontrolü yenilendi.")}><Activity size={15} /> Yenile</button></header><div className={styles.healthList}>{services.map((service) => <div key={service.name}><p><strong>{service.name}</strong><span>{service.state}</span></p><progress value={service.value} max="100" /><b>%{service.value}</b></div>)}</div><footer><span><i /> Tüm kritik servisler erişilebilir</span><button onClick={() => onNotify("Teknik gözlem merkezi açıldı.")}>Gözlem merkezini aç</button></footer></article>;
-}
+function SystemHealth({snapshot,full=false}:{snapshot:Snapshot;full?:boolean}){const connected=snapshot.providers.filter(item=>item.status==="CONNECTED").length,total=snapshot.providers.length,activePercent=snapshot.totals.members?Math.round(snapshot.totals.activeMembers/snapshot.totals.members*100):100,providerPercent=total?Math.round(connected/total*100):100;return <article className={`${styles.card} ${styles.healthCard} ${full?styles.fullCard:""}`}><header className={styles.cardHeader}><div><h2>Platform Kayıt Sağlığı</h2><p>Canlı veritabanı özeti</p></div><Activity size={17}/></header><div className={styles.healthList}><div><p><strong>Aktif kullanıcılar</strong><span>{snapshot.totals.activeMembers}/{snapshot.totals.members}</span></p><progress value={activePercent} max="100"/><b>%{activePercent}</b></div><div><p><strong>Bağlı sağlayıcılar</strong><span>{connected}/{total}</span></p><progress value={providerPercent} max="100"/><b>%{providerPercent}</b></div><div><p><strong>Firma kayıtları</strong><span>{snapshot.totals.tenants} tenant</span></p><progress value={100} max="100"/><b>{snapshot.moduleCounts.reduce((sum,item)=>sum+item.count,0)}</b></div><div><p><strong>Açık destek kayıtları</strong><span>operasyon yükü</span></p><progress value={Math.max(0,100-Math.min(100,snapshot.totals.openTickets*10))} max="100"/><b>{snapshot.totals.openTickets}</b></div></div>{full&&<div className={styles.ticketList}>{snapshot.tickets.map(ticket=><article key={ticket.id}><strong>{ticket.tenantName} · {ticket.priority}</strong><p>{ticket.description}</p><small>{ticket.id} · {ticket.module}/{ticket.pageArea} · {ticket.status} · {formatDate(ticket.createdAt)}</small></article>)}</div>}</article>}
