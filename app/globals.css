@@ -684,6 +684,35 @@ body{background:#f3f4f6}.content{background:#f3f4f6}.panel{border-color:#dfe1e5;
 .content :is(button,input,select,textarea){min-height:40px}.content :is(p,small,label,time,em){font-size:12px}.content :is(button,a,input,select,textarea):focus-visible,.sidebar button:focus-visible,.topbar button:focus-visible{outline:3px solid #2563eb!important;outline-offset:2px!important}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 @media(max-width:880px){.accessibility-grid{grid-template-columns:1fr}.accessibility-note{grid-column:auto}.count-pair{grid-column:1/-1}}
+
+/* v1.28.20 — stable tracking and driver-runtime rows/columns */
+.view-driverApp .runtime-steps{margin-inline:0}
+.view-driverApp .control-note{margin:14px 18px 18px}
+.view-driverApp .mobile-gate-row{padding:12px 18px}
+.view-driverApp .mobile-gate-row:last-of-type{border-bottom:0}
+.view-driverApp .runtime-selection{display:flex;min-width:0;flex-direction:column;gap:4px;margin:14px 18px 18px;padding:12px 13px;border:1px solid #dfe3e8;border-radius:8px;background:#f8fafc}
+.view-driverApp .runtime-selection>span{color:#64748b;font-size:8px;font-weight:800;letter-spacing:.45px;text-transform:uppercase}
+.view-driverApp .runtime-selection>strong{overflow-wrap:anywhere;color:#27272a;font-size:11px}
+.view-driverApp .runtime-selection>small{color:#64748b;font-size:9px;line-height:1.4}
+.view-trackers .adapter-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.view-trackers .adapter-card header{gap:8px}
+.view-trackers .adapter-card header>span{flex:0 0 34px}
+.view-trackers .adapter-card dl div{display:grid;grid-template-columns:minmax(62px,.7fr) minmax(0,1.3fr);align-items:start}
+.view-trackers .adapter-card dd{min-width:0;overflow-wrap:anywhere}
+.operational-table-wrap{width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+.operational-data-table{table-layout:fixed}
+.operational-data-table :is(th,td){box-sizing:border-box;vertical-align:middle}
+.operational-data-table td{overflow-wrap:anywhere;white-space:normal}
+.operational-data-table th{white-space:nowrap}
+.driver-installations-table{min-width:980px}
+.driver-installations-table col:nth-child(1){width:21%}.driver-installations-table col:nth-child(2){width:14%}.driver-installations-table col:nth-child(3){width:11%}.driver-installations-table col:nth-child(4){width:13%}.driver-installations-table col:nth-child(5){width:12%}.driver-installations-table col:nth-child(6){width:18%}.driver-installations-table col:nth-child(7){width:11%}
+.view-trackers .module-table table{table-layout:fixed;min-width:1040px}
+.view-trackers .module-table :is(th,td){box-sizing:border-box;vertical-align:middle}
+.view-trackers .module-table td{overflow-wrap:anywhere;white-space:normal}
+.view-trackers .gateway-boundary+.module-table :is(th,td):nth-child(1){width:14%}.view-trackers .gateway-boundary+.module-table :is(th,td):nth-child(2){width:18%}.view-trackers .gateway-boundary+.module-table :is(th,td):nth-child(3){width:21%}.view-trackers .gateway-boundary+.module-table :is(th,td):nth-child(4){width:14%}.view-trackers .gateway-boundary+.module-table :is(th,td):nth-child(5){width:16%}.view-trackers .gateway-boundary+.module-table :is(th,td):nth-child(6){width:17%;text-align:right}
+.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(1){width:14%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(2){width:14%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(3){width:13%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(4){width:20%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(5){width:8%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(6){width:13%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(7){width:18%}
+.view-trackers .gateway-boundary+.module-table td:last-child .table-action{margin-left:6px}
+@media(max-width:640px){.view-driverApp .runtime-steps>div,.view-driverApp .mobile-gate-row{padding-inline:14px}.view-driverApp .control-note,.view-driverApp .runtime-selection{margin-inline:14px}.view-trackers .gateway-boundary+.module-table td:last-child .table-action{display:block;width:100%;margin:5px 0 0}}
 /* User-seat licensing and shared-login feedback */
 .demo-login-note { display:flex; flex-direction:column; gap:3px; padding:10px 12px; border:1px solid #dce6ff; border-radius:8px; background:#f4f7ff; color:#52617d; font-size:12px; }
 .demo-login-note strong { color:#315ca8; }

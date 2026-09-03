@@ -564,6 +564,17 @@ test("master design system is shared by generic and specialized fleet pages", ()
   assert.match(masterCss, /\.dateCritical/);
 });
 
+test("tracking and driver runtime layouts keep rows aligned with stable columns", () => {
+  assert.match(page, /driver-installations-table/);
+  assert.match(page, /<colgroup>/);
+  assert.match(page, /scope="col"/);
+  assert.match(css, /\.operational-data-table\{table-layout:fixed\}/);
+  assert.match(css, /\.view-driverApp \.mobile-gate-row\{padding:12px 18px\}/);
+  assert.match(css, /\.view-driverApp \.runtime-selection\{display:flex/);
+  assert.match(css, /\.view-trackers \.adapter-grid\{grid-template-columns:repeat\(auto-fit,minmax\(220px,1fr\)\)\}/);
+  assert.match(css, /\.view-trackers \.module-table table\{table-layout:fixed/);
+});
+
 test("all requested operations remain represented in navigation or dedicated pages", () => {
   for (const view of ["commercialFlow","entities","fleet","drivers","operations","routes","geofences","alerts","tasks","inspections","tires","expenses","documents","safety","incidents","devices","trackers","mobile","driverApp","custody","notifications","notificationOps","reports","onboarding","users","subscription","security","settings","audit","rollout"]) {
     assert.match(page, new RegExp('id: "'+view+'"|view === "'+view+'"'));
