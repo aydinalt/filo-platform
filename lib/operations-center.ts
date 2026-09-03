@@ -1,4 +1,5 @@
 import { assertPermission, runtimeEnv, type Workspace } from "./platform-store";
+import { isValidEmailAddress } from "./validation";
 
 type Severity="CRITICAL"|"HIGH"|"MEDIUM";
 type SignalRule={signal:string;severity:Severity;team:string;ackMinutes:number;escalationMinutes:number;runbook:string};
@@ -18,7 +19,7 @@ const RULES:Record<string,SignalRule>={
 const numberValue=(value:unknown,fallback=-1)=>{const parsed=Number(value);return Number.isFinite(parsed)?Math.round(parsed):fallback};
 const isoAfter=(minutes:number)=>new Date(Date.now()+minutes*60_000).toISOString();
 const cleanNote=(value:unknown,min=1)=>{const note=String(value||"").trim();if(note.length<min)throw new Response("İşlem açıklaması zorunludur.",{status:400});return note};
-const alertRecipients=()=>String(runtimeEnv().OPERATIONS_ALERT_EMAILS||"").split(",").map(value=>value.trim().toLowerCase()).filter((value,index,list)=>/^\S+@\S+\.\S+$/.test(value)&&list.indexOf(value)===index).slice(0,10);
+const alertRecipients=()=>String(runtimeEnv().OPERATIONS_ALERT_EMAILS||"").split(",").map(value=>value.trim().toLowerCase()).filter((value,index,list)=>isValidEmailAddress(value)&&list.indexOf(value)===index).slice(0,10);
 
 async function recordSignal(workspace:Workspace,rule:SignalRule,active:boolean,detail:string){
   const {DB}=runtimeEnv(),fingerprint=`${workspace.tenantId}:${rule.signal}`;

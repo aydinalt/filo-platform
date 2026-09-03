@@ -1,3 +1,5 @@
+import { isValidEmailAddress } from "./validation";
+
 export type LegalProfile={
   controllerName:string;taxId:string;address:string;contactEmail:string;dpoContact:string;jurisdictions:string;
   employeeLegalBasis:string;locationPurposes:string;retentionDays:number;periodicDestructionMonths:number;subprocessors:string;
@@ -236,7 +238,7 @@ const PUBLIC_LEGAL_LABELS:Record<string,string>={
 export function platformLegalStatus(env:PlatformLegalEnvironment){
   const missing=[] as string[];
   if(!env.LEGAL_CONTROLLER_NAME)missing.push("LEGAL_CONTROLLER_NAME");
-  if(!env.LEGAL_CONTROLLER_EMAIL||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.LEGAL_CONTROLLER_EMAIL))missing.push("LEGAL_CONTROLLER_EMAIL");
+  if(!env.LEGAL_CONTROLLER_EMAIL||!isValidEmailAddress(env.LEGAL_CONTROLLER_EMAIL))missing.push("LEGAL_CONTROLLER_EMAIL");
   if(!env.LEGAL_CONTROLLER_ADDRESS)missing.push("LEGAL_CONTROLLER_ADDRESS");
   if(!env.LEGAL_TERMS_EFFECTIVE_AT||!/^\d{4}-\d{2}-\d{2}$/.test(env.LEGAL_TERMS_EFFECTIVE_AT))missing.push("LEGAL_TERMS_EFFECTIVE_AT");
   if(env.PUBLIC_SIGNUP_ENABLED!=="true")missing.push("PUBLIC_SIGNUP_ENABLED");

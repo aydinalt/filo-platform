@@ -11,7 +11,7 @@ const strict=args.has("--strict"),json=args.has("--json");
 const runtime=String(process.env.FILO_RUNTIME||"cloudflare").trim().toLowerCase()==="supabase"?"supabase":"cloudflare";
 
 const httpsUrl=value=>{try{const url=new URL(value);return url.protocol==="https:"&&!/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/u.test(url.hostname)}catch{return false}};
-const email=value=>/^\S+@\S+\.\S+$/u.test(value);
+const email=value=>{const normalized=String(value||"").trim();const separator=normalized.indexOf("@");if(separator<1||separator!==normalized.lastIndexOf("@"))return false;const domain=normalized.slice(separator+1);return normalized.length<=254&&domain.length>=3&&domain.split(".").length>=2&&!domain.startsWith(".")&&!domain.endsWith(".")&&!normalized.includes(" ")};
 const positiveInteger=value=>/^\d+$/u.test(value)&&Number(value)>0;
 const isoDate=value=>Number.isFinite(Date.parse(value))&&Date.parse(value)<=Date.now()+300000;
 const hostList=value=>value.split(",").map(item=>item.trim()).filter(Boolean).every(host=>/^[a-z0-9.-]+$/iu.test(host)&&!host.includes(".."));
@@ -57,7 +57,7 @@ const checks=[
   {id:"PAYMENT",label:"Ödeme sağlayıcısı",required:["PAYMENT_API_URL","PAYMENT_API_KEY","PAYMENT_WEBHOOK_SECRET","PAYMENT_CHECKOUT_HOSTS"],validators:{PAYMENT_API_URL:httpsUrl,PAYMENT_API_KEY:value=>value.length>=20,PAYMENT_WEBHOOK_SECRET:value=>value.length>=32,PAYMENT_CHECKOUT_HOSTS:hostList},note:"Ücretsiz plan dışındaki paketlerde gerçek tamamlanmış callback gerekir."},
   {id:"MESSAGING",label:"E-posta ve push",required:["RESEND_API_KEY","RESEND_WEBHOOK_SECRET","RESEND_FROM","EXPO_ACCESS_TOKEN","EXPO_PROJECT_ID"],validators:{RESEND_API_KEY:value=>value.length>=20,RESEND_WEBHOOK_SECRET:value=>value.length>=32,RESEND_FROM:value=>value.length>=5,EXPO_ACCESS_TOKEN:value=>value.length>=20,EXPO_PROJECT_ID:value=>/^[0-9a-f-]{36}$/iu.test(value)},note:"Teslimat, bounce ve push receipt sonuçları doğrulanmadan bildirim başarılı sayılmaz."},
   {id:"TRACKER_GATEWAYS",label:"Fiziksel takip gatewayleri",required:["TRACKER_GATEWAY_MODE","DEVICE_TOKEN_MAX_AGE_DAYS"],exact:{TRACKER_GATEWAY_MODE:"DEVICE_TOKEN"},validators:{DEVICE_TOKEN_MAX_AGE_DAYS:value=>positiveInteger(value)&&Number(value)<=90},note:"Teltonika/Queclink ortak sabit sır yerine süreli cihaz tokenı, HMAC ve replay koruması kullanır."},
-  {id:"MAP_PROVIDER",label:"Harita ve konum sağlayıcısı",required:["MAP_PROVIDER","MAP_ALLOWED_HOSTS"],exact:{MAP_PROVIDER:"OPENSTREETMAP"},validators:{MAP_ALLOWED_HOSTS:value=>hostList(value)&&value.split(",").map(item=>item.trim().toLowerCase()).includes("www.openstreetmap.org")},note:"Harita host izin listesi, kullanım şartları ve konum veri akışı hukuk profilinde kayıtlı olmalıdır."},
+  {id:"MAP_PROVIDER",label:"Harita ve konum sağlayıcısı",required:["MAP_PROVIDER","MAP_ALLOWED_HOSTS"],exact:{MAP_PROVIDER:"OPENSTREETMAP"},validators:{MAP_ALLOWED_HOSTS:value=>hostList(value)&&value.split(",").map(item=>item.trim().toLowerCase()).some(host=>host==="www.openstreetmap.org")},note:"Harita host izin listesi, kullanım şartları ve konum veri akışı hukuk profilinde kayıtlı olmalıdır."},
 ];
 
 const results=checks.map(check=>{

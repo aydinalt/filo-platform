@@ -3,6 +3,7 @@ import { legalProfileReadiness, platformLegalStatus, type LegalProfile } from ".
 import { scanUploadedFileWithProvider } from "./security";
 import { READINESS_GATES, READINESS_ORDER, type ReadinessGateId } from "./readiness-contract";
 import { geocodingConfiguration } from "./map-geocoding";
+import { isValidEmailAddress } from "./validation";
 
 type RuntimeEnv = { DB: D1Database; BUCKET: R2Bucket; APP_ENV?:string; ENVIRONMENT_ID?:string; PUBLIC_APP_ORIGIN?:string; RELEASE_VERSION?:string; FILO_RUNTIME?:string; D1_ENVIRONMENT_ID?:string; R2_ENVIRONMENT_ID?:string; NEXT_PUBLIC_SUPABASE_URL?:string; NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?:string; SUPABASE_SERVICE_ROLE_KEY?:string; SUPABASE_DATABASE_URL?:string; SUPABASE_STORAGE_BUCKET?:string; SUPABASE_CRON_MODE?:string; SECRETS_ROTATED_AT?:string; SECRET_ROTATION_OWNER?:string; SECRET_MAX_AGE_DAYS?:string; PAYMENT_API_URL?:string; PAYMENT_API_KEY?:string; PAYMENT_WEBHOOK_SECRET?:string; PAYMENT_PROVIDER_NAME?:string; PAYMENT_CHECKOUT_HOSTS?:string; ESIGN_API_KEY?:string; ESIGN_WEBHOOK_SECRET?:string; RESEND_API_KEY?:string; RESEND_WEBHOOK_SECRET?:string; RESEND_FROM?:string; EXPO_ACCESS_TOKEN?:string; EXPO_PROJECT_ID?:string; FCM_SERVER_KEY?:string; EINVOICE_API_URL?:string; EINVOICE_API_KEY?:string; EINVOICE_WEBHOOK_SECRET?:string; EINVOICE_PROVIDER_NAME?:string; LEGAL_CONTROLLER_NAME?:string; LEGAL_CONTROLLER_EMAIL?:string; LEGAL_CONTROLLER_ADDRESS?:string; LEGAL_TERMS_EFFECTIVE_AT?:string; PUBLIC_SIGNUP_ENABLED?:string; PRIVILEGED_MFA_REQUIRED?:string; BROWSER_TELEMETRY_ENABLED?:string; OPERATIONS_ALERT_EMAILS?:string; OPERATIONS_CRON_SECRET?:string; DATABASE_CAPACITY_USED_PERCENT?:string; STORAGE_CAPACITY_USED_PERCENT?:string; MALWARE_SCAN_PROVIDER?:string; CLOUDMERSIVE_API_KEY?:string; VEHICLE_CATALOG_PROVIDER?:string; VEHICLE_CATALOG_API_URL?:string; VEHICLE_CATALOG_API_KEY?:string; VEHICLE_CATALOG_ALLOWED_HOSTS?:string; TRACKER_GATEWAY_MODE?:string; DEVICE_TOKEN_MAX_AGE_DAYS?:string; MAP_PROVIDER?:string; MAP_ALLOWED_HOSTS?:string; MAP_GEOCODING_API_URL?:string; MAP_GEOCODING_API_KEY?:string; MAP_GEOCODING_ALLOWED_HOSTS?:string; PLATFORM_ADMIN_EMAILS?:string; FILO_DEMO_AUTH_ENABLED?:string; FILO_DEMO_SESSION_SECRET?:string };
 type SignupAcceptance={contract:string;termsVersion:string;privacyVersion:string;acceptedAt:string};
@@ -436,7 +437,7 @@ async function validateRecord(workspace:Workspace,moduleName:string,data:Record<
   const required:Record<string,string[]>={crm:["company","contact","potential","potentialCurrency","team"],requests:["title","customer","service","targetDate","team","description"],offers:["customer","service","quantity","unitPrice","taxJurisdiction","currency","tax","validUntil","team"],entities:["legalName","country","entityType","registrationNo","taxId","currency","billingEmail","phone","address"],fleet:["plate","registrationCountry","make","model","year","chassis","ownerEntity","relation","team"],drivers:["name","phone","license","licenseExpiry","team"],operations:["vehicle","driver","startDate","startTime","route","team"],devices:["assetId","deviceType","manufacturer","modelName","serial","connectionType","status","team"],expenses:["vehicle","category","date","amount","currency","tax","supplier","invoiceType","team"],custody:["assignmentType","asset","recipient","company","handoverDate","signatureMethod","jurisdiction"],readiness:["checkKey","category","checkName","status","executedAt","note"]};
   const missing=(required[moduleName]||[]).filter(key=>!stringValue(data,key));
   if(missing.length)throw new Response(`Zorunlu alanlar eksik: ${missing.join(", ")}`,{status:400});
-  for(const key of ["email","billingEmail"]){const value=stringValue(data,key);if(value&&!/^\S+@\S+\.\S+$/.test(value))throw new Response(`${key} geçerli bir e-posta olmalıdır.`,{status:400});}
+  for(const key of ["email","billingEmail"]){const value=stringValue(data,key);if(value&&!isValidEmailAddress(value))throw new Response(`${key} geçerli bir e-posta olmalıdır.`,{status:400});}
   for(const key of ["targetDate","validUntil","licenseExpiry","startDate","handoverDate","returnDate","dueDate","expiryDate","date"]){const value=stringValue(data,key);if(value&&!/^\d{2}\.\d{2}\.\d{4}$/.test(value)&&Number.isNaN(Date.parse(value)))throw new Response(`${key} geçerli bir tarih olmalıdır.`,{status:400});}
   const positive=["potential","quantity","unitPrice","year","mileage","amount","cost","damage","heartbeat"];
   for(const key of positive){const value=stringValue(data,key);if(value&&(!Number.isFinite(Number(value.replace(",",".")))||Number(value.replace(",","."))<=0))throw new Response(`${key} sıfırdan büyük bir sayı olmalıdır.`,{status:400});}
@@ -601,7 +602,7 @@ export async function saveTeam(workspace: Workspace, team: Record<string, unknow
 export async function saveMember(workspace: Workspace, member: Record<string, unknown>) {
   assertPermission(workspace,"member");
   const email = String(member.email || "").trim().toLowerCase();
-  if (!/^\S+@\S+\.\S+$/.test(email)) throw new Response("Geçerli e-posta zorunludur.", { status: 400 });
+  if (!isValidEmailAddress(email)) throw new Response("Geçerli e-posta zorunludur.", { status: 400 });
   const role = String(member.role || "Viewer");
   if (!new Set(["Owner", "Admin", "Operator", "Viewer"]).has(role)) throw new Response("Geçersiz rol.", { status: 400 });
   const { DB } = runtimeEnv();
@@ -662,8 +663,8 @@ export async function saveLegalProfile(workspace:Workspace,input:Record<string,u
   const profile:LegalProfile={
     controllerName:String(input.controllerName||"").trim(),taxId:String(input.taxId||"").trim(),address:String(input.address||"").trim(),contactEmail:String(input.contactEmail||"").trim().toLowerCase(),dpoContact:String(input.dpoContact||"").trim().toLowerCase(),jurisdictions:String(input.jurisdictions||"").trim(),employeeLegalBasis:String(input.employeeLegalBasis||"").trim(),locationPurposes:String(input.locationPurposes||"").trim(),retentionDays:Number(input.retentionDays||0),periodicDestructionMonths:Number(input.periodicDestructionMonths||0),subprocessors:String(input.subprocessors||"").trim(),status:String(input.status||"LEGAL_REVIEW_REQUIRED").toUpperCase(),approvedBy:String(input.approvedBy||"").trim(),approvedAt:String(input.approvedAt||"").trim(),legalOpinionReference:String(input.legalOpinionReference||"").trim(),policyVersion:String(input.policyVersion||"").trim(),
   };
-  if(profile.contactEmail&&!/^\S+@\S+\.\S+$/.test(profile.contactEmail))throw new Response("Geçerli uyum e-postası zorunludur.",{status:400});
-  if(profile.dpoContact&&!/^\S+@\S+\.\S+$/.test(profile.dpoContact))throw new Response("Geçerli KVKK/DPO iletişim e-postası zorunludur.",{status:400});
+  if(profile.contactEmail&&!isValidEmailAddress(profile.contactEmail))throw new Response("Geçerli uyum e-postası zorunludur.",{status:400});
+  if(profile.dpoContact&&!isValidEmailAddress(profile.dpoContact))throw new Response("Geçerli KVKK/DPO iletişim e-postası zorunludur.",{status:400});
   if(profile.retentionDays<0||profile.periodicDestructionMonths<0||profile.periodicDestructionMonths>6)throw new Response("Saklama süresi pozitif; periyodik imha aralığı 1–6 ay olmalıdır.",{status:400});
   if(!["DRAFT","LEGAL_REVIEW_REQUIRED","APPROVED"].includes(profile.status))throw new Response("Geçersiz hukuk profili durumu.",{status:400});
   if(profile.status==="APPROVED"){const readiness=legalProfileReadiness(profile);if(readiness.missing.length)throw new Response(`Hukuk onayı için eksik alanlar: ${readiness.missing.join(", ")}`,{status:409})}
@@ -858,7 +859,7 @@ export async function runSystemHealthCheck(workspace:Workspace){
 }
 
 export async function runObservabilityDrill(workspace:Workspace){
-  assertPermission(workspace,"provider");const env=runtimeEnv(),{DB}=env,id=`MON-${crypto.randomUUID()}`,recipients=String(env.OPERATIONS_ALERT_EMAILS||"").split(",").map(value=>value.trim().toLowerCase()).filter(value=>/^\S+@\S+\.\S+$/.test(value));
+  assertPermission(workspace,"provider");const env=runtimeEnv(),{DB}=env,id=`MON-${crypto.randomUUID()}`,recipients=String(env.OPERATIONS_ALERT_EMAILS||"").split(",").map(value=>value.trim().toLowerCase()).filter(isValidEmailAddress);
   if(!recipients.length)throw new Response("Alarm provası için OPERATIONS_ALERT_EMAILS içinde gerçek nöbetçi alıcısı zorunludur.",{status:503});
   await DB.batch([
     DB.prepare("INSERT INTO monitoring_events (id,tenant_id,source,signal,severity,status,detail,assigned_team,fingerprint,occurrence_count,first_detected_at,last_detected_at,acknowledge_due_at,escalation_due_at) VALUES (?,?,'DRILL','TEST_ALERT','HIGH','OPEN','Harici teslimat, onay ve kapanış kanıtı bekleniyor','TEKNİK EKİP',?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,datetime('now','+15 minutes'),datetime('now','+30 minutes'))").bind(id,workspace.tenantId,`${workspace.tenantId}:DRILL:${id}`),
