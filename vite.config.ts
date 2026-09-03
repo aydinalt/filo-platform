@@ -44,6 +44,12 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    // UI libraries such as Lucide and Recharts import React through their own
+    // package entry points. Force every Vite environment to share the app's
+    // React runtime so dependency re-optimization cannot create invalid hooks.
+    resolve: {
+      dedupe: ["react", "react-dom"],
+    },
     server: {
       host: "0.0.0.0",
       allowedHosts: ["terminal.local"],
