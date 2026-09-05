@@ -15,6 +15,12 @@ test("Supabase and production runtimes reject Sites identity headers before read
 
 test("Supabase auth SDKs include the current SSR cookie and PKCE fixes",async()=>{const packageJson=JSON.parse(await read("package.json")),lock=JSON.parse(await read("package-lock.json"));assert.equal(packageJson.dependencies["@supabase/ssr"],"0.12.5");assert.equal(packageJson.dependencies["@supabase/supabase-js"],"2.114.0");assert.equal(lock.packages["node_modules/@supabase/ssr"].version,"0.12.5");assert.equal(lock.packages["node_modules/@supabase/supabase-js"].version,"2.114.0")});
 
+test("mobile driver matches the Expo SDK 57 patch contract",async()=>{
+  const packageJson=JSON.parse(await read("mobile-driver/package.json")),lock=JSON.parse(await read("mobile-driver/package-lock.json"));
+  const expected={expo:"57.0.20","expo-location":"57.0.16","expo-notifications":"57.0.17","expo-task-manager":"57.0.16"};
+  for(const [name,version] of Object.entries(expected)){assert.equal(packageJson.dependencies[name],"~"+version);assert.equal(lock.packages["node_modules/"+name].version,version)}
+});
+
 test("production flags are case-safe and provider dispatch is privileged",async()=>{const [store,telemetry,provider]=await Promise.all([read("lib/platform-store.ts"),read("app/api/telemetry/route.ts"),read("app/api/provider-dispatch/route.ts")]);assert.match(store,/String\(env\.APP_ENV\|\|""\)\.toLowerCase\(\)==="production"/);assert.match(store,/String\(env\.FILO_RUNTIME\|\|""\)\.toLowerCase\(\)==="supabase"/);assert.match(telemetry,/String\(env\.APP_ENV\|\|""\)\.toLowerCase\(\)==="production"/);assert.match(provider,/requirePrivilegedAccess\(workspace,`provider-dispatch:/)});
 
 test("public signup consent is carried by Supabase and verified before tenant creation",async()=>{const [browser,auth,store]=await Promise.all([read("app/supabase-browser.ts"),read("app/chatgpt-auth.ts"),read("lib/platform-store.ts")]);for(const marker of ["FILO_PUBLIC_SIGNUP_V1","filo_terms_version","filo_privacy_version","filo_accepted_at"])assert.match(browser,new RegExp(marker));assert.match(auth,/signupAcceptance/);assert.match(store,/SUPABASE_SIGNUP_METADATA/);assert.match(store,/Date\.now\(\)-acceptedAt>24\*60\*60\*1000/);assert.match(store,/APP_ENV\|\|""\)\.toLowerCase\(\)==="production"&&identity\.authSource!=="SUPABASE"/)});
