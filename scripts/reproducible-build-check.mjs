@@ -22,12 +22,12 @@ function normalizedBuildContent(content,entropy){
   for(const value of entropy)text=text.replaceAll(value,"<VINEXT_GENERATED_SECRET>");
   text=text
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/giu,"<VINEXT_GENERATED_UUID>")
-    .replace(/-[A-Za-z0-9_-]{8}(?=\.js)/gu,"-<VINEXT_CHUNK_HASH>");
+    .replace(/-[A-Za-z0-9_-]{8,64}(?=\.(?:js|css))/gu,"-<VINEXT_CHUNK_HASH>");
   return Buffer.from(text);
 }
 function normalizedBuildName(name,contentHash){
   const portable=name.replaceAll("\\","/").replace(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/giu,"<VINEXT_GENERATED_UUID>");
-  return portable.replace(/-[A-Za-z0-9_-]{8}(?=\.js$)/u,`-${contentHash.slice(0,16)}`);
+  return portable.replace(/-[A-Za-z0-9_-]{8,64}(?=\.(?:js|css)$)/u,"-"+contentHash.slice(0,16));
 }
 async function fingerprint(){
   const entries=[];for(const file of await filesAt(dist))entries.push({name:relative(dist,file),content:await readFile(file)});
