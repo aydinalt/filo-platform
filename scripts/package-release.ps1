@@ -59,7 +59,14 @@ try {
   Compress-Archive -Path $fullRoot -DestinationPath $fullZip -CompressionLevel Optimal -Force
   Compress-Archive -Path (Join-Path $updateRoot "*") -DestinationPath $updateZip -CompressionLevel Optimal -Force
   foreach ($zip in @($fullZip, $updateZip)) {
-    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($zip)
+    try {
+      $hash = ([BitConverter]::ToString($sha256.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+      $stream.Dispose()
+      $sha256.Dispose()
+    }
     Set-Content -LiteralPath "$zip.sha256" -Value "$hash  $([IO.Path]::GetFileName($zip))" -Encoding ascii
   }
   Write-Output $fullZip
