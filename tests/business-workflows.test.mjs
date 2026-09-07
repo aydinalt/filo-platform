@@ -573,8 +573,10 @@ test("tracking and driver runtime layouts keep rows aligned with stable columns"
   assert.match(page, /scope="col"/);
   assert.match(css, /\.operational-data-table\{table-layout:fixed\}/);
   assert.match(css, /\.view-driverApp \.mobile-gate-row\{padding:12px 18px\}/);
+  assert.match(css, /\.view-driverApp \.mobile-gate-row>span:last-child\{/);
   assert.match(css, /\.view-driverApp \.runtime-selection\{display:flex/);
   assert.match(css, /\.view-trackers \.adapter-grid\{grid-template-columns:repeat\(auto-fit,minmax\(220px,1fr\)\)\}/);
+  assert.match(css, /\.view-trackers \.adapter-card header>span:last-child\{/);
   assert.match(css, /\.view-trackers \.module-table table\{table-layout:fixed/);
 });
 

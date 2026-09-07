@@ -713,6 +713,27 @@ body{background:#f3f4f6}.content{background:#f3f4f6}.panel{border-color:#dfe1e5;
 .view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(1){width:14%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(2){width:14%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(3){width:13%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(4){width:20%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(5){width:8%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(6){width:13%}.view-trackers .gateway-boundary+.module-table+.module-table :is(th,td):nth-child(7){width:18%}
 .view-trackers .gateway-boundary+.module-table td:last-child .table-action{margin-left:6px}
 @media(max-width:640px){.view-driverApp .runtime-steps>div,.view-driverApp .mobile-gate-row{padding-inline:14px}.view-driverApp .control-note,.view-driverApp .runtime-selection{margin-inline:14px}.view-trackers .gateway-boundary+.module-table td:last-child .table-action{display:block;width:100%;margin:5px 0 0}}
+
+/* Keep status badges independent from the fixed-size icon slots. */
+.view-driverApp .mobile-gate-row>span:last-child{
+  display:inline-flex;
+  width:max-content;
+  max-width:100%;
+  height:auto;
+  align-items:center;
+  justify-self:end;
+  border-radius:999px;
+}
+.view-trackers .adapter-card header>span:last-child{
+  display:inline-flex;
+  width:max-content;
+  max-width:calc(100% - 42px);
+  height:auto;
+  flex:0 1 auto;
+  align-items:center;
+  justify-content:center;
+  border-radius:999px;
+}
 /* User-seat licensing and shared-login feedback */
 .demo-login-note { display:flex; flex-direction:column; gap:3px; padding:10px 12px; border:1px solid #dce6ff; border-radius:8px; background:#f4f7ff; color:#52617d; font-size:12px; }
 .demo-login-note strong { color:#315ca8; }
